@@ -9,7 +9,7 @@
 // @include       http://*superuser.com/*
 // @include       http://*stackapps.com/*
 // @include       http://*askubuntu.com/*
-// @version       1.3
+// @version       1.4
 // ==/UserScript==
 
 (function () {
@@ -50,16 +50,15 @@
             for (var questionId in updateTasksByQuestionId) {
                 var updateTasksForQuestion = updateTasksByQuestionId[questionId];
                 if ($(updateTasksForQuestion).is(":visible")) {
-                    console.log("going to update posts for "+questionId);
                     $.get("/questions/" + questionId, {
                         dataType: "html"
                     }).then(function (questionId, updateTasksForQuestion, response) {
                         $response = $(response);
                         if($(".pager-answers", $response).length){
+                            console.log("paging not supported");
                             return;
                         }
                         updateTasksForQuestion.forEach(function (updateTask) {
-                            console.log("updating ", updateTask);
                             var $targetInResponse;
                             if (updateTask.answerId) {
                                 $targetInResponse = $("#answer-" + updateTask.answerId, $response);
