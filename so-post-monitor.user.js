@@ -2,14 +2,14 @@
 // @name          Stack Exchange post monitor
 // @description   a hacky bugfix of Stack Exchange questions not updating properly. 
 // @description   currently fixes the posts not updating their deleted/undeleted status.
-// @include       http://*.stackexchange.com/*
-// @include       http://*.stackoverflow.com/*
-// @include       http://*.mathoverflow.com/*
-// @include       http://*.serverfault.com/*
-// @include       http://*.superuser.com/*
-// @include       http://*.stackapps.com/*
-// @include       http://*.askubuntu.com/*
-// @version       1.0
+// @include       http://*stackexchange.com/*
+// @include       http://*stackoverflow.com/*
+// @include       http://*mathoverflow.com/*
+// @include       http://*serverfault.com/*
+// @include       http://*superuser.com/*
+// @include       http://*stackapps.com/*
+// @include       http://*askubuntu.com/*
+// @version       1.1
 // ==/UserScript==
 
 (function () {
