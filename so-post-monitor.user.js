@@ -9,7 +9,7 @@
 // @include       http://*superuser.com/*
 // @include       http://*stackapps.com/*
 // @include       http://*askubuntu.com/*
-// @version       1.1
+// @version       1.2
 // ==/UserScript==
 
 (function () {
@@ -25,7 +25,6 @@
     }
 
     UpdateTask.prototype.addSelf = function () {
-        console.log("going to update post  ", this);
         var thisTask = this,
             questionIdPromise = $.Deferred();
         updateTasks.push(this);
@@ -56,9 +55,7 @@
                         dataType: "html"
                     }).then(function (questionId, updateTasksForQuestion, response) {
                         $response = $(response);
-                        console.log("got a response for "+questionId);
                         if($(".pager-answers", $response)){
-                            console.log("paging not supported yet");
                             return;
                         }
                         updateTasksForQuestion.forEach(function (updateTask) {
