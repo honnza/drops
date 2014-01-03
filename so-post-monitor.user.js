@@ -9,7 +9,7 @@
 // @include       http://*superuser.com/*
 // @include       http://*stackapps.com/*
 // @include       http://*askubuntu.com/*
-// @version       1.2
+// @version       1.3
 // ==/UserScript==
 
 (function () {
@@ -55,7 +55,7 @@
                         dataType: "html"
                     }).then(function (questionId, updateTasksForQuestion, response) {
                         $response = $(response);
-                        if($(".pager-answers", $response)){
+                        if($(".pager-answers", $response).length){
                             return;
                         }
                         updateTasksForQuestion.forEach(function (updateTask) {
