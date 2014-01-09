@@ -9,7 +9,7 @@
 // @include       http://*superuser.com/*
 // @include       http://*stackapps.com/*
 // @include       http://*askubuntu.com/*
-// @version       1.4
+// @version       1.5
 // ==/UserScript==
 
 (function () {
@@ -72,9 +72,16 @@
                                 updateTask.target.addClass("deleted-answer");
                             }
                         });
-                    }.bind(null, questionId, updateTasksForQuestion)).fail(function (jqxhr) {
-                        console.log(arguments);
-                    });
+                    }.bind(null, questionId, updateTasksForQuestion))
+                    .fail(function (updateTasksForQuestion, jqxhr) {
+                        if(jqxhr.status === 404){
+                            updateTasksForQuestion.forEach(function(updateTask){
+                                updateTask.target.addClass("deleted-answer");
+                            })
+                        }else if (jqxhr.status > 0){
+                            console.log(arguments);
+                        }
+                    }.bind(null,updateTasksForQuestion);
                 }
             }
         }
