@@ -9,7 +9,7 @@
 // @include       http://*superuser.com/*
 // @include       http://*stackapps.com/*
 // @include       http://*askubuntu.com/*
-// @version       1.5
+// @version       1.5.1
 // ==/UserScript==
 
 (function () {
@@ -81,7 +81,7 @@
                         }else if (jqxhr.status > 0){
                             console.log(arguments);
                         }
-                    }.bind(null,updateTasksForQuestion);
+                    }.bind(null,updateTasksForQuestion));
                 }
             }
         }
