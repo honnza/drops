@@ -9,7 +9,7 @@
 // @include       http://*superuser.com/*
 // @include       http://*stackapps.com/*
 // @include       http://*askubuntu.com/*
-// @version       1.5.1
+// @version       1.6
 // ==/UserScript==
 
 (function () {
@@ -35,7 +35,9 @@
             //todo: this is ugly as a sin, even for a fallback. Use [the API][1] instead
             //[1]: http://api.stackexchange.com/docs/answers-by-ids
             $.get("/posts/" + this.answerId + "/edit").then(function (response) {
-                questionIdPromise.resolve($(response).find("a.cancel-edit").attr("href"));
+                questionIdPromise.resolve(
+                    $(response).find("a.cancel-edit").attr("href").match(/questions\/(\d+)/)[1]
+                );
             });
         }
         questionIdPromise.then(function (questionId) {
