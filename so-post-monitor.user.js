@@ -9,7 +9,7 @@
 // @include       http://*superuser.com/*
 // @include       http://*stackapps.com/*
 // @include       http://*askubuntu.com/*
-// @version       1.7.3
+// @version       1.8
 // ==/UserScript==
 
 (function () {
@@ -56,7 +56,7 @@
                         dataType: "html"
                     }).then(function (questionId, updateTasksForQuestion, response) {
                         $response = $(response);
-                        if($(".pager-answers", $response).length){
+                        if($(".pager-answers a", $response).length){
                             console.log("paging not supported");
                             return;
                         }
