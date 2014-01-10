@@ -9,7 +9,7 @@
 // @include       http://*superuser.com/*
 // @include       http://*stackapps.com/*
 // @include       http://*askubuntu.com/*
-// @version       1.7.1
+// @version       1.7.2
 // ==/UserScript==
 
 (function () {
@@ -51,7 +51,6 @@
         if (visibilityState === "visible") {
             for (var questionId in updateTasksByQuestionId) {
                 var updateTasksForQuestion = updateTasksByQuestionId[questionId];
-                debugger;
                 if (updateTasksforQuestion.some(function(x){return x.target.is(":visible")})) {
                     $.get("/questions/" + questionId, {
                         dataType: "html"
