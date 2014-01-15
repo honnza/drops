@@ -9,7 +9,7 @@
 // @include       http://*superuser.com/*
 // @include       http://*stackapps.com/*
 // @include       http://*askubuntu.com/*
-// @version       1.8
+// @version       1.9
 // ==/UserScript==
 
 (function () {
@@ -20,7 +20,11 @@
 
     function UpdateTask(target) {
         this.target = $(target);
-        this.questionId = this.target.data("questionid") || $(".question-page [data-questionid]").data("questionid");
+	//in case of questions: `closest` will find the parent element.
+        //in case of answers inside a close dialog: `closest` will find `div.show-original`
+        //in case of answers on a question page: `closest` will find `#mainbar`
+        //in case of the 10k tools: nothing can be found
+        this.questionId  =  this.target.closest(":has([data-questionid])").find("[data-questionid]").data("questionid");
         this.answerId = this.target.data("answerid");
     }
 
