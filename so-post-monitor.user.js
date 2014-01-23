@@ -9,7 +9,7 @@
 // @include       http://*superuser.com/*
 // @include       http://*stackapps.com/*
 // @include       http://*askubuntu.com/*
-// @version       1.9
+// @version       1.10
 // ==/UserScript==
 
 (function () {
@@ -17,6 +17,8 @@
     if(!$.fn.addBack) $.fn.addBack = function(selector){
         return this.andSelf().filter(selector);    
     };
+
+/// core
 
     function UpdateTask(target) {
         this.target = $(target);
@@ -27,6 +29,8 @@
         this.questionId  =  this.target.closest(":has([data-questionid])").find("[data-questionid]").data("questionid");
         this.answerId = this.target.data("answerid");
     }
+
+/// on new task
 
     UpdateTask.prototype.addSelf = function () {
         var thisTask = this,
@@ -48,11 +52,35 @@
             if (!updateTasksByQuestionId[questionId]) updateTasksByQuestionId[questionId] = [];
             updateTasksByQuestionId[questionId].push(thisTask);
         });
+
+        //deletion timer:
+        if(this.target.is(".question-page #question")){
+            $(document).on("ajaxComplete", function(_,_,ajaxOptions){
+                if(/\/flags\//.test(ajaxOptions.url) && ajaxOptions.type === "POST"){
+                    if(timerAttached){
+                        console.log("attaching twice (???)");
+                        return;
+                    }
+                    timerAttached = true;
+                    thisTask.target.find(".post-menu").append($("<span>", {"class": "lsep", text: "|"}))
+                        .append($("<input>", {type: "checkbox", id: "monitor-post-deletion", change: function(){
+                            timeDeletion = updateAlways = this.checked;
+                        }})).append($("<span>", {text: " time this post deletion"}));
+                    thisTask.creationTime = Math.min.apply(Math,
+                        thisTask.target.find(".user-action-time span[title]").map(function(){
+                            return Date.parse(this.title);
+                        })
+                    );
+                }
+            });
+        }
     };
+
+/// on clock tick
 
     UpdateTask.updateAll = function () {
         var visibilityState = document.visibilityState || document.webkitVisibilityState || "visible";
-        if (visibilityState === "visible") {
+        if (visibilityState === "visible" || updateAlways) {
             for (var questionId in updateTasksByQuestionId) {
                 var updateTasksForQuestion = updateTasksByQuestionId[questionId];
                 if (updateTasksForQuestion.some(function(x){return x.target.is(":visible")})) {
@@ -72,10 +100,20 @@
                                 $targetInResponse = $("#question", $response);
                             }
                             //yep, even deleted questions are `.deleted-answer`s.
-                            if ($targetInResponse.is(":not(.deleted-answer)")) {
+                            if ($targetInResponse.is(":not(.deleted-answer)")) { //and exists
                                 updateTask.target.removeClass("deleted-answer");
+                                
                             } else {
                                 updateTask.target.addClass("deleted-answer");
+                                // deletion times:
+                                if(timeDeletion && $targetInResponse.is("#question")){
+                                    updateTask.deletionTime = Date.parse(
+                                        $(".question-status .relativetime", $response).attr("title")
+                                    );
+                                    updateTask.deletionTimeError = 500;
+                                    timeDeletion = false;
+                                    timerReport(updateTask);
+                                }
                             }
                         });
                     }.bind(null, questionId, updateTasksForQuestion))
@@ -83,6 +121,12 @@
                         if(jqxhr.status === 404){
                             updateTasksForQuestion.forEach(function(updateTask){
                                 updateTask.target.addClass("deleted-answer");
+                                if(timeDeletion && updateTask.target.is(".question-page #question")){
+                                    updateTask.deletionTime = Date.now() - UPDATE_TIMEOUT / 2;
+                                    updateTask.deletionTimeError = UPDATE_TIMEOUT/2;
+                                    timeDeletion = false;
+                                    timerReport(updateTask);
+                                }
                             })
                         }else if (jqxhr.status > 0){
                             console.log(arguments);
@@ -93,15 +137,20 @@
         }
     };
 
-    ///
+    /// globals
 
     var UPDATE_TARGET_SELECTOR = "div[data-answerid], div[data-questionid]",
+        UPDATE_TIMEOUT = 10000,
 
         updateTasks = [],
         updateTasksById = {},
-        updateTasksByQuestionId = {};
+        updateTasksByQuestionId = {},
 
-    ///
+        updateAlways = false,
+        timeDeletion = false,
+        timerAttached = false;
+
+    /// adding tasks
 
     $(UPDATE_TARGET_SELECTOR).each(function () {
         new UpdateTask(this).addSelf();
@@ -120,5 +169,19 @@
         subtree: true
     });
 
-    setInterval(UpdateTask.updateAll, 10000);
+    setInterval(UpdateTask.updateAll, UPDATE_TIMEOUT);
+
+    /// timer functions
+
+    function timerReport(updateTask){
+        debugger;
+        $checkbox = $("#monitor-post-deletion");
+        var dt = updateTask.deletionTime - updateTask.creationTime;
+        var dte = updateTask.deletionTimeError;
+        $checkbox.next().text(
+            "deleted after " + (dt/1000).toFixed() + " +/- " + (dte/1000) + "s"
+        );
+        $checkbox.remove();
+        document.title = "deleted - " + document.title;
+    }
 })();
