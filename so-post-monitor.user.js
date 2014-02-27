@@ -9,7 +9,7 @@
 // @include       http://*superuser.com/*
 // @include       http://*stackapps.com/*
 // @include       http://*askubuntu.com/*
-// @version       1.12
+// @version       1.13
 // ==/UserScript==
 
 (function () {
@@ -28,7 +28,7 @@
         //in case of the 10k tools: the first branch kicks in.
         this.questionId  = +this.target.closest(":has(.answer-hyperlink)")
                                        .find(".answer-hyperlink")
-                                       .attr("href").match("/questions/(\d+)/")[1]
+                                       .attr("href").match(/\/questions\/(\d+)\//)[1]
                         || this.target.closest(":has([data-questionid])")
                                       .find("[data-questionid]")
                                       .data("questionid");
