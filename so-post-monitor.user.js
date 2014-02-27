@@ -23,9 +23,9 @@
     function UpdateTask(target) {
         this.target = $(target);
 	//in case of questions: `closest` will find the parent element.
-        //in case of answers inside a close dialog: `closest` will find `div.show-original`
-        //in case of answers on a question page: `closest` will find `#mainbar`
-        //in case of the 10k tools: nothing can be found
+        //in case of answers inside a close dialog: the second `closest` will find `div.show-original`
+        //in case of answers on a question page: the second `closest` will find `#mainbar`
+        //in case of the 10k tools: the first branch kicks in.
         this.questionId  = +this.target.closest(":has(.answer-hyperlink)")
                                        .find(".answer-hyperlink")
                                        .attr("href").match("/questions/(\d+)/")[1]
