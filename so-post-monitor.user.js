@@ -26,7 +26,9 @@
         this.questionId = this.target.data("questionid");
         if (this.questionId) return;
         if (/^\/questions\/\d+\//.test(location.pathname)){
-           this.questionId = this.target.data("questionid");
+           this.questionId =  this.target.closest("#close-question-form")
+                                         .find(".question").data("questionid")
+                           || $("#question").data("questionid");
         }
     }
 
