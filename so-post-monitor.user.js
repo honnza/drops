@@ -9,7 +9,7 @@
 // @include       http://*superuser.com/*
 // @include       http://*stackapps.com/*
 // @include       http://*askubuntu.com/*
-// @version       2.0
+// @version       2.1
 // ==/UserScript==
 
 (function () {
