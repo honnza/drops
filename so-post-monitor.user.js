@@ -29,7 +29,8 @@
             this.questionId =  this.target.closest("#close-question-form")
                                           .find(".question").data("questionid")
                             || $("#question").data("questionid");
-        } else if (/^\/review\/(first-posts|late-answers|low-quality-posts)\/\d+/.test(location.pathname)){
+        } else if (/^\/review\/(first-posts|late-answers|low-quality-posts)\/\d+/
+                   .test(location.pathname)){
             this.questionId = $(".question").data("questionid");
         }
     }
