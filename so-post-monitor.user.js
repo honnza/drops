@@ -9,7 +9,7 @@
 // @include       http://*superuser.com/*
 // @include       http://*stackapps.com/*
 // @include       http://*askubuntu.com/*
-// @version       1.13
+// @version       2.0
 // ==/UserScript==
 
 (function () {
@@ -23,7 +23,11 @@
     function UpdateTask(target) {
         this.target = $(target);
         this.answerId = this.target.data("answerid");
-        ...
+        this.questionId = this.target.data("questionid");
+        if (this.questionId) return;
+        if (/^\/questions\/\d+\//.test(location.pathname)){
+           this.questionId = this.target.data("questionid");
+        }
     }
 
 /// on new task
