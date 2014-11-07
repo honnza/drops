@@ -6,13 +6,14 @@
 // @include       http://chat.meta.stackexchange.com/rooms/*
 // @include       http://chat.stackoverflow.com/rooms/*
 // @include       http://chat.meta.stackoverflow.com/rooms/*
-// @version       0.1
+// @version       0.2
 // ==/UserScript==
 $(function(){
   var currentFrame = null;
   $("body").click(function(){
     if(currentFrame) currentFrame.parentNode.removeChild(currentFrame);
     currentFrame = null;
+    console.log("frame removed");
   });
   $("#chat").hoverIntent({
     selector: ".content a", 
@@ -38,13 +39,13 @@ $(function(){
         currentFrame.style.padding = 10;
         currentFrame.appendChild(overlay);
         currentFrame.appendChild(frame);
-        console.log("%o appended", currentFrame);
         
-         GM_xmlhttpRequest({
-          url: link.href,
+        GM_xmlhttpRequest({
+          url: this.href,
           onload: function(response){
-            frame.document.documentElement.innerHTML = response.data;
-           document.body.appendChild(currentFrame);
+            document.body.appendChild(currentFrame);
+            frame.contentDocument.innerHTML = response.data;
+            console.log("%o appended", currentFrame);
           }
         });
       }
