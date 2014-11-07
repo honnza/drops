@@ -9,7 +9,7 @@
 // @include       http://*superuser.com/*
 // @include       http://*stackapps.com/*
 // @include       http://*askubuntu.com/*
-// @version       2.1
+// @version       2.2
 // ==/UserScript==
 
 (function () {
@@ -175,6 +175,7 @@
     });
 
     setInterval(UpdateTask.updateAll, UPDATE_TIMEOUT);
+    $(document).on("visibilitychange", UpdateTask.updateAll);
 
     /// timer functions
 
