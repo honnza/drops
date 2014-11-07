@@ -2,14 +2,11 @@
 // @name          Stack Exchange hover popup
 // @description   Shows a popup with a SE question when a link to the question is hovered in the chat
 // @require       http://cherne.net/brian/resources/jquery.hoverIntent.minified.js
-// @include       http://*stackexchange.com/*
-// @include       http://*stackoverflow.com/*
-// @include       http://*mathoverflow.com/*
-// @include       http://*serverfault.com/*
-// @include       http://*superuser.com/*
-// @include       http://*stackapps.com/*
-// @include       http://*askubuntu.com/*
-// @version       2.2
+// @include       http://chat.stackexchange.com/rooms/*
+// @include       http://chat.meta.stackexchange.com/rooms/*
+// @include       http://chat.stackoverflow.com/rooms/*
+// @include       http://chat.meta.stackoverflow.com/rooms/*
+// @version       0.1
 // ==/UserScript==
 $(function(){
   var currentFrame = null;
