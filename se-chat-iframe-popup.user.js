@@ -6,7 +6,7 @@
 // @include       http://chat.meta.stackexchange.com/rooms/*
 // @include       http://chat.stackoverflow.com/rooms/*
 // @include       http://chat.meta.stackoverflow.com/rooms/*
-// @version       0.3
+// @version       0.4
 // ==/UserScript==
 $(function(){
   var popup = null;
@@ -18,7 +18,7 @@ $(function(){
   $("#chat").hoverIntent({
     selector: ".content a", 
     out: function(){console.log("out");},
-    over: function(event){
+    over: function(){
       function maximise(el){
         el.style.top = "0px";
         el.style.left = "0px";
@@ -26,8 +26,32 @@ $(function(){
         el.style.bottom = "0px";
         el.style.position = "absolute";
       }
+      function frameLoad(url){
+        var base = document.createElement("base");
+        base.href = url;
+        GM_xmlhttpRequest({
+          url: url,
+          onload: function(response){
+            document.body.appendChild(popup);
+            frame.contentDocument.documentElement.innerHTML = response.responseText;
+            frame.contentDocument.head.appendChild(base);
+            $(frame.contentDocument).on("click", "a[href]", function(event){
+              if(!event.isDefaultPrevented()){
+                event.preventDefault();
+                frameLoad(this.href);
+                console.log("navigation to %o emulated", this.href);
+              } else {
+                console.log("in-frame click to %o with default prevented", this);
+              }
+            })
+            console.log("%o appended", popup);
+          }
+        });
+      }
+      
       console.log("in %o", this);
       if(isSeDomain(this.host)){
+        
         var frame = document.createElement("iframe");
         frame.style.height = "100%";
         frame.style.width = "100%";
@@ -48,14 +72,7 @@ $(function(){
         popup.style.zIndex = 9;
         popup.appendChild(border);
         
-        GM_xmlhttpRequest({
-          url: this.href,
-          onload: function(response){
-            document.body.appendChild(popup);
-            frame.contentDocument.innerHTML = response.responseText;
-            console.log("%o appended", popup);
-          }
-        });
+        frameLoad(this.href);
       }
     }
   });
