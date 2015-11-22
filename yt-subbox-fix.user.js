@@ -1,9 +1,8 @@
 // ==UserScript==
 // @name          Youtube subbox number patch
 // @description   replaces the (unreliable and since mid-Nov2015 broken) subscription feed new item counter in the menu
-// @include       http://youtube.com/*
-// @include       https://youtube.com/*
-// @version       0.0.2
+// @include       http*://*.youtube.com/*
+// @version       0.0.3
 // ==/UserScript==
 
 if(location.pathname === "/feed/subscriptions"){
