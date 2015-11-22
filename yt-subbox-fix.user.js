@@ -14,7 +14,7 @@ if(location.pathname === "/feed/subscriptions"){
   xhr.open("get", "/feed/subscriptions");
   xhr.onload = function(){
     var subVids = scrapeIDs(new DOMParser().parseFromString(xhr.response, "text/html"));
-    var numUnseen = unseenVids.filter(id => ~ seenVids.indexOf(id)).length;
+    var numUnseen = subVids.filter(id => ~ seenVids.indexOf(id)).length;
     var numElement = document.querySelector("#subscriptions-guide-item .guide-count-value")
     if(numElement){
     	numElement.textContent = numUnseen.toString();
