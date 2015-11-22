@@ -2,7 +2,7 @@
 // @name          Youtube subbox number patch
 // @description   replaces the (unreliable and since mid-Nov2015 broken) subscription feed new item counter in the menu
 // @include       http*://*.youtube.com/*
-// @version       0.0.3
+// @version       0.0.4
 // ==/UserScript==
 
 if(location.pathname === "/feed/subscriptions"){
@@ -10,7 +10,7 @@ if(location.pathname === "/feed/subscriptions"){
   console.log("uptdated the list of seen vids");
 } else {
 	var seenVids = GM_getValue("seenVids");
-  var xhr = new XmlHttpRequest();
+  var xhr = new XMLHttpRequest();
   xhr.open("get", "/feed/subscriptions");
   xhr.onLoad = function(){
     var subVids = scrapeIDs(new DOMParser().parseFromString(xhr.response, "text/html"));
