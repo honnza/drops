@@ -2,7 +2,7 @@
 // @name          Youtube subbox number patch
 // @description   replaces the (unreliable and since mid-Nov2015 broken) subscription feed new item counter in the menu
 // @include       http*://*.youtube.com/*
-// @version       0.0.12
+// @version       0.0.13
 // ==/UserScript==
 
 if(location.pathname === "/feed/subscriptions"){
@@ -38,7 +38,7 @@ function awaitElement(parent, selector, callback){
 		mo = new MutationObserver(function(records){
 			records.forEach(function(record){
 				[].some.call(record.addedNodes, function(node){
-					if(node.matches(selector)){
+					if(node.type === node.ELEMENT_TYPE && node.matches(selector)){
 						callback(node);
 						mo.unobserve();
 						return true;
