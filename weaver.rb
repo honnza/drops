@@ -15,9 +15,29 @@ class CombinationGenerator
       @literals.any? {|lit| str[lit.ix] == (lit.is_neg ? "0" : "1")}
     end
 
+    def - other
+      # a && (!a || b) === a && b
+      if other.literals.length == 1
+        selfLit = @literals.find{|lit| lit.ix == other.literals[0].ix}
+        if selfLit && selfLit.is_neg != other.literals[0].is_neg
+          res = Filter.new (@literals - [selfLit])
+          puts "#{self} - #{other} = #{res}"
+          return res
+        end
+      end
+
+      # a && (a || b) = a
+      if other.literals - @literals == []
+        puts "#{other} => #{self}"
+        return nil
+      end
+
+      self
+    end
+
     def last_ix; @literals.last.ix; end
     def [] ix; @literals_by_ix[ix]; end
-    def to_s; "Filter{#{@literals.map(&:to_s).join(", ")}}"; end
+    def to_s; "{#{@literals.map(&:to_s).join(",")}}"; end
   end
 
   def initialize names
@@ -29,13 +49,23 @@ class CombinationGenerator
   end
 
   def add_filter f_names
-    @filters.push Filter.new f_names.map {|f_name|
+    learn Filter.new f_names.map {|f_name|
       _, sign, name = *(f_name.match /(.)(.*)/)
       ix = @names.find_index name
       raise ArgumentError, "unknown name #{name.inspect}" unless ix
       Literal.new ix, sign == "-"
     }
-    "#{@filters.length} filters, last #{@filters.last}"
+  end
+  def learn nf
+    @filters.each{|f| nf -= f; return "new filter redundant" unless nf}
+    @filters.each do |f|
+      difff = f - nf
+      @filters.delete f if difff != f
+      learn difff if difff && difff != f
+    end
+    @filters.push nf
+
+    @filters.join ", "
   end
 
   def rm_filter
@@ -61,6 +91,7 @@ class CombinationGenerator
     if path.length == @names.length
       y.yield path.chars.map.with_index {|c, ix| c == '1' ? @names[ix] + " " : ""}.join ""
       @yield_clock += 1 
+      @fail_cache = {}
     end
 
     unless @fail_cache[[unsat_filters, ones, zeroes]]
