@@ -51,3 +51,21 @@ function awaitElement(parent, selector, callback){
       mo.observe(parent, {childList:true, subtree:true})
    }
 }
+
+// With a guide count, the DOM is:
+//  body#body > div#body-container > div#page-container > div#page > div#guide > div#appbar-guide-menu 
+//   > div#guide-container > div.guide-module-content > ul.guide-toplevel > li.guide-section 
+//   > div.guide-item-container > ul.guide-user-links > li#subscriptions-guide-item.guide-notification-item
+//   > a.guide-item > (span.yt-valign-container > span.display-name) ~ (span.guide-count > span.guide-count-value)
+// Without a guide count, the DOM is:
+//  body#body > div#body-container > div#page-container > div#page > div#guide > div#appbar-guide-menu
+//   > div#guide-container > div.guide-module-content > ul.guide-toplevel > li.guide-section
+//   > div.guide-item-container > ul.guide-user-links > li#subscriptions-guide-item.guide-notification-item
+//   > a.guide-item > span.yt-valign-container > span.display-name.no-count
+// The diff seems to be:
+//  in the context of #subscriptions-guide-item
+//   remove .no-count from .display-name
+//   append span.guide-count.yt-uix-tooltip.yt-valign to .guide-item
+//   append span.yt-valign-container.guide-count-value to the new element
+//   set its value to the desired number
+// The same DOM exists on video pages (pop-up menu) as on feed pages (persistent menu)
