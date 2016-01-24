@@ -16,23 +16,22 @@ class CombinationGenerator
     end
 
     def - other
-      # a && (!a || b) === a && b
-      if other.literals.length == 1
-        selfLit = @literals.find{|lit| lit.ix == other.literals[0].ix}
-        if selfLit && selfLit.is_neg != other.literals[0].is_neg
-          res = Filter.new (@literals - [selfLit])
-          puts "#{self} - #{other} = #{res}"
-          return res
-        end
-      end
-
-      # a && (a || b) = a
-      if other.literals - @literals == []
+      diff = other.literals - @literals
+      case diff.size
+      when 0 
         puts "#{other} => #{self}"
-        return nil
+        nil
+      when 1
+        coDiff = @literals.find{|lit|lit.ix == diff[0].ix}
+        if coDiff.nil?
+          self
+        else
+          res = Filter.new(@literals - [coDiff])
+          puts "#{self} - #{other} = #{res}"
+          res
+        end
+      else self
       end
-
-      self
     end
 
     def last_ix; @literals.last.ix; end
