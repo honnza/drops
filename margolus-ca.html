@@ -1,0 +1,184 @@
+<html>
+  <head>
+    <title>margolus CA</title>
+  </head>
+  <body>
+    <p><canvas id = "canvas"></canvas>
+    <p><span id = "tempSpan"></span>
+    <p>scale: <input id = "scaleInput" value = 1> 
+    <p><input type = "text" id = "urlInput"><input type = "file" id = "fileInput">
+    <!--p><input type = "button" value = "reverse" onclick = "ca.reverse();"-->
+    <p><input type = "button" value = "shuffle" onclick = "ca.shuffle();">
+
+    <script type="text/javascript">
+
+      function loadUrl(url){
+        var img = new Image;
+        img.crossOrigin = "anonymous";
+        img.addEventListener("load", function(){;
+          var scale = + document.getElementById("scaleInput").value;
+          var c = document.getElementById("canvas");
+          c.width = this.width * scale;
+          c.height = this.height * scale;
+          var vscale = Math.min(640 / c.height, 1024 / c.width);
+          c.style.height = c.height * vscale;
+          c.style.width = c.width * vscale;
+          var ctx = c.getContext("2d");
+          ctx.drawImage(this, 0, 0, c.width, c.height);
+          ca.start(c);
+        });
+        img.src = url;
+      }
+
+      document.getElementById("fileInput").addEventListener("change", function(){
+        ca.stop();
+        var reader = new FileReader();
+        reader.addEventListener("load", function(){loadUrl(reader.result)});
+        reader.readAsDataURL(this.files[0]);
+      });
+
+      document.getElementById("urlInput").addEventListener("blur", function(){
+        loadUrl("http://crossorigin.me/" + this.value);
+      })
+
+      ca = {
+        stop: function(){this.running = false},
+        start: function(c){
+          this.ctx = c.getContext("2d");
+          this.w = c.width;
+          this.h = c.height;
+          this.pixels = this.w * this.h;
+          this.data = this.ctx.getImageData(0, 0, this.w, this.h);
+          this.phase = 0;
+          this.temperature = TEMP_INIT;
+          this.tempSpan = document.getElementById("tempSpan");
+
+           for(var x = this.phase; x < this.w; x ++){
+             for(var y = this.phase; y < this.h; y ++){
+                 this.data.data[4 * x + 4 * this.w * y + 3] = 255;
+          //     normalize(this.data.data, 4 * x + 4 * this.w * y);
+             }
+           }
+          this.running = true;
+
+          var tick = annealingTick.bind(this);
+          tick();
+
+          function annealingTick(){
+            for(var n = 0; n < 10000; n++){
+              var i = (Math.random() * 4 * this.pixels) & ~3;
+              var j = (Math.random() * 4 * this.pixels) & ~3;
+              var ary = this.data.data;
+              var origGradient = rgbGradientSqAt(ary, i, 4, 4 * this.w) + rgbGradientSqAt(ary, j, 4, 4 * this.w);
+              swapRGB(ary, i, j);
+              var newGradient = rgbGradientSqAt(ary, i, 4, 4 * this.w) + rgbGradientSqAt(ary, j, 4, 4 * this.w);
+              if(newGradient - origGradient > this.temperature * this.temperature) swapRGB(ary, i, j);
+            }
+            this.ctx.putImageData(this.data, 0, 0)
+            this.temperature -= TEMP_STEP;
+            if(this.temperature < 0) this.temperature = 0;
+            this.tempSpan.textContent = this.temperature;
+            if(this.running) requestAnimationFrame(tick);
+          }
+          function margolusTick(){
+            for(var x = this.phase; x < this.w - 1; x += 2){
+              for(var y = this.phase; y < this.h - 1; y += 2){
+                doMargolus.call(this, this.data.data, 4 * x + 4 * this.w * y, 4, 4 * this.w);
+              }
+            }
+            this.ctx.putImageData(this.data, 0, 0)
+            this.phase = 1 - this.phase;
+            if(this.running) requestAnimationFrame(tick);
+          };
+
+
+        },
+        reverse: function(){
+          for(var x = 0; (2 * x + 1) <= this.w; x++){
+            for(var y = 0; y < this.h; y++){
+              if(2 * x + 1 === this.w && 2 * y >= this.h) return;
+              var off1 = 4 * x + 4 * this.w * y;
+              swapRGB(this.data.data, off1, this.data.data.length - 4 - off1); 
+            }
+          }
+        },
+        shuffle: function(){
+          this.temperature = TEMP_INIT;
+          for(var i = 0; i < this.data.data.length; i += 4){
+            var j = Math.random() * (i + 1) & ~3;
+            swapRGB(this.data.data, i, j) 
+          }
+        }
+      }
+
+      function margolusSortRGB(ary, ulo, xOff, yOff){
+        sortRGB(ary, ulo, ulo + xOff, 0.49, 0.31, 0.20);
+        sortRGB(ary, ulo + yOff, ulo + xOff + yOff, 0.49, 0.31, 0.20);
+        sortRGB(ary, ulo, ulo + yOff, 0, 0, 1);
+        sortRGB(ary, ulo + xOff, ulo + xOff + yOff, 0, 0, 1);      }
+
+      var doMargolus = margolusSortRGB;
+
+      function normalize(ary, off){
+        var lScale = gamma[255] / (gamma[ary[off]] + gamma[ary[off + 1]] + gamma[ary[off + 2]]);
+        scale = Math.pow(lScale, 1/GAMMA_EXP);
+
+        if(scale > 255){
+          ary[off    ] = 155; 
+          ary[off + 1] = 155; 
+          ary[off + 2] = 155; 
+        } else {
+          ary[off    ] *= scale; 
+          ary[off + 1] *= scale; 
+          ary[off + 2] *= scale; 
+        }
+      }
+
+      function sortRGB(ary, off1, off2, r = 0.18, g = 0.81, b = 0.01){
+        var rgb1 = gamma[ary[off1]] * r + gamma[ary[off1 + 1]] * g + gamma[ary[off1 + 2]] * b; 
+        var rgb2 = gamma[ary[off2]] * r + gamma[ary[off2 + 1]] * g + gamma[ary[off2 + 2]] * b; 
+        
+        if(rgb1 > rgb2){
+          swapRGB(ary, off1, off2);
+        }
+      }
+
+      function distRGBsq(ary, off1, off2, r = 2, g = 3, b = 1){
+        var dr = r * (gamma[ary[off1]] - gamma[ary[off2]]);
+        var dg = g * (gamma[ary[off1 + 1]] - gamma[ary[off2 + 1]]);
+        var db = b * (gamma[ary[off1 + 2]] - gamma[ary[off2 + 2]]);
+        return dr*dr + dg*dg + db*db
+      }
+
+      function rgbGradientSqAt(ary, ix, xOff, yOff){
+        var acc = 0;
+        for(var dx = -1; dx <= 1; dx++){
+          for(var dy = -1; dy <= 1; dy++){
+            acc += distRGBsq(ary, ix, (ix + xOff * dx + yOff * dy + ary.length) % ary.length)
+          }
+        }
+        return acc / 8;
+      }
+
+      function swapRGB(ary, off1, off2){
+        var t;
+        t = ary[off1];
+        ary[off1] = ary[off2];
+        ary[off2] = t;
+        t = ary[off1 + 1];
+        ary[off1 + 1] = ary[off2 + 1];
+        ary[off2 + 1] = t;
+        t = ary[off1 + 2];
+        ary[off1 + 2] = ary[off2 + 2];
+        ary[off2 + 2] = t;
+      }
+
+      var GAMMA_EXP = 1;
+      var gamma = Array(256);
+      for(var i = 0; i < 256; i++) gamma[i] = Math.pow(i, GAMMA_EXP);
+
+      var TEMP_INIT = gamma[255];
+      var TEMP_STEP = TEMP_INIT / (1 << 11);
+    </script>
+  </body>
+</html>
