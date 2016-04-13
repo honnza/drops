@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name       SOChatUserColors
-// @version    1.4
+// @version    1.5
 // @description  color chat lines in a Stack Overflow chat room, using a different color for each user
 // @match      *://chat.stackoverflow.com/rooms/*
 // @match      *://chat.stackexchange.com/rooms/*
@@ -18,7 +18,6 @@ var main = function(){
     var $presentUsers = $("#present-users");
     var $chat = $(".monologue").parent().add("#chat");
     var $style = $("<style>");
-    var isMobile = /( |^)mc=1/.test(document.cookie);
     
     //element not present in the transcript
     $presentUsers.each(function(){ 
@@ -50,15 +49,14 @@ var main = function(){
     
     function refresh(){
         var newCSS = "";
-        var selectorRest = isMobile ? "" : " .messages";
         function colorise(usrId){
             var usrIDbits = (+/\d+/.exec(usrId)).toString(2).split('').reverse().join('');
             var usrColor = 'rgb('+parseInt(('11'+usrIDbits.replace(/(.)?.?.?/g,'$1')+"00000000").slice(0,8),2)
             +','  +parseInt(('11'+usrIDbits.replace(/.?(.)?.?/g,'$1')+"00000000").slice(0,8),2)
             +','  +parseInt(('11'+usrIDbits.replace(/.?.?(.)?/g,'$1')+"00000000").slice(0,8),2)
             +')';
-            var usrClass = ".user-"+usrId;
-            newCSS += usrClass + selectorRest + "{background-color:"+usrColor+"}\n";
+            var usrClass = "#chat .user-"+usrId;
+            newCSS += usrClass + "{background-color:"+usrColor+"}\n";
         }
         CHAT.RoomUsers.allPresent().forEach(function(user){
             if(!user.colorised && !pastUsers[user.id]){

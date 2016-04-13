@@ -77,8 +77,8 @@
             this.ctx.putImageData(this.data, 0, 0)
             this.temperature -= TEMP_STEP;
             if(this.temperature < 0) this.temperature = 0;
-            this.tempSpan.textContent = this.temperature;
-            if(this.running) requestAnimationFrame(tick);
+            document.title = this.tempSpan.textContent = this.temperature;
+            if(this.running) setTimeout(tick, 1);
           }
           function margolusTick(){
             for(var x = this.phase; x < this.w - 1; x += 2){
@@ -88,7 +88,7 @@
             }
             this.ctx.putImageData(this.data, 0, 0)
             this.phase = 1 - this.phase;
-            if(this.running) requestAnimationFrame(tick);
+            if(this.running) setTimeout(tick, 1);
           };
 
 
@@ -151,13 +151,18 @@
       }
 
       function rgbGradientSqAt(ary, ix, xOff, yOff){
-        var acc = 0;
-        for(var dx = -1; dx <= 1; dx++){
-          for(var dy = -1; dy <= 1; dy++){
-            acc += distRGBsq(ary, ix, (ix + xOff * dx + yOff * dy + ary.length) % ary.length)
-          }
-        }
-        return acc / 8;
+        var w = yOff / xOff;
+        var h = ary.length / yOff;
+        var x = (ix / xOff) % w;
+        var y = (ix / yOff) | 0;
+        var n = 0;
+        var sum = 0;
+ 
+        if(x >   0) {n++; sum += distRGBsq(ary, ix, ix - xOff)}
+        if(y >   0) {n++; sum += distRGBsq(ary, ix, ix - yOff)}
+        if(x < w-1) {n++; sum += distRGBsq(ary, ix, ix + xOff)}
+        if(y < h-1) {n++; sum += distRGBsq(ary, ix, ix + yOff)}
+        return sum / n;
       }
 
       function swapRGB(ary, off1, off2){
