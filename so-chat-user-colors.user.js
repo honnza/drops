@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name       SOChatUserColors
-// @version    1.6.1
+// @version    1.6.2
 // @description  color chat lines in a Stack Overflow chat room, using a different color for each user
 // @match      *://chat.stackoverflow.com/rooms/*
 // @match      *://chat.stackexchange.com/rooms/*
@@ -15,7 +15,7 @@
 // ==/UserScript==
 
 var main = function(){
-  var FORCE_SCALE = 0.1;
+  var FORCE_SCALE = 0.5;
   var $presentUsers = $("#present-users");
   var $chat = $(".monologue").parent().add("#chat");
   var $style = $("<style>");
