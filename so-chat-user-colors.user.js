@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name       SOChatUserColors
-// @version    1.6.2
+// @version    1.6.3
 // @description  color chat lines in a Stack Overflow chat room, using a different color for each user
 // @match      *://chat.stackoverflow.com/rooms/*
 // @match      *://chat.stackexchange.com/rooms/*
@@ -38,7 +38,8 @@ var main = function(){
     users.forEach(function(user){
       if(!user.color){ user.color = colorise(user.id); }
       var usrClass = "#main .monologue.user-"+user.id;
-      user.msgCount = $(usrClass + selectorRest).length;
+      user.msgCount = $(usrClass + selectorRest)
+          .filter((i, e) => e.offsetTop > document.documentElement.scrollTop).length;
     });
     users.forEach(function(user){
       user.cDiff = [0, 0, 0];
@@ -47,7 +48,7 @@ var main = function(){
           var dx = (user.color[0]-user2.color[0]);
           var dy = (user.color[1]-user2.color[1]);
           var dz = (user.color[2]-user2.color[2]);
-          var force = FORCE_SCALE / (dx*dx + dy*dy + dz*dz) * user.msgCount * user2.msgCount;
+          var force = FORCE_SCALE / (dx*dx + dy*dy + dz*dz) * (user.msgCount + 1) * (user2.msgCount + 1);
           user.cDiff[0] += dx * force;
           user.cDiff[1] += dy * force;
           user.cDiff[2] += dz * force;
