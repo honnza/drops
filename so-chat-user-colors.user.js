@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name       SOChatUserColors
-// @version    1.6.9
+// @version    1.6.10
 // @description  color chat lines in a Stack Overflow chat room, using a different color for each user
 // @match      *://chat.stackoverflow.com/rooms/*
 // @match      *://chat.stackexchange.com/rooms/*
@@ -23,11 +23,13 @@ var main = function(){
       .css({position: "fixed", display: "inline-block", right: 25, top: 25, zIndex: 1,
             background: "white", border: "2px solid darkGray", borderRadius: 10, padding: 10})
       .on("click", function(){$debug.find("span").toggle();})
-      .appendTo(document.body);
+      .appendTo(document.body).find("span");
   var isMobile = /( |^)mc=1/.test(document.cookie);
 
   refresh();
   $style.appendTo(document.head);
+
+  function showAry(ary, n){return ary.map(v => v.toFixedString(n)).join(", ")}
 
   function refresh(){
     var newCSS = "";
@@ -62,14 +64,14 @@ var main = function(){
             user.cDiff[2] += dz * forceMul;
           }
         });
-        debugLines.push(user.name + " - [" + user.color + "] + [" + user.cDiff + "]")
+        debugLines.push(user.name + " - [" + showAry(user.color, 10) + "] + [" + showAry(user.cDiff, 10) + "]")
       }
     });
     users.forEach(function(user){
       user.color[0] = 224 + 32 * Math.tanh((user.color[0] + user.cDiff[0]) / 32 - 7);
       user.color[1] = 224 + 32 * Math.tanh((user.color[1] + user.cDiff[1]) / 32 - 7);
       user.color[2] = 224 + 32 * Math.tanh((user.color[2] + user.cDiff[2]) / 32 - 7);
-      var colorCSS = "rgb(" + user.color.map(v => Math.floor(v)).join(", ") + ")";
+      var colorCSS = "rgb(" + showAry(user.color, 0) + ")";
       var usrClass = "#main .monologue.user-"+user.id;
       newCSS += usrClass + selectorRest + "{background-color:"+colorCSS+"}\n";
     });
