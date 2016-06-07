@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name       SOChatUserColors
-// @version    1.6.7
+// @version    1.6.8
 // @description  color chat lines in a Stack Overflow chat room, using a different color for each user
 // @match      *://chat.stackoverflow.com/rooms/*
 // @match      *://chat.stackexchange.com/rooms/*
@@ -19,10 +19,11 @@ var main = function(){
   var $presentUsers = $("#present-users");
   var $chat = $(".monologue").parent().add("#chat");
   var $style = $("<style>");
-  var $debug = $("<pre>")
+  var $debug = $("<pre><span>")
       .css({position: "fixed", display: "inline-block", right: 25, top: 25, zIndex: 1,
             background: "white", border: "2px solid darkGray", borderRadius: 10, padding: 10})
-//      .appendTo(document.body);
+      .on("click", function(){$debug.find("span").toggle();})
+      .appendTo(document.body);
   var isMobile = /( |^)mc=1/.test(document.cookie);
 
   refresh();
@@ -49,6 +50,7 @@ var main = function(){
     users.forEach(function(user){
       user.cDiff = [0, 0, 0];
       if(user.msgCount){
+        debugLines.push(user.name + " - [" + user.color + "] + [" + user.cDiff + "]")
         users.forEach(function(user2) {
           if(user !== user2) {
             var dx = (user.color[0]-user2.color[0]);
@@ -64,9 +66,9 @@ var main = function(){
       }
     });
     users.forEach(function(user){
-      user.color[0] = 224 + 32 * Math.tanh((user.color[0] + user.cDiff[0]) / 32 - 7);
-      user.color[1] = 224 + 32 * Math.tanh((user.color[1] + user.cDiff[1]) / 32 - 7);
-      user.color[2] = 224 + 32 * Math.tanh((user.color[2] + user.cDiff[2]) / 32 - 7);
+      user.color[0] += user.cDiff[0];
+      user.color[1] += user.cDiff[1];
+      user.color[2] += user.cDiff[2];
       var colorCSS = "rgb(" + user.color.map(v => Math.floor(v)).join(", ") + ")";
       var usrClass = "#main .monologue.user-"+user.id;
       newCSS += usrClass + selectorRest + "{background-color:"+colorCSS+"}\n";
