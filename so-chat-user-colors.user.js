@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name       SOChatUserColors
-// @version    1.6.8
+// @version    1.6.9
 // @description  color chat lines in a Stack Overflow chat room, using a different color for each user
 // @match      *://chat.stackoverflow.com/rooms/*
 // @match      *://chat.stackexchange.com/rooms/*
@@ -50,7 +50,6 @@ var main = function(){
     users.forEach(function(user){
       user.cDiff = [0, 0, 0];
       if(user.msgCount){
-        debugLines.push(user.name + " - [" + user.color + "] + [" + user.cDiff + "]")
         users.forEach(function(user2) {
           if(user !== user2) {
             var dx = (user.color[0]-user2.color[0]);
@@ -63,12 +62,13 @@ var main = function(){
             user.cDiff[2] += dz * forceMul;
           }
         });
+        debugLines.push(user.name + " - [" + user.color + "] + [" + user.cDiff + "]")
       }
     });
     users.forEach(function(user){
-      user.color[0] += user.cDiff[0];
-      user.color[1] += user.cDiff[1];
-      user.color[2] += user.cDiff[2];
+      user.color[0] = 224 + 32 * Math.tanh((user.color[0] + user.cDiff[0]) / 32 - 7);
+      user.color[1] = 224 + 32 * Math.tanh((user.color[1] + user.cDiff[1]) / 32 - 7);
+      user.color[2] = 224 + 32 * Math.tanh((user.color[2] + user.cDiff[2]) / 32 - 7);
       var colorCSS = "rgb(" + user.color.map(v => Math.floor(v)).join(", ") + ")";
       var usrClass = "#main .monologue.user-"+user.id;
       newCSS += usrClass + selectorRest + "{background-color:"+colorCSS+"}\n";
