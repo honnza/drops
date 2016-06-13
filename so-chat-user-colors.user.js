@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name       SOChatUserColors
-// @version    1.6.12
+// @version    1.6.1
 // @description  color chat lines in a Stack Overflow chat room, using a different color for each user
 // @match      *://chat.stackoverflow.com/rooms/*
 // @match      *://chat.stackexchange.com/rooms/*
@@ -49,23 +49,22 @@ var main = function(){
       user.msgCount = $(usrClass + selectorRest)
           .filter((i, e) => e.offsetTop > document.documentElement.scrollTop).length;
     });
+    users = users.filter(u => u.msgCount);
     users.forEach(function(user){
       user.cDiff = [0, 0, 0];
-      if(user.msgCount){
-        users.forEach(function(user2) {
-          if(user !== user2) {
-            var dx = (user.color[0]-user2.color[0]);
-            var dy = (user.color[1]-user2.color[1]);
-            var dz = (user.color[2]-user2.color[2]);
-            var sqDist = (dx*dx + dy*dy + dz*dz)
-            var forceMul = FORCE_SCALE / sqDist * (user.msgCount * user2.msgCount);
-            user.cDiff[0] += dx * forceMul;
-            user.cDiff[1] += dy * forceMul;
-            user.cDiff[2] += dz * forceMul;
-          }
-        });
-        debugLines.push(user.name + " - [" + showAry(user.color, 10) + "] + [" + showAry(user.cDiff, 10) + "]")
-      }
+      users.forEach(function(user2) {
+        if(user !== user2) {
+          var dx = (user.color[0]-user2.color[0]);
+          var dy = (user.color[1]-user2.color[1]);
+          var dz = (user.color[2]-user2.color[2]);
+          var sqDist = (dx*dx + dy*dy + dz*dz)
+          var forceMul = FORCE_SCALE / sqDist * (user.msgCount * user2.msgCount);
+          user.cDiff[0] += dx * forceMul;
+          user.cDiff[1] += dy * forceMul;
+          user.cDiff[2] += dz * forceMul;
+        }
+      });
+      debugLines.push(user.name + " - [" + showAry(user.color, 10) + "] + [" + showAry(user.cDiff, 10) + "]")
     });
     users.forEach(function(user){
       user.color[0] = 224 + 32 * Math.tanh((user.color[0] + user.cDiff[0]) / 32 - 7);
