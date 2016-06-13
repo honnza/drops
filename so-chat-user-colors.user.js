@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name       SOChatUserColors
-// @version    1.6.13
+// @version    1.6.14
 // @description  color chat lines in a Stack Overflow chat room, using a different color for each user
 // @match      *://chat.stackoverflow.com/rooms/*
 // @match      *://chat.stackexchange.com/rooms/*
@@ -43,11 +43,16 @@ var main = function(){
     }
 
     var users = CHAT.RoomUsers.all();
+    var sTop = document.documentElement.scrollTop;
+    var sBot = sTop + window.innerHeight - $("#input-area").height();
     users.forEach(function(user){
       if(!user.color){ user.color = colorise(user.id); }
       var usrClass = "#main .monologue.user-"+user.id;
       user.msgCount = $(usrClass + selectorRest)
-          .filter((i, e) => e.offsetTop > document.documentElement.scrollTop).length;
+          .filter((i, e) => {
+            var eTop = $(e).offset().top, eBot = eTop + e.offsetHeight;
+            return eBot > sTop && eTop < sBot;
+          }).length;
     });
     users = users.filter(u => u.msgCount);
     users.forEach(function(user){
@@ -64,7 +69,7 @@ var main = function(){
           user.cDiff[2] += dz * forceMul;
         }
       });
-      debugLines.push(user.name + " - [" + showAry(user.color, 10) + "] + [" + showAry(user.cDiff, 10) + "]")
+      debugLines.push(user.msgCount + " " + user.name + " - [" + showAry(user.color, 10) + "] + [" + showAry(user.cDiff, 10) + "]")
     });
     users.forEach(function(user){
       user.color[0] = 224 + 32 * Math.tanh((user.color[0] + user.cDiff[0]) / 32 - 7);
