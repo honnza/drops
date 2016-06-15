@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name       SOChatUserColors
-// @version    1.6.15
+// @version    1.6.16
 // @description  color chat lines in a Stack Overflow chat room, using a different color for each user
 // @match      *://chat.stackoverflow.com/rooms/*
 // @match      *://chat.stackexchange.com/rooms/*
@@ -14,7 +14,7 @@
 // @licence    Creative Commons with attribution
 // ==/UserScript==
 
-var main = function(){
+var main = function(showDebug){
   var FORCE_SCALE = 10;
   var $presentUsers = $("#present-users");
   var $chat = $(".monologue").parent().add("#chat");
@@ -23,7 +23,8 @@ var main = function(){
       .css({position: "fixed", display: "inline-block", right: 25, top: 25, zIndex: 1,
             background: "white", border: "2px solid darkGray", borderRadius: 10, padding: 10})
       .on("click", function(){$debug.toggle();});
-  if(typeof unsafeWindow === 'undefined') $debug.appendTo(document.body).find("span");
+  if(showDebug) $debug.appendTo(document.body);
+  $debug = $debug.find("span");
   var isMobile = /( |^)mc=1/.test(document.cookie);
 
   refresh();
@@ -89,5 +90,5 @@ var main = function(){
 //the following lines were donated by Phenomnomnominal
 var script = document.createElement('script');
 script.type = "text/javascript";
-script.textContent = '(' + main.toString() + ')();';
+script.textContent = '(' + main.toString() + ')(' + (typeof unsafeWindow === 'undefined') + ');';
 document.body.appendChild(script);
