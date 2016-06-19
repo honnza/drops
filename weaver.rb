@@ -80,8 +80,7 @@ class CombinationGenerator
     keys_map = Hash[@filters.map.with_index(1){|f, ix|[f.id, ix]}]
     {
       n: @names.dup,
-      f: @filters.map{|f|f.literals.map{|l|l.is_neg ? ~l.ix : l.ix}},
-      c: @fail_cache.keys.map{|fs, len, ones| [fs.map{|f|keys_map[f]}, len, ones]}
+      f: @filters.map{|f|f.literals.map{|l|l.is_neg ? ~l.ix : l.ix}}
     }
   end
 
