@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name       SOChatUserColors
-// @version    1.6.17
+// @version    1.6.18
 // @description  color chat lines in a Stack Overflow chat room, using a different color for each user
 // @match      *://chat.stackoverflow.com/rooms/*
 // @match      *://chat.stackexchange.com/rooms/*
@@ -70,15 +70,20 @@ var main = function(showDebug){
           user.cDiff[2] += dz * forceMul;
         }
       });
-      debugLines.push(user.msgCount + " " + user.name + " - [" + showAry(user.color, 10) + "] + [" + showAry(user.cDiff, 10) + "]")
     });
     users.forEach(function(user){
-      user.color[0] = 224 + 32 * Math.tanh((user.color[0] + user.cDiff[0]) / 32 - 7);
-      user.color[1] = 224 + 32 * Math.tanh((user.color[1] + user.cDiff[1]) / 32 - 7);
-      user.color[2] = 224 + 32 * Math.tanh((user.color[2] + user.cDiff[2]) / 32 - 7);
+      user.color[0] += user.cDiff[0];
+      user.color[1] += user.cDiff[1];
+      user.color[2] += user.cDiff[2];
+      var dx = user.color[0] - 224, dy = user.color[1] - 224, dz = user.color[2] - 224;
+      var dist = Math.sqrt(dx * dx + dy * dy + dz * dz), scale = 32/dist;
+      user.color[0] = user.color[0] * scale + 224 * (1 - scale);
+      user.color[1] = user.color[1] * scale + 224 * (1 - scale);
+      user.color[2] = user.color[2] * scale + 224 * (1 - scale);
       var colorCSS = "rgb(" + showAry(user.color, 0) + ")";
       var usrClass = "#main .monologue.user-"+user.id;
-      newCSS += usrClass + selectorRest + "{background-color:"+colorCSS+"}\n";
+      debugLines.push(user.msgCount + " [" + showAry(user.color, 15) + "] " + dist.toFixed(15) + " " + scale.toFixed(15) + " " + user.name)
+      newCSS += usrClass + selectorRest + "{background-color:" + colorCSS + "}\n";
     });
 
     $style.text(newCSS);
