@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name          Unofficial Stack Exchange gas mask
 // @description   A mission-critical tool when exploring the deepest depths of Stack Exchange.
-// @description   Automatically hides images from new users. Version 1.0 hides all images.
+// @description   Automatically hides images from new users. 
 // @run-at        document-start
 // @grant         none
 // @include       http://*stackexchange.com/*
