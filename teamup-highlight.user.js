@@ -1,15 +1,13 @@
 // ==UserScript==
 // @name       TeamUp highlight
-// @version    0.0.1
+// @version    0.0.2
 // @description  highlight the current event in a teamup schedule
 // @match      *://teamup.com/*
 // @copyright  2017+, Jan Dvorak
 // @licence    Creative Commons with attribution
 // ==/UserScript==
 
-new MutationObserver(x=>console.log(x))
-   .observe(document.getElementById("teamup-calendar-panel-list-bd"), 
-            {childList: true, subtree: true})
+new MutationObserver(refresh).observe(document.body, {childList: true, subtree: true});
 setInterval(refresh, 60000);
 refresh();
 
