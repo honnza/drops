@@ -2,10 +2,10 @@ require 'json'
 require 'zlib'
 
 class CombinationGenerator
-  Literal = Struct.new :ix, :is_neg, :for_gen do 
+  Literal = Struct.new :ix, :is_neg, :for_gen do
     def to_s; (is_neg ? "-" : "+") + for_gen.names[ix]; end
   end
-  class Filter 
+  class Filter
     class << self
       def id; @id += 1; end
       attr_writer :id
@@ -27,7 +27,7 @@ class CombinationGenerator
     def - other
       diff = other.literals - @literals
       case diff.size
-      when 0 
+      when 0
         puts "#{other} => #{self}"
         nil
       when 1
@@ -51,7 +51,7 @@ class CombinationGenerator
   def initialize names
     @names = names
     @filters = []
-    make_enum 
+    make_enum
     @fail_cache = {}
     @yield_clock = 0
     Filter.id = 0
@@ -131,26 +131,26 @@ class CombinationGenerator
   def make_enum
     @enum = Enumerator.new do |y|
       loop.with_index do |_, ones|
-        break if ones > @names.length 
+        break if ones > @names.length
         do_enum(y, "", ones)
       end
     end
   end
 
   def do_enum y, path, ones
-    puts path if path.length < 160
+    $buffer.puts path if path.length < 160
     sleep $speed if $speed > 0
     unsat_filters = @filters.reject{|f| f.satisfied_by? path};
     yield_clock = @yield_clock
     return if unsat_filters.any? {|f| f.last_ix < path.length}
     if path.length == @names.length
       y.yield path.chars.map.with_index {|c, ix| c == '1' ? @names[ix] + " " : ""}.join ""
-      @yield_clock += 1 
+      @yield_clock += 1
     end
 
     some_unsat_filters = unsat_filters.map(&:id);
     some_unsat_filters.pop until some_unsat_filters.empty? || @fail_cache[[some_unsat_filters, path.length, ones]]
-    
+
     unless @fail_cache[[some_unsat_filters, path.length, ones]]
       do_enum(y, path + "0", ones) if ones + path.length < @names.length
       do_enum(y, path + "1", (ones - 1)) if ones > 0
@@ -176,6 +176,18 @@ class CombinationGenerator
     "#{histogram} #{bois} #{bois.reduce 0, :+}"
   end
 end
+
+$buffer = Class.new{
+  def initialize; @buffer = []; end
+  def puts str
+    @buffer << str
+    flush if @buffer.length >= 50
+  end
+  def flush
+    Kernel.puts @buffer.join ?\n
+    @buffer = []
+  end
+}.new
 
 class SolutionTracker
   public def initialize
@@ -310,17 +322,19 @@ def do_command line
       $custom = false
       $new_str = line
       puts "ok; #{make_gen $1, $2}"
-    when /^([+-]\w+( |\b))+\.$/ 
+    when /^([+-]\w+( |\b))+\.$/
       $undo_log.push [$enum.serialize, line]
       $solution_tracker.drop_speculation
       puts "ok; #{make_filter $&.chop}"
-    when /^pop$/ 
+    when /^pop$/
       $solution_tracker.add_speculation
       sol = $enum.next
+      $buffer.flush
       puts $renderer[sol, $enum] if $renderer
       puts rolling_prefix "pop", sol
+      puts ?\a #"alert" character
       $solution_tracker.speculation = sol
-    when /^undo$/ 
+    when /^undo$/
       if $undo_log.empty?
         puts "nothing to undo"
       else
@@ -359,7 +373,7 @@ def do_command line
           puts $renderer[sol, $enum] if $renderer
           puts rolling_prefix "pop", sol
           $solution_tracker.speculation = sol
-        end        
+        end
       else
         puts "unknown which level to pop"
       end
@@ -373,7 +387,7 @@ def do_command line
       puts $enum.filters.join " "
     else puts "?"
   end
-end 
+end
 
 puts "Welcome to Weaver.rb"
 $solution_tracker = SolutionTracker.new
@@ -384,7 +398,7 @@ loop do
     putc ?>
     line = gets.chomp
     do_command line
-  rescue 
+  rescue
     puts $!
     puts $!.backtrace
   end

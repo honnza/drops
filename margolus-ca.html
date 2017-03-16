@@ -55,13 +55,13 @@
 
            for(var x = this.phase; x < this.w; x ++){
              for(var y = this.phase; y < this.h; y ++){
-                 this.data.data[4 * x + 4 * this.w * y + 3] = 255;
-          //     normalize(this.data.data, 4 * x + 4 * this.w * y);
+               this.data.data[4 * x + 4 * this.w * y + 3] = 255;
+               normalize(this.data.data, 4 * x + 4 * this.w * y);
              }
            }
           this.running = true;
 
-          var tick = annealingTick.bind(this);
+          var tick = margolusTick.bind(this);
           tick();
 
           function annealingTick(){
@@ -124,9 +124,9 @@
         scale = Math.pow(lScale, 1/GAMMA_EXP);
 
         if(scale > 255){
-          ary[off    ] = 155; 
-          ary[off + 1] = 155; 
-          ary[off + 2] = 155; 
+          ary[off    ] = 86; 
+          ary[off + 1] = 86; 
+          ary[off + 2] = 86; 
         } else {
           ary[off    ] *= scale; 
           ary[off + 1] *= scale; 
