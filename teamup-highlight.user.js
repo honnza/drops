@@ -46,7 +46,6 @@ function refresh(){
     
     var oldProgressEl = row.lastChild.querySelector("progress");
     if(oldProgressEl) oldProgressEl.remove();
-    console.log(row.lastChild.textContent, progress);
     if(progress > 1) row.style.opacity = 0.5;
     else if(progress > 0){
       var progressEl = document.createElement("progress");
