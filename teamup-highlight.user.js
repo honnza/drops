@@ -1,13 +1,15 @@
 // ==UserScript==
 // @name       TeamUp highlight
-// @version    0.0.2
+// @version    0.0.3
 // @description  highlight the current event in a teamup schedule
 // @match      *://teamup.com/*
 // @copyright  2017+, Jan Dvorak
 // @licence    Creative Commons with attribution
 // ==/UserScript==
 
-new MutationObserver(refresh).observe(document.body, {childList: true, subtree: true});
+new MutationObserver(
+  mrs => {if(mrs.some(mr => mr.addedNodes.some(node => node.nodeType === "TABLE"))) refresh;}
+).observe(document.body, {childList: true, subtree: true});
 setInterval(refresh, 60000);
 refresh();
 
