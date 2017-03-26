@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name       SOChatUserColors
-// @version    1.6.19
+// @version    1.7
 // @description  color chat lines in a Stack Overflow chat room, using a different color for each user
 // @match      *://chat.stackoverflow.com/rooms/*
 // @match      *://chat.stackexchange.com/rooms/*
@@ -44,6 +44,14 @@ var main = function(showDebug){
     }
 
     var users = CHAT.RoomUsers.all();
+    if(users.count && users.count() === 0){
+      usrHash = {};
+      $(".username a").each(function(){
+        urlParts = this.pathname.split("/").slice(-2);
+        usrHash[urlParts[1]] = {id: +urlParts[0]}
+      });
+      users = Object.values(usrHash);
+    }
     // Firefox scrolls the document, Chrome scrolls its body
     var sTop = document.documentElement.scrollTop + document.body.scrollTop;
     var sBot = sTop + window.innerHeight - $("#input-area").height();
