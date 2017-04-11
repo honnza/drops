@@ -50,6 +50,7 @@ end
 class Renderer
   #fudging vertices by 0.1 causes visible snapping in some causes
   #fudging by 1e-6 causes lines to extend far off-screen and cause performance issues.
+  #todo: truncate lines while rendering instead.
   EPSILON = 0.001
   #the default values for ceil and floor account for character aspect ratio
   def initialize width, height, hfov = 120, ceil = 0.25, floor = ceil
