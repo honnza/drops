@@ -206,16 +206,16 @@ class GameController
     @last_time = Time.now
     @player = player
     @getch_fallback = false
-        
+
     scr_size = IO.console.winsize[1]
     render_size = scr_size % 4 == 0 ? scr_size - 3 : scr_size - scr_size % 4 + 1
     @renderer = Renderer.new(render_size, render_size / 2 + 1)
   end
-  
+
   def scan_keys
     @last_key = IO.console.getch_nonblock&.upcase
   end
-  
+
   def key_pressed(*keys)
     if @getch_fallback
       keys.include? @last_key
@@ -239,16 +239,16 @@ class GameController
     loop do
       frame_time = self.frame_time
 
-      scan_keys      
+      scan_keys
       @player.walk( frame_time)   if key_pressed "W", "8", 38, 104
       @player.walk(-frame_time)   if key_pressed "S", "2", "5", 40, 98, 101
       @player.strafe(-frame_time) if key_pressed "A", "4", 100
       @player.strafe( frame_time) if key_pressed "D", "6", 102
       @player.turn( frame_time)   if key_pressed "Q", "7", 37, 103
       @player.turn(-frame_time)   if key_pressed "E", "9", 39, 105
-      
+
       return if key_pressed 27, " "
-      
+
       @renderer.reset_cursor
       @renderer.render_3d @player.tile, @player.dir, @player.x_off, @player.y_off
       sleep 0.016
