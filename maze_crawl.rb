@@ -222,7 +222,7 @@ class GameController
     else
       keys.any?{|key| IO.console.pressed? key.ord}
     end
-  rescue
+  rescue NotImplementedError #this is what's raised on Macs.
     @getch_fallback = true
     retry
   end
