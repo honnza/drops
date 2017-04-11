@@ -48,6 +48,9 @@ def gen_maze(width, height, debug: false)
 end
 
 class Renderer
+  #fudging vertices by 0.1 causes visible snapping in some causes
+  #fudging by 1e-6 causes lines to extend far off-screen and cause performance issues.
+  EPSILON = 0.001
   #the default values for ceil and floor account for character aspect ratio
   def initialize width, height, hfov = 120, ceil = 0.25, floor = ceil
     @width = width
@@ -76,11 +79,11 @@ class Renderer
   end
   
   private def render_line(x1, y1, x2, y2, x_min, x_max, buffer)
-    # p [x1, y1, x2, y2]
     # todo: Bressenham's line algorithm
     length = [(x1-x2).abs, (y1-y2).abs, 1].max
     dx = (x1-x2).fdiv length
     dy = (y1-y2).fdiv length
+    # p [x1, y1, x2, y2] if length > 1000
     (0..length).each do |i|
       x = (x2+i*dx).round
       y = (y2+i*dy).round
@@ -106,6 +109,8 @@ class Renderer
       [[-0.5, -0.5], [-0.5, 0.5], [0.5, -0.5], [0.5, 0.5]].each do |cx, cy|
         cam_x = - (cy + y_off) * cos_dir + (cx + x_off) * sin_dir
         cam_z = + (cy + y_off) * sin_dir + (cx + x_off) * cos_dir
+        #fudge for speed
+        cam_z = EPSILON * (cam_z > 0 ? 1 : -1) if cam_z > -EPSILON && cam_z < EPSILON
         px_x = ((cam_x / cam_z * @scale + 0.5) + @width / 2).round
         px_ceil = (@height / 2 - @ceil * @scale / cam_z).round
         px_floor = (@height / 2 + @floor * @scale / cam_z).round
