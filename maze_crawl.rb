@@ -1,5 +1,5 @@
 require 'io/console'
-require 'Singleton'
+require 'singleton'
 
 #A space with four sides, each of which can be either a :wall, or another Tile
 #tile.n == :wall || tile.n.s, and similarly for all other sides.
@@ -45,6 +45,18 @@ def gen_maze(width, height, debug: false)
   end
 
   tiles.flatten
+end
+
+class IO
+  def has_data?
+    #source: http://stackoverflow.com/a/948077/
+    result = IO.select([self], nil, nil, 0)
+    result && (result.first.first == self)
+  end
+  
+  def getch_nonblock
+    getch if has_data?
+  end
 end
 
 class Renderer
@@ -193,14 +205,26 @@ class GameController
   def initialize(player)
     @last_time = Time.now
     @player = player
+    @getch_fallback = false
         
     scr_size = IO.console.winsize[1]
     render_size = scr_size % 4 == 0 ? scr_size - 3 : scr_size - scr_size % 4 + 1
     @renderer = Renderer.new(render_size, render_size / 2 + 1)
   end
   
+  def scan_keys
+    @last_key = IO.console.getch_nonblock&.upcase
+  end
+  
   def key_pressed(*keys)
-    keys.any?{|key| IO.console.pressed? key.ord}
+    if @getch_fallback
+      keys.include? @last_key
+    else
+      keys.any?{|key| IO.console.pressed? key.ord}
+    end
+  rescue
+    @getch_fallback = true
+    retry
   end
 
   def frame_time
@@ -214,15 +238,16 @@ class GameController
     @renderer.clr_scr
     loop do
       frame_time = self.frame_time
+
+      scan_keys      
+      @player.walk( frame_time)   if key_pressed "W", "8", 38, 104
+      @player.walk(-frame_time)   if key_pressed "S", "2", "5", 40, 98, 101
+      @player.strafe(-frame_time) if key_pressed "A", "4", 100
+      @player.strafe( frame_time) if key_pressed "D", "6", 102
+      @player.turn( frame_time)   if key_pressed "Q", "7", 37, 103
+      @player.turn(-frame_time)   if key_pressed "E", "9", 39, 105
       
-      @player.walk( frame_time)   if key_pressed "W", 38, 104
-      @player.walk(-frame_time)   if key_pressed "S", 40, 98, 101
-      @player.strafe(-frame_time) if key_pressed "A", 100
-      @player.strafe( frame_time) if key_pressed "D", 102
-      @player.turn( frame_time)   if key_pressed "Q", 37, 103
-      @player.turn(-frame_time)   if key_pressed "E", 39, 105
-      
-      return if key_pressed 27, 32
+      return if key_pressed 27, " "
       
       @renderer.reset_cursor
       @renderer.render_3d @player.tile, @player.dir, @player.x_off, @player.y_off
