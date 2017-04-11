@@ -89,6 +89,7 @@ class Renderer
   end
 
   def clr_scr; puts "\e[H\e[2J"; end
+  def reset_cursor; puts "\e[H"; end
 
   def render_3d(tile, dir, x_off = 0, y_off = 0)
     buffer = Array.new(@height){" " * @width}
@@ -158,8 +159,8 @@ class Player
   
   #translate the player position perpendicular to the forward direction if the terrain permits
   def strafe(dist)
-    @x_off += Math.cos(dir) * dist
-    @y_off += Math.sin(dir) * dist
+    @x_off += Math.sin(dir) * dist
+    @y_off -= Math.cos(dir) * dist
     fix_position
   end
   
@@ -204,17 +205,20 @@ class GameController
   end
 
   def run_smooth_kbd
+    @renderer.clr_scr
     loop do
       frame_time = self.frame_time
       
-      @player.walk( frame_time) if key_pressed "W", 38, 104
-      @player.walk(-frame_time) if key_pressed "S", 40, 98
-      @player.turn( frame_time) if key_pressed "A", 37, 100
-      @player.turn(-frame_time) if key_pressed "D", 39, 102
+      @player.walk( frame_time)   if key_pressed "W", 38, 104
+      @player.walk(-frame_time)   if key_pressed "S", 40, 98, 101
+      @player.strafe(-frame_time) if key_pressed "A", 100
+      @player.strafe( frame_time) if key_pressed "D", 102
+      @player.turn( frame_time)   if key_pressed "Q", 37, 103
+      @player.turn(-frame_time)   if key_pressed "E", 39, 105
       
       return if key_pressed 27, 32
       
-      @renderer.clr_scr
+      @renderer.reset_cursor
       @renderer.render_3d @player.tile, @player.dir, @player.x_off, @player.y_off
       sleep 0.016
     end
@@ -222,7 +226,7 @@ class GameController
 end
 
 maze = gen_maze 10, 10
-tile = p maze.sample
+tile = maze.sample
 player = Player.new(tile, 0)
 
 GameController.new(player).run_smooth_kbd
