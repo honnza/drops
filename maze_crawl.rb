@@ -78,7 +78,7 @@ class Renderer
   private def render_line(x1, y1, x2, y2, x_min, x_max, buffer)
     # p [x1, y1, x2, y2]
     # todo: Bressenham's line algorithm
-    length = [(x1-x2).abs, (y1-y2).abs].max
+    length = [(x1-x2).abs, (y1-y2).abs, 1].max
     dx = (x1-x2).fdiv length
     dy = (y1-y2).fdiv length
     (0..length).each do |i|
