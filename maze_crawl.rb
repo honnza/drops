@@ -135,6 +135,49 @@ class Renderer
   end
 end
 
+#the Player class represents the player's tile, facing direction and position within tile
+class Player
+  HALF_WIDTH = 0.45
+  def initialize(tile, dir, x_off = 0, y_off = 0)
+    @tile = tile
+    @dir = dir
+    @x_off = x_off
+    @y_off = y_off
+  end
+  attr_accessor :tile, :dir, :x_off, :y_off
+  
+  #translate the player position in the forward direction if the terrain permits
+  def walk(dist)
+    @x_off += Math.cos(dir) * dist
+    @y_off += Math.sin(dir) * dist
+    fix_position
+  end
+  
+  #translate the player position perpendicular to the forward direction if the terrain permits
+  def strafe(dist)
+    @x_off += Math.cos(dir) * dist
+    @y_off += Math.sin(dir) * dist
+    fix_position
+  end
+  
+  #rotates the player by a specified amount
+  def turn(angle)
+    @dir = (@dir + angle) % Math::PI
+  end
+  
+  private def fix_position
+    @x_off =  HALF_WIDTH if @x_off >  HALF_WIDTH && @tile.e == :wall
+    @y_off =  HALF_WIDTH if @y_off >  HALF_WIDTH && @tile.n == :wall
+    @x_off = -HALF_WIDTH if @x_off < -HALF_WIDTH && @tile.w == :wall
+    @y_off = -HALF_WIDTH if @y_off < -HALF_WIDTH && @tile.s == :wall
+    
+    (@x_off -= 1; @tile = @tile.e) if @x_off >  0.5
+    (@y_off -= 1; @tile = @tile.n) if @y_off >  0.5
+    (@x_off += 1; @tile = @tile.w) if @x_off < -0.5
+    (@y_off += 1; @tile = @tile.s) if @y_off < -0.5
+  end
+end
+
 maze = gen_maze 10, 10
 tile = p maze.sample
 scr_size = IO.console.winsize[1]
