@@ -4,7 +4,7 @@ require 'io/console'
 #tile.n == :wall || tile.n.s, and similarly for all other sides.
 Tile = Struct.new :id, :n, :e, :s, :w
 
-def gen_maze width, height, debug: false
+def gen_maze(width, height, debug: false)
   tiles = Array.new(height){|y| Array.new(width){|x| Tile.new [x, y], :wall, :wall, :wall, :wall}}
   vis_tiles = [[0, 0]]
   vis_edges = [[0, 0, 0, 1, rand], [0, 0, 1, 0, rand]]
@@ -58,7 +58,7 @@ class Renderer
 
   attr_reader :width, :height
 
-  def render_corner px_x, px_ceil, px_floor, buffer
+  private def render_corner(px_x, px_ceil, px_floor, buffer)
     # p [:c, px_x, px_ceil, px_floor]
     px_x = px_x.round
     px_ceil = 0 if px_ceil < 0
@@ -66,7 +66,7 @@ class Renderer
     (px_ceil .. px_floor).each{|y| buffer[y][px_x] = "|"}
   end
 
-  def render_wall pt1, pt2, x_min, x_max, buffer
+  private def render_wall(pt1, pt2, x_min, x_max, buffer)
     # p [pt1, pt2, x_min, x_max]
     pt1, pt2 = pt2, pt1 if pt1[1] < 0
     pt2 = pt1.zip(pt2).map{|c1, c2| 2 * c1 - c2} if pt2[1] < 0
@@ -74,7 +74,7 @@ class Renderer
     render_line pt1[0], pt1[3], pt2[0], pt2[3], x_min, x_max, buffer
   end
   
-  def render_line x1, y1, x2, y2, x_min, x_max, buffer
+  private def render_line(x1, y1, x2, y2, x_min, x_max, buffer)
     # p [x1, y1, x2, y2]
     # todo: Bressenham's line algorithm
     length = [(x1-x2).abs, (y1-y2).abs].max
@@ -87,7 +87,7 @@ class Renderer
     end
   end
 
-  def render tile, dir, x_off = 0, y_off = 0
+  def render(tile, dir, x_off = 0, y_off = 0)
     buffer = Array.new(@height){" " * @width}
     sin_dir = Math.sin dir
     cos_dir = Math.cos dir
@@ -145,7 +145,7 @@ angle = 0
 x = rand - 0.5
 y = rand - 0.5
 loop do
-  puts "\e[H\e[2J"
+  puts "\e[H\e[2J" # move cursor to top left and clear screen
   renderer.render(tile, angle, x, y)
   angle += 0.1
   sleep 0.1
