@@ -1,4 +1,5 @@
 require 'io/console'
+require 'Singleton'
 
 #A space with four sides, each of which can be either a :wall, or another Tile
 #tile.n == :wall || tile.n.s, and similarly for all other sides.
@@ -87,7 +88,9 @@ class Renderer
     end
   end
 
-  def render(tile, dir, x_off = 0, y_off = 0)
+  def clr_scr; puts "\e[H\e[2J"; end
+
+  def render_3d(tile, dir, x_off = 0, y_off = 0)
     buffer = Array.new(@height){" " * @width}
     sin_dir = Math.sin dir
     cos_dir = Math.cos dir
@@ -170,6 +173,7 @@ class Player
     @y_off =  HALF_WIDTH if @y_off >  HALF_WIDTH && @tile.n == :wall
     @x_off = -HALF_WIDTH if @x_off < -HALF_WIDTH && @tile.w == :wall
     @y_off = -HALF_WIDTH if @y_off < -HALF_WIDTH && @tile.s == :wall
+    #todo: fix corners
     
     (@x_off -= 1; @tile = @tile.e) if @x_off >  0.5
     (@y_off -= 1; @tile = @tile.n) if @y_off >  0.5
@@ -178,18 +182,44 @@ class Player
   end
 end
 
+class GameController
+  def initialize(player)
+    @last_time = Time.now
+    @player = player
+        
+    scr_size = IO.console.winsize[1]
+    render_size = scr_size % 4 == 0 ? scr_size - 3 : scr_size - scr_size % 4 + 1
+    @renderer = Renderer.new(render_size, render_size / 2 + 1)
+  end
+  
+  def key_pressed(*keys)
+    keys.any?{|key| IO.console.pressed? key.ord}
+  end
+
+  def frame_time
+    new_time = Time.now
+    delta = new_time - @last_time
+    @last_time = new_time
+    delta
+  end
+
+  def run_smooth_kbd
+    loop do
+      frame_time = self.frame_time
+      
+      player.move( frame_time) if key_pressed "W", 38, 104
+      player.move(-frame_time) if key_pressed "S", 40, 98
+      player.turn( frame_time) if key_pressed "A", 37, 100
+      player.turn(-frame_time) if key_pressed "D", 39, 102
+      
+      @renderer.clr_scr
+      @renderer.render_3d  
+    end
+  end
+end
+
 maze = gen_maze 10, 10
 tile = p maze.sample
-scr_size = IO.console.winsize[1]
-render_size = scr_size % 4 == 0 ? scr_size - 3 : scr_size - scr_size % 4 + 1
-renderer = Renderer.new(render_size, render_size / 2 + 1)
+player = Player.new(tile, 0)
 
-angle = 0
-x = rand - 0.5
-y = rand - 0.5
-loop do
-  puts "\e[H\e[2J" # move cursor to top left and clear screen
-  renderer.render(tile, angle, x, y)
-  angle += 0.1
-  sleep 0.1
-end
+GameController.new(player).run_smooth_kbd
