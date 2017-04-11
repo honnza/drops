@@ -121,8 +121,8 @@ class Renderer
         ([:w, 0, 1, -1, 0] if x_off < 0.5)
       ].compact.each do |side, cix_l, cix_r, dx, dy|
         # p [side, cix_l, cix_r, dx, dy]
-        # next if corners[cix_r][0] < scan_l && corners[cix_r][1] < 0
-        # next if corners[cix_l][0] > scan_r && corners[cix_l][1] < 0
+        next if corners[cix_r][0] < scan_l && corners[cix_r][1] > 0
+        next if corners[cix_l][0] > scan_r && corners[cix_l][1] > 0
         next if corners[cix_l][1] < 0 && corners[cix_r][1] < 0
         if tile[side] == :wall
           render_wall corners[cix_l], corners[cix_r], scan_l + 1, scan_r - 1, buffer
