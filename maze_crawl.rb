@@ -133,7 +133,7 @@ class Renderer
       end
     end
 
-    recurse[tile, x_off, y_off, 0, @width - 1]
+    recurse[tile, -x_off, -y_off, 0, @width - 1]
     puts buffer
   end
 end
@@ -165,7 +165,7 @@ class Player
   
   #rotates the player by a specified amount
   def turn(angle)
-    @dir = (@dir + angle) % Math::PI
+    @dir = (@dir + angle) % (2 * Math::PI)
   end
   
   private def fix_position
@@ -207,13 +207,16 @@ class GameController
     loop do
       frame_time = self.frame_time
       
-      player.move( frame_time) if key_pressed "W", 38, 104
-      player.move(-frame_time) if key_pressed "S", 40, 98
-      player.turn( frame_time) if key_pressed "A", 37, 100
-      player.turn(-frame_time) if key_pressed "D", 39, 102
+      @player.walk( frame_time) if key_pressed "W", 38, 104
+      @player.walk(-frame_time) if key_pressed "S", 40, 98
+      @player.turn( frame_time) if key_pressed "A", 37, 100
+      @player.turn(-frame_time) if key_pressed "D", 39, 102
+      
+      return if key_pressed 27, 32
       
       @renderer.clr_scr
-      @renderer.render_3d  
+      @renderer.render_3d @player.tile, @player.dir, @player.x_off, @player.y_off
+      sleep 0.016
     end
   end
 end
