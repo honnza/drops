@@ -5,6 +5,7 @@ require 'singleton'
 #tile.n == :wall || tile.n.s, and similarly for all other sides.
 Tile = Struct.new :id, :n, :e, :s, :w do
   def wall?(dir); self[dir] == :wall; end
+  def walls; %i{n e s w}.select{|k| wall? k}; end
 end
 
 
@@ -48,6 +49,28 @@ def gen_maze(width, height, debug: false)
   end
 
   tiles.flatten
+end
+
+module RoomDecoration
+  attr_reader :lines
+  def rotate_90
+    @lines.map!{|line|[-line[1], line[0], line[2], -line[4], line[3], line[5]]}
+  end
+  
+  def rotate_to_wall(wall)
+    %i{n w s e}.find_index(wall).times{rotate_90}
+  end
+end
+
+class Goal
+  include RoomDecoration
+  def initialize(wall)
+    @lines = [
+      [-0.5, 1, -1  , -0.5, 1,  0.5],
+      [-0.5, 1,  0.5,  0.5, 1,  0.5],
+      [ 0.5, 1,  0.5,  0.5, 1, -1  ]
+    ]
+  end
 end
 
 class IO
