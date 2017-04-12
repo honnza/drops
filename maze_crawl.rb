@@ -3,7 +3,10 @@ require 'singleton'
 
 #A space with four sides, each of which can be either a :wall, or another Tile
 #tile.n == :wall || tile.n.s, and similarly for all other sides.
-Tile = Struct.new :id, :n, :e, :s, :w
+Tile = Struct.new :id, :n, :e, :s, :w do
+  def wall?(dir); self[dir] == :wall; end
+end
+
 
 def gen_maze(width, height, debug: false)
   tiles = Array.new(height){|y| Array.new(width){|x| Tile.new [x, y], :wall, :wall, :wall, :wall}}
@@ -188,10 +191,10 @@ class Player
   end
   
   private def fix_position
-    @x_off =  HALF_WIDTH if @x_off >  HALF_WIDTH && @tile.e == :wall
-    @y_off =  HALF_WIDTH if @y_off >  HALF_WIDTH && @tile.n == :wall
-    @x_off = -HALF_WIDTH if @x_off < -HALF_WIDTH && @tile.w == :wall
-    @y_off = -HALF_WIDTH if @y_off < -HALF_WIDTH && @tile.s == :wall
+    @x_off =  HALF_WIDTH if @x_off >  HALF_WIDTH && @tile.wall?(:e)
+    @y_off =  HALF_WIDTH if @y_off >  HALF_WIDTH && @tile.wall?(:n)
+    @x_off = -HALF_WIDTH if @x_off < -HALF_WIDTH && @tile.wall?(:w)
+    @y_off = -HALF_WIDTH if @y_off < -HALF_WIDTH && @tile.wall?(:s)
     #todo: fix corners
     
     (@x_off -= 1; @tile = @tile.e) if @x_off >  0.5
