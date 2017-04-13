@@ -3,14 +3,15 @@ require 'singleton'
 
 #A space with four sides, each of which can be either a :wall, or another Tile
 #tile.n == :wall || tile.n.s, and similarly for all other sides.
-Tile = Struct.new :id, :n, :e, :s, :w do
+Tile = Struct.new :id, :n, :e, :s, :w, :decorations do
+  def initialize(id, n=:wall, e=:wall, s=:wall, w=:wall, decorations=[]); super; end
   def wall?(dir); self[dir] == :wall; end
   def walls; %i{n e s w}.select{|k| wall? k}; end
 end
 
 
 def gen_maze(width, height, debug: false)
-  tiles = Array.new(height){|y| Array.new(width){|x| Tile.new [x, y], :wall, :wall, :wall, :wall}}
+  tiles = Array.new(height){|y| Array.new(width){|x| Tile.new [x, y]}}
   vis_tiles = [[0, 0]]
   vis_edges = [[0, 0, 0, 1, rand], [0, 0, 1, 0, rand]]
   until vis_tiles.size == width * height
