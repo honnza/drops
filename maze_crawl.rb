@@ -92,12 +92,12 @@ class Renderer
   #todo: truncate lines while rendering instead.
   EPSILON = 0.001
   #the default values for ceil and floor account for character aspect ratio
-  def initialize width, height, hfov = 120, ceil = 0.25, floor = ceil
+  def initialize width, height, hfov = 120
     @width = width
     @height = height
     @scale = (@width / 2) / Math.tan(hfov * (Math::PI / 180) / 2)
-    @ceil = ceil
-    @floor = floor
+    @ceil = 0.25
+    @floor = 0.25
   end
 
   attr_reader :width, :height
