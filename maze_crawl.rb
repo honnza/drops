@@ -61,16 +61,37 @@ module RoomDecoration
   def rotate_to_wall(wall)
     %i{n w s e}.find_index(wall).times{rotate_90}
   end
+  
+  def rotate_to_corridor_end(tile)
+    rotate_to_wall case tile.walls
+    when [:n, :e, :s] then :e
+    when [:n, :e, :w] then :n
+    when [:n, :s, :w] then :w
+    when [:e, :s, :w] then :s
+    else raise ArgumentError, "not a corridor end: #{tile.walls}"
+    end
+  end
 end
 
-class Goal
+class DoorRD
   include RoomDecoration
-  def initialize(wall)
+  def initialize(where)
     @lines = [
-      [-0.5, 1, -1  , -0.5, 1,  0.5],
-      [-0.5, 1,  0.5,  0.5, 1,  0.5],
-      [ 0.5, 1,  0.5,  0.5, 1, -1  ]
+      [-0.25, 0.5,  1  , -0.25, 0.5, -0.5],
+      [-0.25, 0.5, -0.5,  0.25, 0.5, -0.5],
+      [ 0.25, 0.5, -0.5,  0.25, 0.5,  1  ]
     ]
+    where.is_a?(Symbol) ? rotate_to_wall(where) : rotate_to_corridor_end(where)
+  end
+end
+
+def gen_door(maze)
+  loop do
+    tile = maze.sample
+    redo if tile.walls.count != 3
+    redo if tile.decorations.any?{|d|d.is_a? DoorRD}
+    tile.decorations << DoorRD.new(tile)
+    return tile
   end
 end
 
@@ -158,7 +179,7 @@ class Renderer
         # p [cx, cy]
         render_corner px_x, px_ceil, px_floor, buffer if cam_z > 0 && scan_l < px_x && scan_r > px_x
       end
-
+      
       [
         ([:n, 1, 3, 0, 1] if y_off > -0.5),
         ([:e, 3, 2, 1, 0] if x_off > -0.5),
@@ -175,6 +196,23 @@ class Renderer
           scan_l_new = [scan_l, (corners[cix_l][0] if corners[cix_l][1] > 0)].compact.max
           scan_r_new = [scan_r, (corners[cix_r][0] if corners[cix_r][1] > 0)].compact.min
           recurse[tile[side], x_off + dx, y_off + dy, scan_l_new, scan_r_new]
+        end
+      end
+      
+      tile.decorations.each do |dec|
+        p(dec.lines).each do |line|
+          cam_x1 = - (line[1] + y_off) * cos_dir + (line[0] + x_off) * sin_dir
+          cam_y1 = line[2] * @ceil
+          cam_z1 = + (line[1] + y_off) * sin_dir + (line[0] + x_off) * cos_dir
+          cam_x2 = - (line[4] + y_off) * cos_dir + (line[3] + x_off) * sin_dir
+          cam_y2 = line[5] * @ceil
+          cam_z2 = + (line[4] + y_off) * sin_dir + (line[3] + x_off) * cos_dir
+          px_x1 = ((cam_x1 / cam_z1 * @scale + 0.5) + @width / 2).round
+          px_y1 = ((cam_y1 / cam_z1 * @scale + 0.5) + @height / 2).round
+          px_x2 = ((cam_x2 / cam_z2 * @scale + 0.5) + @width / 2).round
+          px_y2 = ((cam_y2 / cam_z2 * @scale + 0.5) + @height / 2).round
+          
+          render_line px_x1, px_y1, px_x2, px_y2, scan_l, scan_r, buffer
         end
       end
     end
@@ -283,8 +321,9 @@ class GameController
   end
 end
 
-maze = gen_maze 10, 10
-tile = maze.sample
-player = Player.new(tile, 0)
+maze = gen_maze 5, 5
+start = gen_door maze
+goal  = gen_door maze
+player = Player.new(start, 0)
 
 GameController.new(player).run_smooth_kbd
