@@ -1,11 +1,15 @@
 // ==UserScript==
 // @name       SOChatUserColors
-// @version    1.7
+// @version    1.7.1
 // @description  color chat lines in a Stack Overflow chat room, using a different color for each user
 // @match      *://chat.stackoverflow.com/rooms/*
+// @match      *://chat.stackoverflow.com/search*
 // @match      *://chat.stackexchange.com/rooms/*
+// @match      *://chat.stackexchange.com/search*
 // @match      *://chat.meta.stackoverflow.com/rooms/*
+// @match      *://chat.meta.stackoverflow.com/search*
 // @match      *://chat.meta.stackexchange.com/rooms/*
+// @match      *://chat.meta.stackexchange.com/search*
 // @match      *://chat.stackoverflow.com/transcript/*
 // @match      *://chat.stackexchange.com/transcript/*
 // @match      *://chat.meta.stackoverflow.com/transcript/*
