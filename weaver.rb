@@ -328,11 +328,12 @@ def do_command line
       puts "ok; #{make_filter $&.chop}"
     when /^pop$/
       $solution_tracker.add_speculation
+      time_start = Time.now
       sol = $enum.next
       $buffer.flush
       puts $renderer[sol, $enum] if $renderer
       puts rolling_prefix "pop", sol
-      puts ?\a #"alert" character
+      puts ?\a if Time.now - time_start > 10 #?\a is the "alert" character
       $solution_tracker.speculation = sol
     when /^undo$/
       if $undo_log.empty?
