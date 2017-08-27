@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name       SOChatUserColors
-// @version    1.7.1
+// @version    1.7.2
 // @description  color chat lines in a Stack Overflow chat room, using a different color for each user
 // @match      *://chat.stackoverflow.com/rooms/*
 // @match      *://chat.stackoverflow.com/search*
@@ -47,8 +47,11 @@ var main = function(showDebug){
       parseInt(('11'+usrIDbits.replace(/.?.?(.)?/g,'$1')+"00000000").slice(0,8),2)];
     }
 
-    var users = CHAT.RoomUsers.all();
-    if(users.count && users.count() === 0){
+    // So... the main chat page has this object populated with users and live.
+    // The transcript also has this object, but with no-one inside.
+    // The search result page also has a CHAT.RoomUsers objecct, but it's empty.
+    var users = CHAT.RoomUsers.all && CHAT.RoomUsers.all();
+    if(!users || (users.count && users.count() === 0)){
       usrHash = {};
       $(".username a").each(function(){
         urlParts = this.pathname.split("/").slice(-2);
@@ -61,7 +64,7 @@ var main = function(showDebug){
     var sBot = sTop + window.innerHeight - $("#input-area").height();
     users.forEach(function(user){
       if(!user.color){ user.color = colorise(user.id); }
-      var usrClass = "#main .monologue.user-"+user.id;
+      var usrClass = ".monologue.user-"+user.id;
       user.msgCount = $(usrClass + selectorRest)
           .filter((i, e) => {
             var eTop = $(e).offset().top, eBot = eTop + e.offsetHeight;
@@ -94,7 +97,7 @@ var main = function(showDebug){
       user.color[1] = user.color[1] * scale + 224 * (1 - scale);
       user.color[2] = user.color[2] * scale + 224 * (1 - scale);
       var colorCSS = "rgb(" + showAry(user.color, 0) + ")";
-      var usrClass = "#main .monologue.user-"+user.id;
+      var usrClass = ".monologue.user-"+user.id;
       debugLines.push(user.msgCount + " [" + showAry(user.color, 15) + "] " + dist.toFixed(15) + " " + scale.toFixed(15) + " " + user.name)
       newCSS += usrClass + selectorRest + "{background-color:" + colorCSS + "}\n";
     });
