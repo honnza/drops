@@ -1,9 +1,11 @@
 import Common
+import Data.Ord
 import Data.Char
 import Data.List
 import Debug.Trace
 import Data.Numbers.Primes
 import Data.Universe.Helpers
+import Data.Array.IArray as IA
 
 ------------------------------------------------------------------------------
 
@@ -194,4 +196,15 @@ e12 = print $ head [x | n <- [1..],
 
 e13 = putStrLn $ take 10 $ show $ sum $ map read $ lines e13in
 
-main = e13
+e14 = print $ maximumBy (comparing collatzLength) [1..999999]
+      where collatzLength :: Integer -> Integer
+            collatzLength x | x > 999999 = lengthImpl x
+                            |  otherwise = lengths IA.! x
+            lengths :: IA.Array Integer Integer
+            lengths = IA.listArray (1, 999999) $ map lengthImpl [1..999999]
+            lengthImpl :: Integer -> Integer
+            lengthImpl 1 = 1
+            lengthImpl x | even x = 1 + collatzLength(x `div` 2)
+                         |  odd x = 1 + collatzLength(3 * x + 1)
+
+main = e14
