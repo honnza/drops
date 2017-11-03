@@ -54,4 +54,6 @@ e09 = print $ head $ [a*b*c | b <- [1..1000],
                               let c = 1000 - a - b, 
                               a*a + b*b == c*c]
 
-main = e09
+e10 = print $ sum $ takeWhile (< 2000000) primes
+
+main = e10
