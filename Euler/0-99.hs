@@ -86,4 +86,9 @@ e11 = print $ let grid = parseSSV e11in
               in maximum (p grid ++ p(transpose grid) ++ 
                           p(diagonals grid) ++ p(diagonals $ reverse grid))
 
-main = e11
+e12 = print $ head [x | n <- [1..],
+                        let x = n * (n-1) `div` 2,
+                        factorCount x > 500]
+      where factorCount x = product $ map ((+1).length) $ group $ primeFactors x
+
+main = e12
