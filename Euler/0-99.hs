@@ -209,4 +209,6 @@ e14 = print $ maximumBy (comparing collatzLength) [1..999999]
 
 e15 = print $ product [1..40] `div` product [1..20] ^ 2
 
-main = e15
+e16 = print $ sum $ map digitToInt $ show $ 2^1000
+
+main = e16
