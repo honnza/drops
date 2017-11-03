@@ -211,4 +211,6 @@ e15 = print $ product [1..40] `div` product [1..20] ^ 2
 
 e16 = print $ sum $ map digitToInt $ show $ 2^1000
 
-main = e16
+e17 = print $ sum $ map (length . filter isAlpha . say) [1..1000]
+
+main = e17
