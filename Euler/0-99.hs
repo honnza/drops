@@ -49,4 +49,9 @@ e08 = print $ maximum $ [ product $ map digitToInt digits
                         | digits <- map (take 13) $ tails e08in,
                           length digits == 13]
 
-main = e08
+e09 = print $ head $ [a*b*c | b <- [1..1000], 
+                              a <- [1..b], 
+                              let c = 1000 - a - b, 
+                              a*a + b*b == c*c]
+
+main = e09
