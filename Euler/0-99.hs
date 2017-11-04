@@ -4,6 +4,7 @@ import Data.Ord
 import Data.Char
 import Data.List
 import Debug.Trace
+import Text.Regex.Posix
 import Data.Time.Calendar
 import Data.Numbers.Primes
 import Data.Universe.Helpers
@@ -252,4 +253,7 @@ e21 = print $ sum $ [x | x <- [2..9999],
                          properDivisorSum(properDivisorSum x) == x]
   where properDivisorSum x = divisorSum x - x
 
-main = e21
+e22 = print . sum . zipWith score [1..] . sort . getAllTextMatches . (=~ "[A-Z]+") =<< readFile "e22in.txt"
+  where score ix str = ix * sum (map (\c -> ord c - ord 'A' + 1) str)
+
+main = e22
