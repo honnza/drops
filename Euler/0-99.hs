@@ -4,6 +4,7 @@ import Data.Ord
 import Data.Char
 import Data.List
 import Debug.Trace
+import Data.Time.Calendar
 import Data.Numbers.Primes
 import Data.Universe.Helpers
 import Data.Array.IArray as IA
@@ -239,5 +240,9 @@ e18 = let grid :: [[Integer]]
                                  | c > r -> 0
                                  | otherwise -> max (submaxes IA.! (r+1, c)) (submaxes IA.! (r+1, c+1))
       in print $ submaxes ! (1, 1)
-                  
-main = e18
+
+e19 = print $ length[() | x <- [fromGregorian 1901 1 1 .. fromGregorian 2000 12 31],
+                          diffDays x (fromGregorian 1900 1 7) `mod` 7 == 0,
+                          case toGregorian x of (_, _, d) -> d == 1]
+
+main = e19
