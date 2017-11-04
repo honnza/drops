@@ -247,4 +247,9 @@ e19 = print $ length[() | x <- [fromGregorian 1901 1 1 .. fromGregorian 2000 12 
 
 e20 = print $ sum $ map digitToInt $ show $ product [1..100]
 
-main = e20
+e21 = print $ sum $ [x | x <- [2..9999],
+                         properDivisorSum x /= x,
+                         properDivisorSum(properDivisorSum x) == x]
+  where properDivisorSum x = divisorSum x - x
+
+main = e21

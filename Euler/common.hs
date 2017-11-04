@@ -1,7 +1,14 @@
 module Common where
+import Data.List
+import Data.Numbers.Primes
 
 fib :: [Integer]
 fib = 1 : 2 : zipWith (+) fib (tail fib)
+
+divisorSum :: Integer -> Integer
+divisorSum x = product $ map factor $ group $ primeFactors x
+  where factor :: [Integer] -> Integer
+        factor ps@(p:_) = (1 - p ^ (length ps+1)) `div` (1 - p)
 
 say :: Int -> String
 say x = let digitWords = words "zero one two three four five six seven eight nine"
