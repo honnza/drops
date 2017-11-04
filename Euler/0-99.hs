@@ -1,4 +1,5 @@
 import Common
+import Data.Ix
 import Data.Ord
 import Data.Char
 import Data.List
@@ -152,6 +153,21 @@ e13in = "37107287533902102798797998220837590246510135740250\n\
         \20849603980134001723930671666823555245252804609722\n\
         \53503534226472524250874054075591789781264330331690"
 
+e18in = "75\n\
+        \95 64\n\
+        \17 47 82\n\
+        \18 35 87 10\n\
+        \20 04 82 47 65\n\
+        \19 01 23 75 03 34\n\
+        \88 02 77 73 07 63 67\n\
+        \99 65 04 28 06 16 70 92\n\
+        \41 41 26 56 83 40 80 70 33\n\
+        \41 48 72 33 47 32 37 16 94 29\n\
+        \53 71 44 65 25 43 91 52 97 51 14\n\
+        \70 11 33 28 77 73 17 78 39 68 17 57\n\
+        \91 71 52 38 17 14 91 43 58 50 27 29 48\n\
+        \63 66 04 68 89 53 67 30 73 16 69 87 40 31\n\
+        \04 62 98 27 23 09 70 98 73 93 38 53 60 04 23"
 -------------------------------------------------------------------------------
 
 e01 = print $ sum [x | x <- [0..999], x `mod` 3 == 0 || x `mod` 5 == 0]
@@ -213,4 +229,15 @@ e16 = print $ sum $ map digitToInt $ show $ 2^1000
 
 e17 = print $ sum $ map (length . filter isAlpha . say) [1..1000]
 
-main = e17
+e18 = let grid :: [[Integer]]
+          grid = parseSSV e18in
+          size = length grid
+          submaxes :: IA.Array (Int, Int) Integer
+          submaxes = IA.listArray ((1, 1), (size, size)) $ map f [(r, c) | r <- [1..size], c <- [1..size]]
+            where f (r,c) = grid !! (r-1) !! (c-1) + 
+                    case () of _ | r >= size -> 0
+                                 | c > r -> 0
+                                 | otherwise -> max (submaxes IA.! (r+1, c)) (submaxes IA.! (r+1, c+1))
+      in print $ submaxes ! (1, 1)
+                  
+main = e18
