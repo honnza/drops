@@ -245,4 +245,6 @@ e19 = print $ length[() | x <- [fromGregorian 1901 1 1 .. fromGregorian 2000 12 
                           diffDays x (fromGregorian 1900 1 7) `mod` 7 == 0,
                           case toGregorian x of (_, _, d) -> d == 1]
 
-main = e19
+e20 = print $ sum $ map digitToInt $ show $ product [1..100]
+
+main = e20
