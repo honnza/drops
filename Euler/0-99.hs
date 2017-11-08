@@ -251,9 +251,13 @@ e20 = print $ sum $ map digitToInt $ show $ product [1..100]
 e21 = print $ sum $ [x | x <- [2..9999],
                          properDivisorSum x /= x,
                          properDivisorSum(properDivisorSum x) == x]
-  where properDivisorSum x = divisorSum x - x
 
 e22 = print . sum . zipWith score [1..] . sort . getAllTextMatches . (=~ "[A-Z]+") =<< readFile "e22in.txt"
   where score ix str = ix * sum (map (\c -> ord c - ord 'A' + 1) str)
 
-main = e22
+e23 = print $ sum $ [x | x <- [1..28123],
+                         null [() | a <- takeWhile (< x) abudantNumbers, abudant $ x - a]]
+  where abudantNumbers = filter abudant [1..28123]
+        abudant x = divisorSum x > 2 * x
+  
+main = e23
