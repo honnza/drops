@@ -268,4 +268,6 @@ e24 = putStrLn $ nthPermutation 999999 ['0'..'9']
               pluck ix left (x:right) = pluck (ix - 1) (x:left) right
           in  pluck high [] x
 
-main = e24
+e25 = print $ (+ 2) $ length $ takeWhile (< 10^999) fib
+
+main = e25
