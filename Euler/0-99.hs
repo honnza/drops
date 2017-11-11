@@ -259,5 +259,13 @@ e23 = print $ sum $ [x | x <- [1..28123],
                          null [() | a <- takeWhile (< x) abudantNumbers, abudant $ x - a]]
   where abudantNumbers = filter abudant [1..28123]
         abudant x = divisorSum x > 2 * x
-  
-main = e23
+
+e24 = putStrLn $ nthPermutation 999999 ['0'..'9']
+  where nthPermutation 0 x = x
+        nthPermutation n x =
+          let (high, low) = n `divMod` product [1 .. length x - 1]
+              pluck 0 left (x:right) = x : nthPermutation low (reverse left ++ right)
+              pluck ix left (x:right) = pluck (ix - 1) (x:left) right
+          in  pluck high [] x
+
+main = e24
