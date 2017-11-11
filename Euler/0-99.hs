@@ -270,4 +270,9 @@ e24 = putStrLn $ nthPermutation 999999 ['0'..'9']
 
 e25 = print $ (+ 2) $ length $ takeWhile (< 10^999) fib
 
-main = e25
+e26 = print $ maximumBy (comparing periodLength) [1 .. 999]
+  where periodLength x | x `mod` 2 == 0 = periodLength $ x `div` 2
+                       | x `mod` 5 == 0 = periodLength $ x `div` 5
+                       | otherwise      = find (\l -> (10^l-1) `mod` x == 0) [1..]
+
+main = e26
