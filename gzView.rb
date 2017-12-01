@@ -1,3 +1,5 @@
+require "io/console"
+
 def to_bytes_str(bytes)
   bytes.map{|byte| byte.to_s(16).rjust(4, "0x00") }.join " "
 end
@@ -315,9 +317,33 @@ def show_parse_block bit_reader, out_buf, stats
   end
 end
 
+def define_more
+  orig_puts = method(:puts)
+  fiber = Fiber.new do
+    IO.console.winsize[0].times{orig_puts[Fiber.yield]}
+    loop do
+      case key = $stdin.getch
+      when " " then (IO.console.winsize[0] - 2).times{orig_puts[Fiber.yield]}
+      when "\n" then orig_puts[Fiber.yield]
+      else orig_puts "key pressed: #{key}"
+      end
+    end
+  end
+  define_method(:puts){|*strs| strs.each{|str| fiber.resume str}}
+end
+
 ################################################################################
 
 if $0 == __FILE__
+  if ARGV.include?("--slow")
+    ARGV.delete("--slow")
+    orig_puts = method(:puts)
+    define_method(:puts){|*strs| orig_puts.call(*strs); sleep 0.1}
+  elsif ARGV.include?("--more")
+    ARGV.delete("--more")
+    define_more
+  end
+  
   bit_reader = BitReader.new ARGF
   out_buf = []
   stats = {lit_blocks: 0, rep_blocks: 0, block_counts: Hash[(0..285).map{|k| [k,0]}]}
