@@ -7,6 +7,14 @@ def day01(input, part)
   pairs.select{|a, b| a==b}.map{|a, b| a.to_i}.reduce(0, &:+)
 end
 
+def day02(input, part)
+  rows = input.lines.map{|r| r.split(" ").map(&:to_i)}
+  case part
+  when :a then rows.map{|r| r.max - r.min}.reduce(0, &:+)
+  when :b then rows.map{|r| x = nil; r.find{|n| r.find{|d| x = n / d if n != d && n % d == 0}}; x}.reduce(0, &:+)
+  end
+end
+
 puts "time: #{Time.now}"
-p day01(File.read("day01in.txt"), :b)
+p day02(File.read("day02in.txt"), :b)
 puts "time: #{Time.now}"

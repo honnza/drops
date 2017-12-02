@@ -9,4 +9,10 @@ day01 part input
                              PartB -> zip digits $ drop (length digits `div` 2) digits ++ digits
         digits = filter isDigit input
 
-main = print . day01 PartB =<< readFile "day01in.txt"
+day02:: Part -> String -> Int
+day02 part input
+  = sum $ map (lineFn . map read . words) $ lines input
+  where lineFn r = case part of PartA -> maximum r - minimum r
+                                PartB -> head [n `div` d | n <- r, d <- r, n /= d, n `mod` d == 0]
+
+main = print . day02 PartB =<< readFile "day02in.txt"
