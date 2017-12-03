@@ -15,6 +15,33 @@ def day02(input, part)
   end
 end
 
+def day03(input, part)
+  case part
+  when :a
+    major_coord = (input ** 0.5 * 0.5 - 0.5).ceil
+    minor_coord = ((2 * major_coord + 1) ** 2 - input) % (2 * major_coord)
+    minor_coord = (major_coord - minor_coord).abs
+    
+    minor_coord + major_coord
+  when :b
+    board = Hash.new(0); board[[0, 0]] = 1; x = 0; y = 0
+    loop.with_index(1) do
+      p [x, y, board[[x, y]]]; gets
+      return board[[x, y]] if board[[x, y]] > input
+      
+      case
+      when x == y && x < 0 then y += 1
+      when x.abs == y.abs then x += y <=> -0.5
+      when x.abs < y.abs then x += y <=> 0
+      else y += 0 <=> x
+      end
+
+      board[[x, y]] = [[0, 1], [0, -1], [1, 0], [-1, 0], [-1, -1], [-1, 1], [1, -1], [1, 1]]
+          .map{|dx, dy| board[[x+dx, y+dy]]}.reduce(&:+)
+    end
+  end
+end
+
 puts "time: #{Time.now}"
-p day02(File.read("day02in.txt"), :b)
+p day03(325489, :b)
 puts "time: #{Time.now}"
