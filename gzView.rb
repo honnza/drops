@@ -361,9 +361,12 @@ if $0 == __FILE__
     stats_sum[:block_counts].keys.each{|k| stats_sum[:block_counts][k] += stats[:block_counts][k]}
 
     p stats.select{|k, v| v.is_a? Integer}
+    
     puts stats[:block_counts].select{|k, v| v > 0}.map{|k, v| name_block(k) + " => " + v.inspect}.join ", "
-    p stats_sum.select{|k, v| v.is_a? Integer}
-    puts stats_sum[:block_counts].select{|k, v| v > 0}.map{|k, v| name_block(k) + " => " + v.inspect}.join ", "
+    if stats_sum[:lit_blocks] > stats[:lit_blocks]
+      p stats_sum.select{|k, v| v.is_a? Integer}
+      puts stats_sum[:block_counts].select{|k, v| v > 0}.map{|k, v| name_block(k) + " => " + v.inspect}.join ", "
+    end
     break if last
   end
   
