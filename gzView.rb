@@ -325,7 +325,7 @@ def define_more
       case key = $stdin.getch
       when " " then (IO.console.winsize[0] - 2).times{orig_puts[Fiber.yield]}
       when "\n" then orig_puts[Fiber.yield]
-      else orig_puts "key pressed: #{key}"
+      else orig_puts["key pressed: #{key}"]
       end
     end
   end
@@ -346,13 +346,20 @@ if $0 == __FILE__
   
   bit_reader = BitReader.new ARGF
   out_buf = []
-  stats = {lit_blocks: 0, rep_blocks: 0, block_counts: Hash[(0..285).map{|k| [k,0]}]}
+  stats_sum = {lit_blocks: 0, rep_blocks: 0, compressed_size: 0, uncompressed_size: 0, block_counts: Hash[(0..285).map{|k| [k,0]}]}
 
   show_parse_header
+  last_cs = 0
+  last_ucs = 0
   loop do
+    stats = {lit_blocks: 0, rep_blocks: 0, block_counts: Hash[(0..285).map{|k| [k,0]}]}
     last = show_parse_block bit_reader, out_buf, stats
-    stats[:compressed_size] = ARGF.pos
-    stats[:uncompressed_size] = out_buf.size
+    stats[:compressed_size] = ARGF.pos - last_cs; last_cs = ARGF.pos
+    stats[:uncompressed_size] = out_buf.size - last_ucs; last_ucs = out_buf.size
+
+    stats_sum.keys.each{|k| stats_sum[k] += stats[k] if stats_sum[k].is_a? Integer}
+    stats_sum[:block_counts].keys.each{|k| stats_sum[:block_counts][k] += stats[:block_counts][k]}
+
     p stats.select{|k, v| v.is_a? Integer}
     
     puts stats[:block_counts].select{|k, v| v > 0}.map{|k, v| name_block(k) + " => " + v.inspect}.join ", "
@@ -366,5 +373,4 @@ if $0 == __FILE__
   puts "CRC32: " + to_bytes_str(bit_reader.get_bytes(4).bytes)
   puts "uncompressed size (reported): " + bit_reader.get_bytes(4).bytes.bytes_to_int.to_s
   puts "file size: " + ARGF.pos.to_s
-  puts stats[:block_counts].select{|k, v| v > 0}.map{|k, v| name_block(k) + " => " + v.inspect}.join ", "
 end
