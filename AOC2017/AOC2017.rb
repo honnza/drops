@@ -42,6 +42,14 @@ def day03(input, part)
   end
 end
 
+def day04(input, part)
+  input.lines.count do |line|
+    ws = line.split(" ")
+    ws.map!{|w| w.chars.sort.join} if part == :b
+    ws == ws.uniq
+  end
+end
+
 puts "time: #{Time.now}"
-p day03(325489, :b)
+p day04(File.read("day04in.txt"), :b)
 puts "time: #{Time.now}"

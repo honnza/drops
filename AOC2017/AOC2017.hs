@@ -1,4 +1,6 @@
 import Data.Char
+import Data.List
+import Debug.Trace
 import qualified Data.HashMap.Strict as H
 
 data Part = PartA | PartB
@@ -16,7 +18,7 @@ day02 part input
   where lineFn r = case part of PartA -> maximum r - minimum r
                                 PartB -> head [n `div` d | n <- r, d <- r, n /= d, n `mod` d == 0]
 
-day03 ::Part -> Int -> Int
+day03 :: Part -> Int -> Int
 day03 PartA input =
   let major_coord = ceiling $ fromIntegral input ** 0.5 * 0.5 - 0.5
       minor_diag  = ((2 * major_coord + 1) ^ 2 - input) `mod` (2 * major_coord)
@@ -36,6 +38,10 @@ day03 PartB input = iter (H.singleton (0, 0) 1) (0, 0)
                          | abs x < abs y    = (x + signum y, y)
                          | otherwise        = (x, y - signum x)
 
--- main = print . day01 PartB =<< readFile "day01in.txt"
--- main = print . day02 PartB =<< readFile "day02in.txt"
-main = print $ day03 PartB 325489
+day04 :: Part -> String -> Int
+day04 part input = length [() | l <- lines input, 
+                                let ws = (case part of PartA -> id; PartB -> map sort) $ words l,
+                                ws == nub ws]
+
+main = print . day04 PartB =<< readFile "day04in.txt"
+-- main = print $ day03 PartB 325489
