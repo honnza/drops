@@ -325,7 +325,7 @@ def define_more
       case key = $stdin.getch
       when " " then (IO.console.winsize[0] - 2).times{orig_puts[Fiber.yield]}
       when "\n" then orig_puts[Fiber.yield]
-      else orig_puts "key pressed: #{key}"
+      else orig_puts["key pressed: #{key}"]
       end
     end
   end
