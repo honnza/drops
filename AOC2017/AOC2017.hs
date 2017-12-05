@@ -1,9 +1,10 @@
 import Data.Char
 import Data.List
 import Debug.Trace
+import qualified Data.Array.Unboxed as DA
 import qualified Data.HashMap.Strict as H
 
-data Part = PartA | PartB
+data Part = PartA | PartB deriving Eq
 
 day01 :: Part -> String -> Int
 day01 part input
@@ -43,5 +44,14 @@ day04 part input = length [() | l <- lines input,
                                 let ws = (case part of PartA -> id; PartB -> map sort) $ words l,
                                 ws == nub ws]
 
-main = print . day04 PartB =<< readFile "day04in.txt"
+day05 :: Part -> String -> Int
+day05 part input = iter 0 0 $ DA.listArray (0, length inArray - 1) inArray
+  where inArray = map read $ words input :: [Int]
+        iter :: Int -> Int -> DA.Array Int Int -> Int
+        iter t ix ary | not $ DA.inRange (DA.bounds ary) ix = t
+        iter t ix ary = iter (t+1) (ix + ary DA.! ix) (ary DA.// [(ix, nextOffset $ ary DA.! ix)])
+        nextOffset offset | offset >= 3 && part == PartB = offset - 1
+                          | otherwise = offset + 1
+
+main = print . day05 PartB =<< readFile "day05in.txt"
 -- main = print $ day03 PartB 325489
