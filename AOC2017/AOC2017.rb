@@ -50,6 +50,17 @@ def day04(input, part)
   end
 end
 
+def day05(input, part)
+  maze = input.lines.map(&:to_i)
+  maze_ix = 0
+  loop.with_index(1) do |_, t|
+    old_ix = maze_ix
+    maze_ix += maze[maze_ix]
+    maze[old_ix] += part == :b && maze[old_ix] >= 3 ? -1 : 1
+    return t if maze_ix < 0 || maze_ix >= maze.size
+  end
+end
+
 puts "time: #{Time.now}"
-p day04(File.read("day04in.txt"), :b)
+p day05(File.read("day05in.txt"), :b)
 puts "time: #{Time.now}"
