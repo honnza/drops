@@ -283,15 +283,16 @@ def show_parse_block bit_reader, out_buf, stats
   
   puts "#" * 80
   loop do
+    at = out_buf.size
     key, code = bit_reader.read_huffman litlen_codes
     stats[:block_counts][code] += 1
     if code < 256
       out_buf << code.chr
-      print "#{key} - #{code} - #{"new " if stats[:block_counts][code] == 1}literal #{code.chr.inspect[1 .. -2]}".ljust(50)
+      print "@#{at} #{key} - #{code} - #{"new " if stats[:block_counts][code] == 1}literal #{code.chr.inspect[1 .. -2]}".ljust(50)
       puts code.chr.inspect[1 .. -2]
       stats[:lit_blocks] += 1
     elsif code == 256
-      puts "#{key} - #{code} - end of block"
+      puts "@#{at} #{key} - #{code} - end of block"
       puts "#" * 80
       return bfinal
     else
@@ -308,7 +309,7 @@ def show_parse_block bit_reader, out_buf, stats
       length.times{last_buf << out_buf[-offset]; out_buf << out_buf[-offset]}
       buf_end = out_buf.length - offset
       buf_after = [buf_end + 5, out_buf.length].min
-      puts "#{key} #{extra.join} #{okey} #{oextra.join} - repeat #{length} #{offset}".ljust(45) +
+      puts "@#{at} #{key} #{extra.join} #{okey} #{oextra.join} - repeat #{length} #{offset}".ljust(45) +
            "\e[31m#{out_buf[buf_before ... buf_start].join}\e[0m" +
            "#{out_buf[buf_start ... buf_end].join}" +
            "\e[31m#{out_buf[buf_end ... buf_after].join}\e[0m"
