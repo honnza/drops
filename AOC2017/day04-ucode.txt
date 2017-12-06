@@ -1,38 +1,38 @@
 def day04:
 
 $rline:
-  rIx = 0; rIy = 0; rIo = 0
-  mem[rIx] = 0x20; rIx++
+00000   rIx = 0; rIy = 0; rIo = 0
+00001   mem[rIx] = 0x20; rIx++
 
 $rchar:
-  mem[rIx] = kbDta; rIx++ if kbAvail; kbNxt; goto $rchar if ne(kbDta, 0x0a)
-  mem[rIx] = 0x0a; rIx--
-  mem[rIx] = 0x20; rIx=0; goto $wunq0 if partA
+00010   mem[rIx] = kbDta; rIx++ if kbAvail; kbNxt; goto $rchar if ne(kbDta, 0x0a)
+00011   mem[rIx] = 0x0a; rIx--
+00100   mem[rIx] = 0x20; rIx=0; goto $wunq0 if partA
 
 $wsort:
-  goto $wuniq if eq(mem[rIx], 0x0a)
+00101   goto $wuniq if eq(mem[rIx], 0x0a)
 $csort:
-  rCx = mem[rIx]; rIx++; goto $wsort if eq(mem[rIx], 0x20)
-  goto $csort if le(mem[rIx], rCx) 
-  mem[rIx] = rCx; rIx--; rCx = mem[rIx]
-  mem[rIx] = rCx; rIx--; goto $csort
+00110   rCx = mem[rIx]; rIx++; goto $wsort if eq(mem[rIx], 0x20)
+00111   goto $csort if le(mem[rIx], rCx) 
+01000   mem[rIx] = rCx; rIx--; rCx = mem[rIx]
+01001   mem[rIx] = rCx; rIx--; goto $csort
 
 $wuniq:
-  rIx=0
+01010   rIx=0
 $wunq0:
-  rIx++; rIy=0; goto $wunq0 if ne(mem[rIx], 0x20)
-  goto $found if eq(mem[rIx], 0x0a)
+01011   rIx++; rIy=0; goto $wunq0 if ne(mem[rIx], 0x20)
+01100   goto $found if eq(mem[rIx], 0x0a)
 $wunq1:
-  rIy++; goto $wunq1 if ne(mem[rIy], 0x20)
-  goto $wunq0 if eq(rIy, rIx)
-  goto $wunq0 if eq(mem[rIy], 0x0a]
+01101   rIy++; goto $wunq1 if ne(mem[rIy], 0x20)
+01110   goto $wunq0 if eq(rIy, rIx)
+01111   goto $wunq0 if eq(mem[rIy], 0x0a]
 $wunq2:
-  rCx = mem[rIx]
-  goto $wunqi if ne(rCx, mem[rIy])
-  goto $rline if eq(mem[rIx], 0x20)
-  rIo++; goto $wunq2
+10000   rCx = mem[rIx]
+10001   goto $wunqi if ne(rCx, mem[rIy])
+10010   goto $rline if eq(mem[rIx], 0x20)
+10011   rIo++; goto $wunq2
 $wunqi:
-  rIo=0; goto $wunq1
+10100   rIo=0; goto $wunq1
 
 label    IP JmpIP Y N CS CD MD RegOpSel
 ----- ----- ----- - - -- -- -- --------
