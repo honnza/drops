@@ -1,0 +1,62 @@
+def day04:
+
+$rline:
+  rIx = 0; rIy = 0; rIo = 0
+  mem[rIx] = 0x20; rIx++
+
+$rchar:
+  mem[rIx] = kbDta; rIx++ if kbAvail; kbNxt; goto $rchar if ne(kbDta, 0x0a)
+  mem[rIx] = 0x0a; rIx--
+  mem[rIx] = 0x20; rIx=0; goto $wunq0 if partA
+
+$wsort:
+  goto $wuniq if eq(mem[rIx], 0x0a)
+$csort:
+  rCx = mem[rIx]; rIx++; goto $wsort if eq(mem[rIx], 0x20)
+  goto $csort if le(mem[rIx], rCx) 
+  mem[rIx] = rCx; rIx--; rCx = mem[rIx]
+  mem[rIx] = rCx; rIx--; goto $csort
+
+$wuniq:
+  rIx=0
+$wunq0:
+  rIx++; rIy=0; goto $wunq0 if ne(mem[rIx], 0x20)
+  goto $found if eq(mem[rIx], 0x0a)
+$wunq1:
+  rIy++; goto $wunq1 if ne(mem[rIy], 0x20)
+  goto $wunq0 if eq(rIy, rIx)
+  goto $wunq0 if eq(mem[rIy], 0x0a]
+$wunq2:
+  rCx = mem[rIx]
+  goto $wunqi if ne(rCx, mem[rIy])
+  goto $rline if eq(mem[rIx], 0x20)
+  rIo++; goto $wunq2
+$wunqi:
+  rIo=0; goto $wunq1
+
+label    IP JmpIP Y N CS CD MD RegOpSel
+----- ----- ----- - - -- -- -- --------
+rline 00000 11110 0 1 10 01 00 00101010
+      00001 11110 0 1 10 01 10 00010000
+rchar 00010 00010 0 1 10 11 00 10010000
+      00011 11110 0 1 10 01 11 00110000
+      00100 01011 0 1 11 01 10 00100000
+wsort 00101 01010 0 0 10 11 00 00000000
+csort 00110 00101 0 0 10 10 00 01010000
+      00111 00110 0 1 01 00 00 00000000
+      01000 11110 0 1 10 01 01 01110000
+      01001 00110 0 0 10 01 01 00110000
+wuniq 01010 11110 0 1 10 01 00 00100000
+wunq0 01011 01011 0 1 10 10 00 00011000
+      01100 11111 0 0 10 11 00 00000000
+wunq1 01101 01101 1 1 10 10 00 00000100
+      01110 01010 1 0 00 01 00 00000000
+      01111 01011 1 0 10 11 00 00000000
+wunq2 10000 11110 0 1 10 01 00 01000000
+      10001 10100 1 1 10 00 00 00000000
+      10010 00000 0 0 10 10 00 00000000
+      10011 10000 0 0 10 01 00 00000001
+wunqi 10100 01101 0 0 10 01 00 00000010
+
+error 11110 11110 0 0 10 01 00 00000000
+found 11111 11110 0 1 10 01 00 00000000
