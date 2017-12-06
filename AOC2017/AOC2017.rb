@@ -61,6 +61,21 @@ def day05(input, part)
   end
 end
 
-puts "time: #{Time.now}"
-p day05(File.read("day05in.txt"), :b)
-puts "time: #{Time.now}"
+def day06(input, part)
+  state = input.split("\t").map(&:to_i)
+  seen = {}
+  loop.with_index do |_, t|
+    return part == :b ? t - seen[state] : t if seen[state]
+    seen[state] = t
+    max_val = state.max
+    max_ix = state.find_index max_val
+    state = state.map.with_index{|e, i| (max_ix == i ? 0 : e) + max_val / state.size +
+                                        ((i - max_ix - 1) % state.size < max_val % state.size ? 1 : 0)}
+  end
+end
+
+day06in = "4	10	4	1	8	4	9	14	5	1	14	15	0	15	3	5"
+
+time = Time.now
+p day06(day06in, :b)
+puts "time: #{Time.now - time}"

@@ -53,5 +53,21 @@ day05 part input = iter 0 0 $ DA.listArray (0, length inArray - 1) inArray
         nextOffset offset | offset >= 3 && part == PartB = offset - 1
                           | otherwise = offset + 1
 
-main = print . day05 PartB =<< readFile "day05in.txt"
+day06 :: String -> (Int, Int)
+day06 input = iter 0 (map read $ words input) H.empty
+  where iter :: Int -> [Int] -> H.HashMap [Int] Int -> (Int, Int)
+        iter t state seen | H.member state seen = (t, t - seen H.! state)
+        iter t state seen = iter (t+1) (nextState state) (H.insert state t seen)
+        nextState :: [Int] -> [Int]
+        nextState state = 
+          let stateSize = length state
+              maxValue = maximum state
+              Just maxIndex = elemIndex maxValue state
+              in  [ (if index == maxIndex then 0 else el) 
+                  + (maxValue `div` stateSize)
+                  + (if (index - maxIndex - 1) `mod` stateSize < maxValue `mod` stateSize then 1 else 0)
+                  | (el, index) <- zip state [0..]]
+
+-- main = print . day05 PartB =<< readFile "day05in.txt"
 -- main = print $ day03 PartB 325489
+main = print $ day06 "4 10 4 1 8 4 9 14 5 1 14 15 0 15 3 5"
