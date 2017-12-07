@@ -1,10 +1,16 @@
 import Data.Char
 import Data.List
+import Data.Maybe
 import Debug.Trace
+import Text.RegexPR
+import qualified Data.HashMap.Lazy as HL
 import qualified Data.Array.Unboxed as DA
 import qualified Data.HashMap.Strict as H
 
 data Part = PartA | PartB deriving Eq
+
+parsePRGroups :: Int -> [(Int, String)] -> [Maybe String]
+parsePRGroups n groups = [fmap snd $ find ((== i) . fst) groups | i <- [1 .. n]]
 
 day01 :: Part -> String -> Int
 day01 part input
@@ -68,6 +74,29 @@ day06 input = iter 0 (map read $ words input) H.empty
                   + (if (index - maxIndex - 1) `mod` stateSize < maxValue `mod` stateSize then 1 else 0)
                   | (el, index) <- zip state [0..]]
 
--- main = print . day05 PartB =<< readFile "day05in.txt"
+data Day07Node = Day07Node String Int [Day07Node] deriving (Eq, Show)
+day07 :: Part -> String -> Either String Int
+day07 part input = let nodesByName :: H.HashMap String Day07Node
+                       nodesByName = H.fromList [(name, Day07Node name (read weightStr) children)
+                                                | (_, groups) <- gmatchRegexPR "([a-z]*) \\((\\d+)\\)(?: -> ([a-z, ]+))?" input,
+                                                  let [Just name, Just weightStr, maybeChildStr] = parsePRGroups 3 groups,
+                                                  let children = map (nodesByName H.!) $ splitRegexPR ", " $ fromMaybe "" maybeChildStr]
+                       [root] = HL.elems nodesByName \\ [child | Day07Node _ _ children <- H.elems nodesByName, child <- children]
+                       treeWeight :: Day07Node -> Int
+                       treeWeight (Day07Node _ weight children) = weight + sum (map treeWeight children)
+                       unbalancedNodes = [(node, correctWeight - wrongWeight + correctNodeWeight)
+                                         | node@(Day07Node name weight children) <- H.elems nodesByName,
+                                           let childWeights = map treeWeight children,
+                                           (>= 2) $ length $ nub childWeights,
+                                           let ([correctWeight:_], [[wrongWeight]]) = partition ((>1).length) $ group $ sort childWeights,
+                                           let [correctNodeWeight] = [weight | node@(Day07Node _ weight _) <- children, treeWeight node == wrongWeight]
+                                         ]
+                       [fixedWeight] = [fixedWeight 
+                                       | (Day07Node _ _ children, fixedWeight) <- unbalancedNodes,
+                                         null $ intersect children $ map fst unbalancedNodes]
+                   in  case part of PartA -> case root of Day07Node name _ _ -> Left name
+                                    PartB -> Right fixedWeight
+
+main = print . day07 PartB =<< readFile "day07in.txt"
 -- main = print $ day03 PartB 325489
-main = print $ day06 "4 10 4 1 8 4 9 14 5 1 14 15 0 15 3 5"
+-- main = print $ day06 "4 10 4 1 8 4 9 14 5 1 14 15 0 15 3 5"
