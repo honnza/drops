@@ -67,7 +67,7 @@ def day06(input, part)
   state = input.split("\t").map(&:to_i)
   seen = {}
   loop.with_index do |_, t|
-    return (t - seen[state] : t if seen[state])
+    return  t - seen[state], t if seen[state]
     seen[state] = t
     max_val = state.max
     max_ix = state.find_index max_val
@@ -76,6 +76,35 @@ def day06(input, part)
   end
 end
 
+Day07Node = Struct.new :name, :weight, :child_names, :children
+def day07(input, part)
+  nodes = input.lines.map do |line|
+    line =~ /([a-z]+) \((\d+)\)(?: -> ([a-z, ]+))?/
+    Day07Node.new $1, $2.to_i, $3 ? $3.split(", ") : [], nil
+  end
+  
+  root_candidates = nodes.dup
+  nodes_by_name = Hash[nodes.map{|node| [node.name, node]}]
+  nodes.each{|node| node.children = node.child_names.map{|name| nodes_by_name[name]}}
+  nodes.each{|node| node.children.each{|c| root_candidates.delete c}}
+  
+  root = root_candidates[0]
+  return root_name if part == :a  
+  
+  subtree_weight_or_return = Proc.new do |node|
+    weights = node.children.map(&subtree_weight_or_return)
+    if weights.uniq.size <= 1
+      weights.reduce(0, &:+) + node.weight
+    else
+      wrong_weight_at = weights.find_index{|w| weights.count(w) == 1}
+      wrong_weight = weights[wrong_weight_at]
+      correct_weight = weights[wrong_weight_at == 0 ? 1 : 0]
+      return correct_weight - wrong_weight + node.children[wrong_weight_at].weight
+    end
+  end
+  subtree_weight_or_return[root]
+end
+
 time = Time.now
-p day06(day06in, :b)
+p day07(File.read("day07in.txt"), :b)
 puts "time: #{Time.now - time}"
