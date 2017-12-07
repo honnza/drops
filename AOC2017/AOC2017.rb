@@ -61,11 +61,13 @@ def day05(input, part)
   end
 end
 
+day06in = "4	10	4	1	8	4	9	14	5	1	14	15	0	15	3	5"
+
 def day06(input, part)
   state = input.split("\t").map(&:to_i)
   seen = {}
   loop.with_index do |_, t|
-    return part == :b ? t - seen[state] : t if seen[state]
+    return (t - seen[state] : t if seen[state])
     seen[state] = t
     max_val = state.max
     max_ix = state.find_index max_val
@@ -73,8 +75,6 @@ def day06(input, part)
                                         ((i - max_ix - 1) % state.size < max_val % state.size ? 1 : 0)}
   end
 end
-
-day06in = "4	10	4	1	8	4	9	14	5	1	14	15	0	15	3	5"
 
 time = Time.now
 p day06(day06in, :b)
