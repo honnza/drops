@@ -97,6 +97,22 @@ day07 part input = let nodesByName :: H.HashMap String Day07Node
                    in  case part of PartA -> case root of Day07Node name _ _ -> Left name
                                     PartB -> Right fixedWeight
 
-main = print . day07 PartB =<< readFile "day07in.txt"
+day08 :: String -> (Int, Int)
+day08 input = case foldl' iter (0, H.empty) (lines input) 
+              of   (submax, regs) -> (maximum $ H.elems regs, submax)
+  where iter :: (Int, H.HashMap String Int) -> String -> (Int, H.HashMap String Int)
+        iter (submax, regs) line =
+          let Just (_, groups) = matchRegexPR "([a-z]+) (inc|dec) (-?\\d+) if ([a-z]+) (>|>=|==|!=|<|<=) (-?\\d+)" line
+              [Just regWr, Just opWr, Just nrWr, Just regCond, Just opCond, Just nrCond] = parsePRGroups 6 groups
+              newHash = if testCond opCond (H.lookupDefault 0 regCond regs) (read nrCond) 
+                        then H.insert regWr (fn opWr (H.lookupDefault 0 regWr regs) (read nrWr)) regs
+                        else regs
+              fn :: String -> Int -> Int -> Int; fn "dec" = (-); fn "inc" = (+)
+              testCond "<" = (<); testCond "<=" = (<=); testCond "==" = (==)
+              testCond "!=" = (/=); testCond ">" = (>); testCond ">=" = (>=)
+              
+          in  (maximum $ submax : H.elems newHash, newHash)
+
+main = print . day08 =<< readFile "day08in.txt"
 -- main = print $ day03 PartB 325489
 -- main = print $ day06 "4 10 4 1 8 4 9 14 5 1 14 15 0 15 3 5"

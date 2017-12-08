@@ -105,6 +105,17 @@ def day07(input, part)
   subtree_weight_or_return[root]
 end
 
+def day08(input, part)
+  regs = Hash.new(0)
+  max = 0
+  input.lines.each do |line|
+    line =~ /([a-z]+) (inc|dec) (-?\d+) if ([a-z]+) (>|>=|==|!=|<|<=) (-?\d+)/
+    regs[$1] += $3.to_i * ($2 == "inc" ? 1 : -1) if regs[$4].send($5, $6.to_i)
+    max = [max, regs.values.max].max
+  end
+  [regs.values.max, max]
+end
+
 time = Time.now
-p day07(File.read("day07in.txt"), :b)
+p day08(File.read("day08in.txt"), :b)
 puts "time: #{Time.now - time}"
