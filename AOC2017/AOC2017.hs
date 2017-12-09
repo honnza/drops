@@ -3,6 +3,8 @@ import Data.List
 import Data.Maybe
 import Debug.Trace
 import Text.RegexPR
+import Control.Applicative
+import Text.ParserCombinators.ReadP
 import qualified Data.HashMap.Lazy as HL
 import qualified Data.Array.Unboxed as DA
 import qualified Data.HashMap.Strict as H
@@ -113,6 +115,26 @@ day08 input = case foldl' iter (0, H.empty) (lines input)
               
           in  (maximum $ submax : H.elems newHash, newHash)
 
-main = print . day08 =<< readFile "day08in.txt"
+data Day09Node = Day09Stream [Day09Node] | Day09Garbage Int deriving Show
+  
+day09 :: String -> (Int, Int)
+day09 input =
+  let parseNode :: ReadP Day09Node
+      parseNode = parseStream <|> parseGarbage
+      parseStream = fmap Day09Stream $ between (char '{') (char '}') $ parseNode `sepBy` (char ',')
+      parseGarbage = fmap (Day09Garbage . sum) $ (char '<' >>) $ flip manyTill (char '>') $
+        (char '!' >> get >> return 0) <++ (get >> return 1)
+      [(stream, _)] = readP_to_S parseStream input
+        
+      score :: Int -> Day09Node -> Int
+      score depth (Day09Stream elems) = depth + (sum $ map (score $ depth + 1) elems)
+      score _ (Day09Garbage _) = 0
+      
+      garbage :: Day09Node -> Int
+      garbage (Day09Stream elems) = sum $ map garbage elems
+      garbage (Day09Garbage n) = n
+  in  (score 1 stream, garbage stream)
+
+main = print . day09 =<< readFile "day09in.txt"
 -- main = print $ day03 PartB 325489
 -- main = print $ day06 "4 10 4 1 8 4 9 14 5 1 14 15 0 15 3 5"

@@ -116,6 +116,52 @@ def day08(input, part)
   [regs.values.max, max]
 end
 
+class ParseError < StandardError; end
+Day09Stream = Struct.new :elems, :score, :score_total, :garbage_removed do
+    def self.parse_from(io, score)
+      elems = []
+      await_comma = false
+      loop do
+        case (char = io.read(1))
+        when "{"
+          raise ParseError if await_comma
+          elems << Day09Stream.parse_from(io, score + 1)
+          await_comma = true
+        when "<" 
+          raise ParseError if await_comma
+          elems << Day09Garbage.parse_from(io)
+          await_comma = true
+        when ","
+          raise ParseError unless await_comma
+          await_comma = false
+        when "}" 
+          return new(elems, score, score + elems.map(&:score_total).reduce(0, &:+),
+                     elems.map(&:garbage_removed).reduce(0, &:+))
+        else raise ParseError
+        end
+      end
+    end
+end
+Day09Garbage = Struct.new :garbage_removed do
+  def score_total; 0; end
+  def self.parse_from(io)
+    garbage_removed = 0
+    loop do
+      case (char = io.read(1))
+      when ">" then return new(garbage_removed)
+      when "!" then io.read(1)
+      else garbage_removed += 1
+      end
+    end
+  end
+end
+def day09(input, part)
+  io = StringIO.new(input)
+  raise ParseError unless io.read(1) == "{"
+  stream = Day09Stream.parse_from(io, 1)
+  return stream.score_total, stream.garbage_removed
+end
+
 time = Time.now
-p day08(File.read("day08in.txt"), :b)
+p day09(File.read("day09in.txt"), :b)
 puts "time: #{Time.now - time}"
