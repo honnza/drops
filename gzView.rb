@@ -270,16 +270,16 @@ def show_parse_block bit_reader, out_buf, stats
     lit_lengths = read_lencodes bit_reader, len_codes, hlit
     litlen_codes = HuffmanCode.from_lengths lit_lengths
     puts "Literal + length codes: " + litlen_codes.codes.map{|k, v| "#{k} =>  #{name_block v}"}.join(', ')
-
+    (1..15).map do |l|
+      b = litlen_codes.codes.select{|k, v| k.length == l}.values
+      puts "#{l}: #{b.map{|c| name_block c}.join ", "}" unless b.empty?
+    end
+    puts
+    
     dist_lengths = read_lencodes bit_reader, len_codes, hdist
     offset_codes = HuffmanCode.from_lengths dist_lengths
     puts "Offset codes: " + offset_codes.codes.inspect
-  end
-  
-  (1..15).map do |l|
-    b = litlen_codes.codes.select{|k, v| k.length == l}.values
-    puts "#{l}: #{b.map{|c| name_block c}.join ", "}" unless b.empty?
-  end
+  end  
   
   puts "#" * 80
   loop do
