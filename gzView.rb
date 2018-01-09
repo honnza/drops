@@ -167,6 +167,13 @@ def name_block k
   when 257..285 then rnames[k-257]
   end
 end
+
+def name_offset k
+  "O%s" % %w{1 2 3 4 5-6 7-8 9-12 13-16 17-24 25-32
+             33-48 49-64 65-96 97-128 129-192 193-256 257-384 385-512 513-768 769-1024
+             1025-1536 1537-2048 2049-3072 3073-4096 4097-6144 6145-8192 8193-12288 12289-16384 16385-24576 24577-32768}[k]
+end
+
 def read_lencodes bit_reader, len_codes, demand
   r = []
   until r.size >= demand
@@ -314,6 +321,7 @@ def show_parse_block bit_reader, out_buf, stats
            "#{out_buf[buf_start ... buf_end].join}" +
            "\e[31m#{out_buf[buf_end ... buf_after].join}\e[0m"
       stats[:rep_blocks] += 1
+      stats[:offset_counts][ocode] += 1
     end
   end
 end
@@ -345,28 +353,33 @@ if $0 == __FILE__
     define_more
   end
   
+  hash_stats = %i{block_counts offset_counts}
   bit_reader = BitReader.new ARGF
   out_buf = []
-  stats_sum = {lit_blocks: 0, rep_blocks: 0, compressed_size: 0, uncompressed_size: 0, block_counts: Hash[(0..285).map{|k| [k,0]}]}
+  stats_sum = {lit_blocks: 0, rep_blocks: 0, compressed_size: 0, uncompressed_size: 0, 
+               block_counts: Hash[(0..285).map{|k| [k,0]}], offset_counts: Hash[(0..285).map{|k| [k,0]}]}
 
   show_parse_header
   last_cs = 0
   last_ucs = 0
   loop do
-    stats = {lit_blocks: 0, rep_blocks: 0, block_counts: Hash[(0..285).map{|k| [k,0]}]}
+    stats = {lit_blocks: 0, rep_blocks: 0, 
+             block_counts: Hash[(0..285).map{|k| [k,0]}], offset_counts: Hash[(0..285).map{|k| [k,0]}]}
     last = show_parse_block bit_reader, out_buf, stats
     stats[:compressed_size] = ARGF.pos - last_cs; last_cs = ARGF.pos
     stats[:uncompressed_size] = out_buf.size - last_ucs; last_ucs = out_buf.size
 
     stats_sum.keys.each{|k| stats_sum[k] += stats[k] if stats_sum[k].is_a? Integer}
-    stats_sum[:block_counts].keys.each{|k| stats_sum[:block_counts][k] += stats[:block_counts][k]}
+    hash_stats.each{|k| stats_sum[k].keys.each{|hk| stats_sum[k][hk] += stats[k][hk]}}
 
     p stats.select{|k, v| v.is_a? Integer}
     
-    puts stats[:block_counts].select{|k, v| v > 0}.map{|k, v| name_block(k) + " => " + v.inspect}.join ", "
+    puts stats[:block_counts].select{|hk, v| v > 0}.map{|hk, v| name_block(hk) + " => " + v.inspect}.join ", "
+    puts stats[:offset_counts].select{|hk, v| v > 0}.map{|hk, v| name_offset(hk) + " => " + v.inspect}.join ", "
     if stats_sum[:lit_blocks] > stats[:lit_blocks]
       p stats_sum.select{|k, v| v.is_a? Integer}
-      puts stats_sum[:block_counts].select{|k, v| v > 0}.map{|k, v| name_block(k) + " => " + v.inspect}.join ", "
+      puts stats_sum[:block_counts].select{|hk, v| v > 0}.map{|hk, v| name_block(hk) + " => " + v.inspect}.join ", "
+      puts stats_sum[:offset_counts].select{|hk, v| v > 0}.map{|hk, v| name_offset(hk) + " => " + v.inspect}.join ", "
     end
     break if last
   end

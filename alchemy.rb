@@ -100,11 +100,7 @@ class Elem
   
   def recalc_distances
     neighbors = lambda do |node|
-      if node == :root
-        $elems.select{|e| e.parent_pairs.any? &:empty?}
-      else
-        node.parent_pairs.flatten.uniq | node.children | [(:root if node.parent_pairs.any? &:empty?)].compact
-      end
+      node.parent_pairs.flatten.uniq | node.children
     end
     
     @distances = [[self]]
@@ -115,6 +111,16 @@ class Elem
   end
   
   def distance_to other; @distances.find_index{|ds| ds.include? other}; end
+  
+  def path_to other
+    return [self] if self == other
+    own_distance = distance_to(other)
+    @distances.map{|d|d.map(&:name)}
+    next_node = @distances[1].find{|node| node.distance_to(other) == own_distance - 1}
+    [self] + next_node.path_to(other)
+  end
+
+  ROOT = Elem.new("[]", [[]])
 end
 
 class Pair < Array
@@ -125,8 +131,9 @@ class Pair < Array
 
   def priority
     [
-      $eager_skip && self.any?{|el| el.done} ? 1 : 0,
-      self.map(&:priority).reduce(:+) + 1.0 / self.reduce(&:distance_to),
+      $eager_skip && self.any?(&:done) ? 1 : 0,
+      -self.reduce(&:distance_to),
+      self.map(&:priority).reduce(:+) + 1.0,
       self.map{|e|-e.complexity}.reduce(:+)
     ]
   end
@@ -135,6 +142,11 @@ class Pair < Array
   def hash; map{|el| "#{el.name} @ #{el.hash}"}; map(&:hash).reduce(:+) % 2**32; end
   def ==(other); (self[0] == other[0] && self[1] == other[1]) || (self[0] == other[1] && self[1] == other[0]); end
   alias eql? ==
+  
+  def to_s
+    via_str = first.distance_to(last) < 2 ? "" : " via " + first.path_to(last)[1..-2].map(&:name).join(", ") 
+    join(" + ") + " @ " + first.distance_to(last).to_s + via_str
+  end
 end
 
  ##############################################################################
@@ -264,6 +276,7 @@ def add elem_name, parent_names
     (puts "unknown element #{p_name}"; return nil) unless parent
     parent
   end
+  parents << Elem::ROOT if parents.count == 0
   elem = $elems.find{|e| e.name == elem_name}
   if elem
     elem.add_pair parents
@@ -278,7 +291,7 @@ def add elem_name, parent_names
   parents.each{|p|p.update_text; p.successes += 1; p.children |= [elem]}
   elem.update_text
   @categories |= [elem.category]
-  $elems.each &:recalc_distances
+  [*$elems, Elem::ROOT].each &:recalc_distances
   parents + [elem]
 end
 
@@ -290,12 +303,12 @@ def pop names = nil, only_skip: false
       pair = @pairs.max_by{|p| [p.priority, rand]}
     end
     return unless pair
-    out_pair = pair.sort_by{|e| [
+    out_pair = Pair.new(*pair.sort_by{|e| [
       e == $cur_element ? 0 : 1,
       e.category == $cur_category ? 0 : 1,
       - @categories.index(e.category),
       @elems_by_last_seen.index(e)
-    ]}
+    ]})
     top_cats = ((@prev_pop || []) | pair).group_by{|e| e.category}
                                          .map{|k,v| k if v.size >= 2}.compact
     old_cats = @categories.dup
@@ -305,7 +318,7 @@ def pop names = nil, only_skip: false
     break if !pair.any?(&:done) && only_skip
 
     pair.each{|e| e.update_text; e.tries += 1}
-    puts out_pair.join(" + ") + " @ " + pair.reduce(&:distance_to).to_s
+    puts out_pair.to_s
     @pairs.delete pair
     redo if pair.any? &:done
     
@@ -390,7 +403,7 @@ def serialize_data word_width = 6, pad = false
   end
   raise "bug: pairs #{pair_set.map{|pair|pair.map(&:name)}} unaccounted for" unless pair_set.empty?
   {
-    e: $elems.map{|e| [e.name, e.parent_pairs.map{|pair|pair.map{|e|$elems.index e}}, e.done ? 1 : 0]},
+    e: $elems.map{|e| [e.name, e.parent_pairs.map{|pair|pair.map{|e|$elems.index e}.compact}, e.done ? 1 : 0]},
     pt: word_width.to_s + (pad ? "p" : ""),
     p: bit_packer.result[/^(.*[^0])*(?=0*$)/]
   }
@@ -402,7 +415,7 @@ def deserialize_data data
   data[:e].each do |e|
     elem = $elems.find{|elem| elem.name == e[0]}
     e[1].each do |ixes|
-      pair = ixes.map{|ix| $elems[ix]}
+      pair = ixes.empty? ? [Elem::ROOT] : ixes.map{|ix| $elems[ix]}
       elem.add_pair pair
       pair.each{|p|p.update_text; p.successes += 1; p.children |= [elem]}
     end
@@ -416,7 +429,7 @@ def deserialize_data data
     bit_packer.skip_pad if pad
   end
   @categories = $elems.map(&:category).uniq
-  $elems.each &:recalc_distances
+  [*$elems, Elem::ROOT].each &:recalc_distances
   @elems_by_last_seen = $elems.sort_by{|el| [-el.priority, rand]}
   $elems_done = $elems.count &:done
 end
@@ -458,7 +471,7 @@ loop do
   case $stdin.gets
     when /^(.*?)\s*\+\s*(.*?)\s*\=\s*(.*?)$/ # p1+p2=p3 with optional spaces
       r = add($3, [$1, $2]); puts "ok; %s + %s = %s" % r.map(&:to_s) if r
-    when /^add (.*)$/ then puts "ok; %s" % add($1, []).map(&:to_s)
+    when /^add (.*)$/ then puts "ok; %s" % [add($1, [])[1].to_s]
     when /^\=\s*(.*?)$/
       r = add($1, $last_pair.map(&:name))
       puts "ok; %s + %s = %s" % r.map(&:to_s) if r
