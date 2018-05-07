@@ -276,7 +276,8 @@ def show_parse_block bit_reader, out_buf, stats
     puts
     lit_lengths = read_lencodes bit_reader, len_codes, hlit
     litlen_codes = HuffmanCode.from_lengths lit_lengths
-    puts "Literal + length codes: " + litlen_codes.codes.map{|k, v| "#{k} =>  #{name_block v}"}.join(', ')
+    puts "Literal + length codes: "
+    puts word_wrap digest_hash litlen_codes.codes, value_transform: method(:name_block)
     (1..15).map do |l|
       b = litlen_codes.codes.select{|k, v| k.length == l}.values
       puts "#{l}: #{b.map{|c| name_block c}.join ", "}" unless b.empty?
@@ -285,7 +286,8 @@ def show_parse_block bit_reader, out_buf, stats
     
     dist_lengths = read_lencodes bit_reader, len_codes, hdist
     offset_codes = HuffmanCode.from_lengths dist_lengths
-    puts "Offset codes: " + offset_codes.codes.inspect
+    puts "Offset codes: "
+    puts word_wrap digest_hash offset_codes.codes, value_transform: method(:name_offset)
   end  
   
   puts "#" * 80
@@ -305,6 +307,7 @@ def show_parse_block bit_reader, out_buf, stats
     else
       extra = bit_reader.get_bits extra_bits[code-257] rescue p [key, code]
       okey, ocode = bit_reader.read_huffman offset_codes
+      stats[:offset_counts][ocode] += 1
       oextra = bit_reader.get_bits oextra_bits[ocode]
       
       length = extra_offset[code-257] + extra.bits_to_int
@@ -313,15 +316,20 @@ def show_parse_block bit_reader, out_buf, stats
       last_buf = String.new # 8-bit ASCII
       buf_start = out_buf.length - offset
       buf_before = [buf_start - 5, 0].max
+      if out_buf.size < offset
+        puts "offset = #{offset} but only #{out_buf.size} bytes in output buffer"
+        exit
+      end
       length.times{last_buf << out_buf[-offset]; out_buf << out_buf[-offset]}
       buf_end = out_buf.length - offset
       buf_after = [buf_end + 5, out_buf.length].min
-      puts "@#{at} #{key} #{extra.join} #{okey} #{oextra.join} - repeat #{length} #{offset}".ljust(45) +
-           "\e[31m#{out_buf[buf_before ... buf_start].join}\e[0m" +
-           "#{out_buf[buf_start ... buf_end].join}" +
-           "\e[31m#{out_buf[buf_end ... buf_after].join}\e[0m"
+      puts ("@#{at} #{key} #{extra.join} #{okey} #{oextra.join} - repeat" +
+           " #{"new " if stats[:block_counts][code] == 1}#{length}" +
+           " #{"new " if stats[:offset_counts][ocode] == 1}#{offset}").ljust(45) +
+           "\e[31m#{out_buf[buf_before ... buf_start].inspect[1 .. -2]}\e[0m" +
+           "#{out_buf[buf_start ... buf_end].inspect[1 .. -2]}" +
+           "\e[31m#{out_buf[buf_end ... buf_after].inspect[1 .. -2]}\e[0m"
       stats[:rep_blocks] += 1
-      stats[:offset_counts][ocode] += 1
     end
   end
 end
@@ -343,6 +351,42 @@ end
 
 ################################################################################
 
+def word_wrap words, width = IO.console.winsize[1] - 1
+  words[1 .. -1].reduce [words[0]] do |acc, word|
+    if acc.last.length + word.length >= width
+      acc << word
+    else
+      acc.last.concat " " + word
+    end
+    acc
+  end
+end
+
+def list_wrap ary
+  word_wrap ary[0 .. -2].map{|e| e + ","} + ary[-1 .. -1]
+end
+
+def digest_hash hash, key_transform: :inspect.to_proc, value_transform: :inspect.to_proc
+  gap_size = 0
+  prev_key = nil
+  r = []
+  [*hash.to_a, [nil, nil]].each do |k, v|
+    if v == 0
+      gap_size += 1
+    else
+      case gap_size
+      when 0 then nil
+      when 1 then r << "#{key_transform[prev_key]} => 0"
+      else r << "#{gap_size}x 0"
+      end
+      r << "#{key_transform[k]} => #{value_transform[v]}" if k
+      gap_size = 0
+    end
+    prev_key = k
+  end
+  r
+end
+
 if $0 == __FILE__
   if ARGV.include?("--slow")
     ARGV.delete("--slow")
@@ -355,16 +399,16 @@ if $0 == __FILE__
   
   hash_stats = %i{block_counts offset_counts}
   bit_reader = BitReader.new ARGF
-  out_buf = []
+  out_buf = String.new encoding:"ASCII-8BIT"
   stats_sum = {lit_blocks: 0, rep_blocks: 0, compressed_size: 0, uncompressed_size: 0, 
-               block_counts: Hash[(0..285).map{|k| [k,0]}], offset_counts: Hash[(0..285).map{|k| [k,0]}]}
+               block_counts: Hash[(0..285).map{|k| [k,0]}], offset_counts: Hash[(0..29).map{|k| [k,0]}]}
 
   show_parse_header
   last_cs = 0
   last_ucs = 0
   loop do
     stats = {lit_blocks: 0, rep_blocks: 0, 
-             block_counts: Hash[(0..285).map{|k| [k,0]}], offset_counts: Hash[(0..285).map{|k| [k,0]}]}
+             block_counts: Hash[(0..285).map{|k| [k,0]}], offset_counts: Hash[(0..29).map{|k| [k,0]}]}
     last = show_parse_block bit_reader, out_buf, stats
     stats[:compressed_size] = ARGF.pos - last_cs; last_cs = ARGF.pos
     stats[:uncompressed_size] = out_buf.size - last_ucs; last_ucs = out_buf.size
@@ -374,12 +418,12 @@ if $0 == __FILE__
 
     p stats.select{|k, v| v.is_a? Integer}
     
-    puts stats[:block_counts].select{|hk, v| v > 0}.map{|hk, v| name_block(hk) + " => " + v.inspect}.join ", "
-    puts stats[:offset_counts].select{|hk, v| v > 0}.map{|hk, v| name_offset(hk) + " => " + v.inspect}.join ", "
-    if stats_sum[:lit_blocks] > stats[:lit_blocks]
+    puts list_wrap digest_hash stats[:block_counts], key_transform: method(:name_block)
+    puts list_wrap digest_hash stats[:offset_counts], key_transform: method(:name_offset)
+    if stats_sum[:compressed_size] > stats[:compressed_size]
       p stats_sum.select{|k, v| v.is_a? Integer}
-      puts stats_sum[:block_counts].select{|hk, v| v > 0}.map{|hk, v| name_block(hk) + " => " + v.inspect}.join ", "
-      puts stats_sum[:offset_counts].select{|hk, v| v > 0}.map{|hk, v| name_offset(hk) + " => " + v.inspect}.join ", "
+      puts list_wrap digest_hash stats_sum[:block_counts], key_transform: method(:name_block)
+      puts list_wrap digest_hash stats_sum[:offset_counts], key_transform: method(:name_offset)
     end
     break if last
   end

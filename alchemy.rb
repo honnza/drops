@@ -1,9 +1,28 @@
+require 'io/console'
 require 'json'
 require 'zlib'
 require 'set'
 
+def word_wrap words, width = IO.console.winsize[1] - 1
+  words = words.split(" ") if words.is_a? String
+  words[1 .. -1].reduce [words[0]] do |acc, word|
+    if acc.last.length + word.length >= width
+      acc << word
+    else
+      acc.last.concat " " + word
+    end
+    acc
+  end
+end
+
+def print_time_to str
+  time_start = Time.now
+  r = yield
+  puts "%.2fs to %s" % [Time.now - time_start, str]
+  r
+end
+
 $elems = []
-@pairs = []
 @categories = []
 @prev_pop = nil
 $cur_category = nil
@@ -11,6 +30,9 @@ $cur_element = nil
 $last_pair = nil
 @elems_by_last_seen = []
 $elems_done = 0
+
+$stats_keys = %i{pairs_used cache_misses future_dropped future_sort_steps}
+$stats = Hash[$stats_keys.map{|k| [k, 0]}]
 
 class String
   def ansi_color fg, bg = nil
@@ -20,6 +42,16 @@ class String
       (1 if fg && fg >= 8)
     ].compact
     "\e[#{args.join ?;}m#{self}\e[0m"
+  end
+end
+
+class Array
+  def lossy_inpect(max_len)
+    return inspect if inspect.length <= max_len
+    copy = dup
+    skipped = 0
+    (copy.pop; skipped += 1) while copy.inspect.length + skipped.to_s.length + 7 > max_len
+    copy.inspect.sub "]", ", ...(#{skipped})]"
   end
 end
 
@@ -38,11 +70,11 @@ class Elem
     recalc
   end
 
-  def tries_adj; @tries - $elems_done; end # genuine tries = all tries - skips
+  def tries_adj; $eager_skip ? @tries - $elems_done : @tries; end # genuine tries = all tries - skips
   #def tries_adj; @tries; end
 
   def priority
-    Rational(@successes + 1, tries_adj + 2) * (self == $cur_element || category == $cur_category ? 2 : 1)
+    Rational(@successes + 1, tries_adj + 2) * ($use_cats && (self == $cur_element || category == $cur_category) ? 2 : 1)
   rescue ZeroDivisionError
     Float::INFINITY # this can happen if the element is yet to be skipped twice
   end
@@ -57,15 +89,14 @@ class Elem
     @text = "%s(%s %s | %d/%d => %.1f%%)" % [@name, @complexity, @ancestors.count, @successes, tries_adj, 100*priority]
     @text = case
       when done then @text.ansi_color(1)
-      when self == $cur_element then @text.ansi_color(8)
-      when category == $cur_category then @text.ansi_color(15)
+      when self == $cur_element && $use_cats then @text.ansi_color(8)
+      when category == $cur_category || !$use_cats then @text.ansi_color(15)
       else @text.ansi_color(11)
     end
   end
 
-  def to_s
-    @text
-  end
+  def to_s; @text; end
+  def inspect; "Elem<<#{name}>>"; end
 
   def add_pair parents
     @parent_pairs << parents
@@ -108,32 +139,58 @@ class Elem
       @distances << @distances.reduce(@distances.last.map(&neighbors).flatten.uniq){|a, e| a - e}
       break if @distances.last.empty?
     end
+    @directed_dists = [[self]]
+    loop.with_index(1) do |depth, ix|
+      @directed_dists << @directed_dists.reduce(@directed_dists.last.map(&:parent_pairs).flatten.uniq){|a, e| a - e}
+      break if @directed_dists.last.empty?
+    end
   end
   
   def distance_to other; @distances.find_index{|ds| ds.include? other}; end
+  def directed_dist_to other; @directed_dists.find_index{|ds| ds.include? other}; end
+  def bitonic_dist_to other; bitonic_path_to(other).length - 1; end
   
   def path_to other
     return [self] if self == other
     own_distance = distance_to(other)
-    @distances.map{|d|d.map(&:name)}
     next_node = @distances[1].find{|node| node.distance_to(other) == own_distance - 1}
     [self] + next_node.path_to(other)
+  end
+
+  def directed_path_to other
+    return [self] if self == other
+    own_distance = directed_dist_to(other) or return nil
+    next_node = @parent_pairs.flatten.uniq.find{|node| node.directed_dist_to(other) == own_distance - 1}
+    [self] + next_node.directed_path_to(other)
+  end
+  
+  def bitonic_path_to other
+    ([self, *@ancestors] & [other, *other.ancestors]).map{|parent|
+      left = self.directed_path_to(parent)
+      right = other.directed_path_to(parent)
+      left + right.reverse[1 .. -1]
+    }.min_by(&:length)
   end
 
   ROOT = Elem.new("[]", [[]])
 end
 
 class Pair < Array
-  def initialize e1, e2
+  def initialize e1, e2, via_parts: nil, elem_strs: nil
     self[0] = e1
     self[1] = e2
+    @via_parts = via_parts
+    @elem_strs = elem_strs
+  end
+  
+  def bitonic_length
+    @bitonic_length ||= reduce(&:bitonic_dist_to)
   end
 
   def priority
     [
       $eager_skip && self.any?(&:done) ? 1 : 0,
-      -self.reduce(&:distance_to),
-      self.map(&:priority).reduce(:+) + 1.0,
+      self.map(&:priority).reduce(:+),
       self.map{|e|-e.complexity}.reduce(:+)
     ]
   end
@@ -143,11 +200,134 @@ class Pair < Array
   def ==(other); (self[0] == other[0] && self[1] == other[1]) || (self[0] == other[1] && self[1] == other[0]); end
   alias eql? ==
   
+  def update_text
+    @via_parts = first.bitonic_path_to(last)[1..-2].map(&:name) 
+    @elem_strs = map &:to_s
+  end
+  
+  def sort_by
+    if (yield(first) <=> yield(last)) > 0
+      Pair.new(last, first, via_parts: @via_parts.reverse, elem_strs: @elem_strs.reverse)
+    else
+      Pair.new(first, last, via_parts: @via_parts, elem_strs: @elem_strs)
+    end
+  rescue
+    p [first, yield(first), last, yield(last)]
+    raise
+  end
+  
   def to_s
-    via_str = first.distance_to(last) < 2 ? "" : " via " + first.path_to(last)[1..-2].map(&:name).join(", ") 
-    join(" + ") + " @ " + first.distance_to(last).to_s + via_str
+    if @via_parts.empty?
+      @elem_strs.join(" + ")
+    else
+      @elem_strs.join(" + ") + " via " + @via_parts.join(", ")
+    end
   end
 end
+
+module Future
+  include Enumerable
+  class <<self
+    def initialize
+      @near_future = []
+      @far_future = []
+      self
+    end
+    
+    private def ensure_near(n)
+      while @near_future.size <= n
+        pair = @far_future.max_by{|pa| [pa.priority, rand]}
+        $stats[:future_sort_steps] += @far_future.size
+        return if pair.nil?
+        pair.each{|e| e.update_text; e.tries += 1}
+        pair.update_text
+        @near_future << pair
+        @far_future.delete pair
+        str = "peering into the future (@#{n} #{pair})"
+        ww = IO.console.winsize[1]
+        if n > 0
+          str_len = str.gsub(/\e\[[^a-z]*[a-z]/i, "").length
+          if str_len > ww
+            puts str 
+          else
+            print str + " " * (ww - str_len)
+          end
+        end
+      end
+    end
+    
+    def rewind
+      $stats[:future_dropped] += @near_future.size
+      @near_future.each{|pa| pa.each{|e| e.tries -= 1}}
+      @far_future.concat @near_future
+      @near_future = []
+      self
+    end
+    
+    def pop; ensure_near 0; @near_future.shift; end
+    def peek; ensure_near 0; @near_future.first; end
+    def concat(pairs); @far_future.concat pairs; end
+    def <<(pair); @far_future << pair; end
+    def unordered; @near_future + @far_future; end
+    def length; @near_future.size + @far_future.size; end
+    def empty?; length == 0; end
+    
+    def each
+      if block_given?
+        (0 ... length).each{|i| ensure_near i; yield @near_future[i]}
+      else
+        to_enum{length}
+      end
+    end
+    
+    def delete(pair); @near_future.delete(pair) || @far_future.delete(pair); end
+
+    def elem_done?(elem)
+      if elem.tries == $elems.count + 1
+        remaining = @near_future.select{|pa| pa.include?(elem) && !pa.any?(&:done)}
+                                .flat_map{|pa| pa - [elem]}.map(&:name)
+        #puts "#{elem.name} is almost done. Remaining pairs: #{remaining}" if remaining.count > 0
+        remaining.empty?
+      else
+        false
+      end
+    end
+  end
+  
+  
+  initialize
+end
+
+class ElemElevatorEnumerator
+  def initialize
+    @prev_elem = Elem::ROOT
+    @prev_dir = :>
+  end
+  
+  def next
+    case @prev_dir
+    when :>
+      r = $elems.select{|e|e.name > @prev_elem.name}.min_by(&:name)
+      (@prev_dir = :<; r = $elems.max_by(&:name)) unless r
+    when :<
+      r = $elems.select{|e|e.name < @prev_elem.name}.max_by(&:name)
+      (@prev_dir = :>; r = $elems.min_by(&:name)) unless r
+    end
+    @prev_elem = r
+  end
+  
+  def each
+    if block_given?
+      loop{yield self.next}
+    else
+      to_enum{$elems.count}
+    end
+  end
+  
+  include Enumerable
+end
+
+$board_elevator = ElemElevatorEnumerator.new
 
  ##############################################################################
 
@@ -211,7 +391,6 @@ end
        until buf.length == word_width
          buf.push(period(buf + [true]) < period(buf + [false]))
        end
-       puts "%s => %s" % [k, buf].map{|a| a.map{|c| c ? 1 : 0}.join}
        h[k] = buf
      end]
    end]
@@ -264,7 +443,7 @@ end
      else
        [(@base64 ? ALPHABET_B64 : ALPHABET6)[bit_int]]
      end
-   rescue; p self; raise
+   rescue;; raise
    end  
  end
 
@@ -284,43 +463,106 @@ def add elem_name, parent_names
     elem = Elem.new elem_name, [parents]
     $elems << elem
     @elems_by_last_seen << elem
-    $elems.each{|e2| @pairs << Pair.new(e2, elem) unless e2.name.end_with? '*'} unless elem_name.end_with? '*'
+    Future.rewind.concat $elems.map{|e2| Pair.new(e2, elem)}
   end
   $cur_element = nil
   $cur_category = elem.category
-  parents.each{|p|p.update_text; p.successes += 1; p.children |= [elem]}
+  parents.each{|e| e.update_text; e.successes += 1; e.children |= [elem]}
   elem.update_text
   @categories |= [elem.category]
-  [*$elems, Elem::ROOT].each &:recalc_distances
+  [*$elems, Elem::ROOT].each(&:recalc_distances)
+  if $elem_board
+    parents.each{|parent| $elem_board.delete(parent) && $elem_board << nil}
+    ix = $elem_board.find_index(nil)
+    ($elem_board.delete_at(ix); $elem_board << elem) if ix
+  end
   parents + [elem]
 end
 
-def pop names = nil, only_skip: false
-  loop do
-    if names
-      pair = @pairs.find{|p| p.sort_by(&:name) == names.sort_by(&:name)}
-    else
-      pair = @pairs.max_by{|p| [p.priority, rand]}
+def rm_elem elem_name
+  elem = $elems.find{|e| e.name == elem_name}
+  Future.rewind
+  return "unknown element #{elem_name}" unless elem
+  return "can't remove #{elem_name}: has children" if elem.successes > 0
+  $elems.each do |elem2|
+    unless Future.delete(Pair.new(elem, elem2))
+      elem.tries -= 1
+      elem2.tries -= 1
     end
+  end
+
+  elem.parent_pairs.each do |pair|
+    pair.each{|e| e.successes -= 1; e.children.delete(elem)}
+  end
+  $elems.delete(elem)
+  $elem_board&.delete(elem) && $elem_board << nil
+  @categories.delete elem.category unless $elems.any?{|e| e.category == elem.category}
+  
+  $elems.each(&:recalc)
+  "done"
+end
+
+def pop(only_skip: false)
+  loop do
+    pair = Future.peek
     return unless pair
-    out_pair = Pair.new(*pair.sort_by{|e| [
+    out_pair = pair.sort_by{|e| [
       e == $cur_element ? 0 : 1,
       e.category == $cur_category ? 0 : 1,
       - @categories.index(e.category),
       @elems_by_last_seen.index(e)
-    ]})
+    ]}
     top_cats = ((@prev_pop || []) | pair).group_by{|e| e.category}
                                          .map{|k,v| k if v.size >= 2}.compact
-    old_cats = @categories.dup
     @categories.sort_by!.with_index{|cat, i| [(top_cats.include? cat) ? 0 : 1, i]}
     @prev_pop = pair
 
     break if !pair.any?(&:done) && only_skip
+    Future.pop
+    (puts out_pair.to_s; redo) if pair.any?(&:done)
 
-    pair.each{|e| e.update_text; e.tries += 1}
+    if $elem_board
+      new_elems = pair.uniq - $elem_board
+      $stats[:cache_misses] += new_elems.size
+      space_needed = new_elems.size - $elem_board.count(nil)
+      if space_needed > 0
+        candidates = ($elem_board.compact - pair).sort_by{|e|[e.name.size, e.name]}
+        n_pairs_all = 0
+        n_pairs = 0
+        print_time_to "plan for the future" do
+          obv_candidates = candidates.select{|e|Future.elem_done? e}
+          ww = IO.console.winsize[1]
+          Future.each do |npair|
+            if obv_candidates.size >= space_needed
+              candidates = obv_candidates
+              puts candidates.count > 1 ? "#{candidates.join ", "} are out of pairs"
+                                        : "#{candidates.first} is out of pairs"
+              break
+            end
+            
+            n_pairs_all += 1
+            if npair.any?(&:done)
+              obv_candidates = npair.select{|e| candidates.include?(e) && Future.elem_done?(e)}
+              print candidates.map(&:name).lossy_inpect(ww).ljust(ww, " ") + "\e[1A"
+              next
+            end
+            n_pairs += 1
+            candidates.delete npair[0]
+            break if candidates.size == space_needed
+            candidates.delete npair[1]
+            break if candidates.size == space_needed
+            
+            print candidates.map(&:name).lossy_inpect(ww).ljust(ww, " ") + "\e[1A"
+          end
+        end
+        puts "#{n_pairs}/#{n_pairs_all} future pairs condsidered"
+        candidates.sample(new_elems.size).each{|e| puts "-" + e.name; $elem_board.delete e}
+      end
+      new_elems.size.times{ix = $elem_board.find_index(nil); $elem_board.delete_at(ix) if ix}
+      new_elems.each{|e| puts "+" + e.name; $elem_board << e}
+    end
     puts out_pair.to_s
-    @pairs.delete pair
-    redo if pair.any? &:done
+    $stats[:pairs_used] += 1
     
     $cur_element = out_pair.include?($cur_element) ? $cur_element : out_pair.first
     $cur_category = out_pair.last.category
@@ -341,9 +583,8 @@ def rename from, to
 end
 
 def reset_pairs
-  @pairs = ($elems.combination(2).to_a + $elems.map{|e| [e, e]}).map do |e1, e2|
-    Pair.new(e1, e2) unless e1.name.end_with?("*") || e2.name.end_with?("*")
-  end.compact
+  Future.initialize
+  Future.concat ($elems.combination(2).to_a + $elems.map{|e| [e, e]}).map{|e1, e2| Pair.new(e1, e2)}
   $elems.each{|e| e.tries = 0}
   $elems.each{|e| e.parent_pairs.each{|pp| pop pp}}
 end
@@ -355,10 +596,18 @@ def p_stats
   groups = $elems.map(&:successes).group_by{|x| x}
   (0..groups.keys.max).each{|k| p [k, groups.fetch(k, []).length]}
   puts "pairs by distance"
-  @pairs.map{|pair| pair.reduce(&:distance_to)}.sort.group_by{|x| x}.to_a.sort.each{|a| p [a[0], a[1].size]}
+  Future.unordered.map{|pair| pair.reduce(&:distance_to)}.sort.group_by{|x| x}.to_a.sort.each{|a| p [a[0], a[1].size]}
+  puts "pairs by bitonic distance"
+  Future.unordered.map{|pair| pair.bitonic_length}.sort.group_by{|x| x}.to_a.sort.each{|a| p [a[0], a[1].size]}
+  
+  pairs_total = $elems.count * ($elems.count + 1) / 2
+  p elems_open: $elems.count{|e| !e.done}, elems_done: $elems.count{|e| e.done},
+    pairs_open: Future.length, pairs_skipped: pairs_total - Future.length - $stats[:pairs_used]
+
+  p $stats
 end
 
-def show_elems key, elem_name = nil, topo_sort = true
+def show_elems key, topo_sort = true, successor: nil, nonsuccessors: nil, parent: nil
   sort_orders = {
     name: -> _, _ {""},
     history: -> _, i {i + 1},
@@ -368,12 +617,18 @@ def show_elems key, elem_name = nil, topo_sort = true
     importance: -> e, _ {$elems.select{|f| f.ancestors.include? e}.count}
   }
 
-  elem = $elems.find{|e| e.name == elem_name}
-  raise ArgumentError if elem_name && elem.nil?
   triples = $elems.map.with_index{|e, i| [sort_orders[key.to_sym][e, i], e]}.sort_by{|ix, e| [ix, e.name]}
-                  .map{|ix, e| e.parent_pairs.map{|pp| [ix, e, pp] if !elem || elem == e || elem.ancestors.include?(e)}}
-                  .flatten(1).compact
-  
+                  .map{|ix, e| e.parent_pairs.map{|pp| [ix, e, pp]}}.flatten(1)
+
+  succ_elem = $elems.find{|e| e.name == successor}
+  raise ArgumentError if successor && !succ_elem
+  parent_elem = $elems.find{|e| e.name == parent}
+  raise ArgumentError if parent && !parent_elem
+  nonsuccessor_elems = nonsuccessors&.map{|ns| $elems.find{|e| e.name == ns} or raise ArgumentError}
+  triples.select! {|(_, e, _)| succ_elem == e || succ_elem.ancestors.include?(e)} if succ_elem
+  triples.select! {|(_, e, _)| ! nonsuccessor_elems.any?{|ns| ns.ancestors.include?(e)}} if nonsuccessors
+  triples.select! {|(_, _, pp)| pp.include?(parent_elem)} if parent_elem
+
   if topo_sort
     triples_sorted = []
     insert = lambda do |(ix1, e1, pp1)|
@@ -385,35 +640,46 @@ def show_elems key, elem_name = nil, topo_sort = true
         triples_sorted << [ix1, e1, pp1] unless triples_sorted.include? [ix1, e1, pp1]
       end
     end
-    triples.map &insert
+    triples.map(&insert)
     triples = triples_sorted
   end
   
   triples.each do |ix, e, pp|
-    puts "@#{ix} #{pp.empty? ? "add" : "#{pp.join " + "} ="} #{e.name}"
+    e.update_text
+    puts "@#{ix} #{pp.empty? ? "add" : "#{pp.map(&:name).join " + "}"} = #{e}"
   end
 end
 
 def serialize_data word_width = 6, pad = false
-  pair_set = Set.new @pairs.map
+  pair_set = Set.new Future.unordered
   bit_packer = BitPacker.new word_width
-  $elems.each_with_index do |e1, i1|
-    $elems[0 .. i1].each{|e2| bit_packer.push_bit(!!pair_set.delete?(Pair.new e2, e1))}
+  live_elems = $elems.reject{|e| Future.elem_done? e}
+  unless live_elems.empty? || $elems[live_elems.count - 1] == live_elems.last
+    raise "bug: serialize_data requires used up elements to go last"
+  end
+  live_elems.each_with_index do |e1, i1|
+    live_elems[0 .. i1].each{|e2| bit_packer.push_bit(!!pair_set.delete?(Pair.new e2, e1))}
     bit_packer.pad if pad
   end
-  raise "bug: pairs #{pair_set.map{|pair|pair.map(&:name)}} unaccounted for" unless pair_set.empty?
+  raise "bug: pairs #{pair_set.map{|pair| pair.map(&:name)}} unaccounted for" unless pair_set.empty?
   {
-    e: $elems.map{|e| [e.name, e.parent_pairs.map{|pair|pair.map{|e|$elems.index e}.compact}, e.done ? 1 : 0]},
+    e: $elems.map{|e| [
+         e.name, 
+         e.parent_pairs.map{|pair| pair.map{|el| $elems.index el}.compact.sort}.sort, 
+         e.done ? 1 : 0
+       ]},
+    b: $elem_board&.map{|be| be && $elems.index(be)}&.sort_by{|e| [e.nil? ? 1 : 0, e]},
+    st: $stats.values, 
     pt: word_width.to_s + (pad ? "p" : ""),
     p: bit_packer.result[/^(.*[^0])*(?=0*$)/]
-  }
+  }.compact
 end
 
 def deserialize_data data
   (data[:pt] || "6") =~ /^(\d|13)(p?)$/; word_width = $1.to_i; pad = $2 == "p"
   $elems = data[:e].map{|e| el = Elem.new(e[0], []); el.done = e[2] == 1; el}
   data[:e].each do |e|
-    elem = $elems.find{|elem| elem.name == e[0]}
+    elem = $elems.find{|el| el.name == e[0]}
     e[1].each do |ixes|
       pair = ixes.empty? ? [Elem::ROOT] : ixes.map{|ix| $elems[ix]}
       elem.add_pair pair
@@ -421,24 +687,37 @@ def deserialize_data data
     end
   end
   bit_packer = BitPacker.new word_width, data[:pt].nil?, data[:p]
-  @pairs = []
+  if data[:b]
+    $elem_board = data[:b]&.map{|i| i && $elems[i]} #TODO: handle resize
+    puts "board size = #{$elem_board.size}"
+    board_size_arg = ARGV.find{|arg| arg =~ /--board-size-\d+/}
+    if board_size_arg
+      puts "board size from arg = #{board_size_arg[/\d+/]}"
+      $elem_board << nil while $elem_board.size < board_size_arg[/\d+/].to_i
+      removed_elems = $elem_board.slice!(board_size_arg[/\d+/].to_i .. -1).compact
+      removed_elems.each{|e| puts "#{e.name} dropped from board"}
+    end
+  end
+  Future.initialize
   $elems.each_with_index do |e1, i1|
     $elems[0 .. i1].each do |e2|
-      if bit_packer.shift_bit then @pairs << Pair.new(e2, e1) else e1.tries +=1 ; e2.tries += 1; end
+      if bit_packer.shift_bit then Future << Pair.new(e2, e1) else e1.tries +=1 ; e2.tries += 1; end
     end
     bit_packer.skip_pad if pad
   end
   @categories = $elems.map(&:category).uniq
-  [*$elems, Elem::ROOT].each &:recalc_distances
+  [*$elems, Elem::ROOT].each(&:recalc_distances)
   @elems_by_last_seen = $elems.sort_by{|el| [-el.priority, rand]}
-  $elems_done = $elems.count &:done
+  $elems_done = $elems.count(&:done)
+  $stats = Hash[$stats_keys.zip(data[:st] || []).map{|k, v| [k, v || 0]}]
 end
 
 def mk_save
   best_str = nil
   [false, true].each do |pad|
     [1, 2, 3, 4, 5, 6, 13].each do |word_width|
-      json = JSON.generate serialize_data(word_width, pad)
+      data = serialize_data(word_width, pad)
+      json = JSON.generate(data)
       # StringIO defaults to "" rather than String.new
       # which differ in that String.new.encoding is ASCII-8BIT
       # but "".encoding is UTF-8, causing us to misestimate the byte length
@@ -454,53 +733,80 @@ def mk_save
 end
 
 def mk_save_opt
-  pair = nil
   $elems.sort_by!.with_index{|el, ix| [el.tries, ix]}
-  p $elems.map{|el| "#{el.name}"}
+  #puts word_wrap $elems.map{|el| "#{el.name}"}.inspect
   mk_save
 end
 
 ###############################################################################
 
 puts "Welcome to Alchemy.rb"
-if ARGV.include? "--eager-skip"
+if ARGV.include? "--use-cats"
+  $use_cats = true
+end
+if !ARGV.include? "--lazy-skip"
   $eager_skip = true
   puts "will be skipping eagerly"
 end
+board_size_arg = ARGV.find{|arg| arg =~ /--board-size-\d+/}
+if board_size_arg
+  $elem_board = Array.new board_size_arg[/\d+/].to_i
+  puts "board size = #{$elem_board.size}"
+end
+
 loop do
-  case $stdin.gets
-    when /^(.*?)\s*\+\s*(.*?)\s*\=\s*(.*?)$/ # p1+p2=p3 with optional spaces
-      r = add($3, [$1, $2]); puts "ok; %s + %s = %s" % r.map(&:to_s) if r
-    when /^add (.*)$/ then puts "ok; %s" % [add($1, [])[1].to_s]
-    when /^\=\s*(.*?)$/
-      r = add($1, $last_pair.map(&:name))
-      puts "ok; %s + %s = %s" % r.map(&:to_s) if r
-      pop(only_skip: true) if $eager_skip
-    when /^(pop)?$/ then pop
-    when /^done$/ then puts pop until @pairs.empty?
-    when /^s\/(.*?)\/(.*?)\// then (rename $1, $2; puts "ok") rescue puts $!
-    when /^stats$/ then p_stats
-    when /^show elements by (.+)$/ then show_elems $1 #rescue puts "?"
-    when /^show history$/ then show_elems "history"
-    when /^next chapter$/ then (reset_pairs; puts "ok") rescue puts $!
-    when /^skip (.*)$/
-      e = $elems.find{|e| e.name == $1}
-      if e then e.done = true; puts "ok" else puts "unknown element #{$1}" end
-      pop(only_skip: true) if $eager_skip
-    when /^show history of (.*)$/
-      show_elems "history", $1 rescue puts "unknown element #{$1}"
-    when /^save as (.*)$/
-      save = mk_save_opt
-      File.open($1 + ".alchz", "wb"){|f| f.write save}
-      puts "\e[Gok; #{$elems.length} elements, #{@pairs.length} pairs"
-      puts "wrote #{save.length} bytes to disk"
-    when /^load from (.*)$/
-      Zlib::GzipReader.open($1 + ".alchz") do |gz|
-        json = JSON.parse gz.read, symbolize_names: true
-        deserialize_data json
-        puts "\e[Gok; #{$elems.length} elements, #{@pairs.length} pairs"
-      end
-    when /^(q|quit|exit)$/ then exit
-    else puts '?'
+  begin
+    case $stdin.gets
+      when /^(.*?)\s*\+\s*(.*?)\s*\=\s*(.*?)$/ # p1+p2=p3 with optional spaces
+        r = add($3, [$1, $2]); puts "ok; %s + %s = %s" % r.map(&:to_s) if r
+        pop(only_skip: true) if $eager_skip
+      when /^add (.*)$/
+        pop(only_skip: true) if $eager_skip
+        puts "ok; %s" % [add($1, [])[1].to_s]
+      when /^\=\s*(.*?)$/
+        r = add($1, $last_pair.map(&:name))
+        pop(only_skip: true) if $eager_skip
+        puts "ok; %s + %s = %s" % r.map(&:to_s) if r
+      when /^(pop)?$/ then pop
+      when /^done$/ then $elems.each{|e| e.done = true}; pop
+      when /^s\/(.*?)\/(.*?)\// then (rename $1, $2; puts "ok")
+      when /^remove element (.+)$/ then puts rm_elem $1
+      when /^stats$/ then p_stats
+      when /^show elements by (.+)$/ then show_elems $1
+      when /^show history$/ then show_elems "history"
+      when /^next chapter$/ then (reset_pairs; puts "ok")
+      when /^show board$/ then puts word_wrap $elem_board&.map{|e|e&.name}&.sort_by(&:inspect).inspect
+      when /^skip (.*)$/
+        elem = $elems.find{|e| e.name == $1}
+        if elem
+          elem.done = true
+          puts "ok"
+          $elem_board.delete(elem) && $elem_board << nil if $elem_board
+          (Future.rewind; pop(only_skip: true)) if $eager_skip
+        else
+          puts "unknown element #{$1}"
+        end
+      when /^show history of (.*?)(( - .*?)*)$/
+        show_elems "history", successor: $1, nonsuccessors: $2.split(/ - /)[1..-1]
+      when /^show children of (.*)$/
+        show_elems "history", parent: $1 
+      when /^save as (.*)$/
+        save = mk_save_opt
+        File.rename($1 + ".alchz", $1 + ".alchz.bak") if File.exist?($1 + ".alchz")
+        File.open($1 + ".alchz", "wb"){|f| f.write save}
+        puts "\e[Gok; #{$elems.length} elements, #{Future.length} pairs"
+        puts "wrote #{save.length} bytes to disk"
+      when /^load from (.*)$/
+        Zlib::GzipReader.open($1 + ".alchz") do |gz|
+          json = JSON.parse gz.read, symbolize_names: true
+          deserialize_data json
+          puts "\e[Gok; #{$elems.length} elements, #{Future.length} pairs"
+        end
+      when /^(q|quit|exit)$/ then exit
+      else puts '?'
+    end
+  rescue
+    puts $!
+    puts $@
   end
 end
