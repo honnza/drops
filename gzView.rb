@@ -13,10 +13,9 @@ class Array
   end
 end
 
-def ARGF.read_asciiz
-  bytes = []
-  bytes << ARGF.read(1) until bytes.last == "\0"
-  bytes[0 .. -2].join
+class String
+  def display_length; gsub(/\e.*?m/,"").length; end
+  def ljust_d(len); self + " " * [len - display_length, 0].max; end
 end
 
 class BitReader
@@ -25,9 +24,23 @@ class BitReader
     @buffer = []
   end
   
+  def start_random!
+    @io = Object.new
+    def @io.read(n)
+      if n == 1
+        rand 256
+      else
+        n.times.map{rand 256}
+      end
+    end
+  end
+  
+  def p_byte b; print "\e[30;1m%02X\e[0m " % b; end
+  
   def get_bits(n)
     while @buffer.size < n
       byte_in = @io.read(1).ord
+      p_byte byte_in
       (0..7).map{|i| @buffer.push byte_in[i]}
     end
     
@@ -36,9 +49,15 @@ class BitReader
   
   def get_bytes(n)
     @buffer = []
-    @io.read(n)
+    @io.read(n).bytes.each{|b| p_byte b}
   end
   
+  def read_asciiz
+    bytes = []
+    bytes << get_bytes(1)[0] until bytes.last == 0
+    bytes[0 .. -2].pack("U*")
+  end
+
   def read_huffman(huffman_code)
     key = ""
     key += get_bits(1)[0].to_s until huffman_code[key]
@@ -102,8 +121,9 @@ end
 
 ################################################################################
 
-def show_parse_header
-  header = ARGF.read(10).bytes
+def show_parse_header bit_reader
+  header = bit_reader.get_bytes(10)
+  puts
 
   if header[0] != 0x1f || header[1] != 0x8b
     puts "invalid file type ID #{header[0..1].inspect}"
@@ -144,13 +164,13 @@ def show_parse_header
   puts "#{header[9]} - OS (3 = Unix)"
 
   if fextra == 1
-    length = ARGF.read(2).bytes.bytes_to_int
-    puts "extra field: ", ARGF.read(length)
+    length = bit_reader.get_bytes(2).bytes_to_int
+    puts "extra field: ", bit_reader.get_bytes(length)
   end
-  puts "filename: ", ARGF.read_asciiz if fname == 1
-  puts "comment: ", ARGF.read_asciiz if fcomment == 1
+  puts "filename: ", bit_reader.read_asciiz if fname == 1
+  puts "comment: ", bit_reader.read_asciiz if fcomment == 1
   if fhcrc == 1
-    puts "crc: " + ARGF.read(2).bytes.bytes_to_int.to_s(16).rjust(6, "0x0000")
+    puts "crc: " + bit_reader.get_bytes(2).bytes_to_int.to_s(16).rjust(6, "0x0000")
   end
   puts
 end
@@ -206,7 +226,8 @@ def read_lencodes bit_reader, len_codes, demand
   r
 end
 
-def show_parse_block bit_reader, out_buf, stats
+NEW_STR = "\e[32;1mnew \e[0m"
+def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
   code_lengths_for = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15]
   extra_bits = [0, *0..5].map{|c|[c,c,c,c]}.flatten
   extra_offset = [3]
@@ -217,10 +238,10 @@ def show_parse_block bit_reader, out_buf, stats
   oextra_offset = [1]
   oextra_bits.each {|b| oextra_offset << oextra_offset.last + 2 ** b}
 
+  puts "#" * 80
   bfinal = bit_reader.get_bits(1) == [1]
   btype = bit_reader.get_bits(2)
   
-  puts "#" * 80
   puts "final: #{bfinal}"
   puts "btype: #{btype}"
   
@@ -234,16 +255,18 @@ def show_parse_block bit_reader, out_buf, stats
     len = [len0, len1].bytes_to_int
     nlen = ~[nlen0, nlen1].bytes_to_int ^ (-1 << 16)
     if len != nlen
-      puts "len(#{len}) doesn't match nlen(#{nlen})"
+      puts "len(#{len}) doesn't match nlen(#{nlen})" unless quiet
       exit
     end
-    puts "#{to_bytes_str [len0, len1, nlen0, nlen1]} - #{len} bytes of literal data: "
+    puts "#{to_bytes_str [len0, len1, nlen0, nlen1]} - #{len} bytes of literal data: " unless quiet
     data = bit_reader.get_bytes(len)
     out_buf << data
-    if len > 25
-      puts "#{data[0..9]} ... #{data[-10..-1]}"
-    else
-      puts data
+    unless quiet
+      if len > 25
+        puts "#{data[0..9]} ... #{data[-10..-1]}"
+      else
+        puts data
+      end
     end
     return bfinal
   end
@@ -251,59 +274,69 @@ def show_parse_block bit_reader, out_buf, stats
   litlen_codes = nil
   offset_codes = nil
   if btype == [1, 0]
-    puts "block compressed with static Huffman codes: "
+    puts "block compressed with static Huffman codes: " unless quiet
     litlen_codes = HuffmanCode.from_lengths [*[8]*144, *[9]*112, *[7]*24, *[8]*8]
     offset_codes = HuffmanCode.from_lengths [5]*32
   else # btype == [0, 1]
-    puts "block compressed with dynamic Huffman codes: "
+    puts "block compressed with dynamic Huffman codes: " unless quiet
 
     hlit = bit_reader.get_bits(5).bits_to_int + 257
     hdist = bit_reader.get_bits(5).bits_to_int + 1
     hclen = bit_reader.get_bits(4).bits_to_int + 4
     
-    puts "#{hlit} literal/length codes"
-    puts "#{hdist} distance codes"
-    puts "#{hclen} code length codes"
+    unless quiet
+      puts "#{hlit} literal/length codes"
+      puts "#{hdist} distance codes"
+      puts "#{hclen} code length codes"
+    end
     
     code_lengths = hclen.times.map{bit_reader.get_bits(3).bits_to_int}
     code_lengths << 0 until code_lengths.size == 19
     code_lengths.sort_by!.with_index{|_, i| code_lengths_for[i]}
-    puts "code lengths: " + code_lengths.inspect
+    puts "code lengths: " + code_lengths.inspect unless quiet
     
     len_codes = HuffmanCode.from_lengths(code_lengths)
-    puts "length codes: " + len_codes.codes.inspect
+    puts "length codes: " + len_codes.codes.inspect unless quiet
     
     puts
     lit_lengths = read_lencodes bit_reader, len_codes, hlit
     litlen_codes = HuffmanCode.from_lengths lit_lengths
-    puts "Literal + length codes: "
-    puts word_wrap digest_hash litlen_codes.codes, value_transform: method(:name_block)
-    (1..15).map do |l|
-      b = litlen_codes.codes.select{|k, v| k.length == l}.values
-      puts "#{l}: #{b.map{|c| name_block c}.join ", "}" unless b.empty?
-    end
+    unless quiet
+      puts "Literal + length codes: " unless quiet
+      puts word_wrap digest_hash litlen_codes.codes, value_transform: method(:name_block)
+      (1..15).map do |l|
+        b = litlen_codes.codes.select{|k, v| k.length == l}.values
+        puts "#{l}: #{b.map{|c| name_block c}.join(", ")}".gsub('", "', "") unless b.empty?
+      end
+    end   
     puts
     
     dist_lengths = read_lencodes bit_reader, len_codes, hdist
     offset_codes = HuffmanCode.from_lengths dist_lengths
-    puts "Offset codes: "
-    puts word_wrap digest_hash offset_codes.codes, value_transform: method(:name_offset)
+    unless quiet
+      puts "Offset codes: "
+      puts word_wrap digest_hash offset_codes.codes, value_transform: method(:name_offset)
+    end
   end  
   
-  puts "#" * 80
+  puts "#" * 80 unless quiet
   loop do
     at = out_buf.size
     key, code = bit_reader.read_huffman litlen_codes
     stats[:block_counts][code] += 1
     if code < 256
       out_buf << code.chr
-      print "@#{at} #{key} - #{code} - #{"new " if stats[:block_counts][code] == 1}literal #{code.chr.inspect[1 .. -2]}".ljust(50)
-      puts code.chr.inspect[1 .. -2]
+      print "@#{at} #{key} - #{code} - #{NEW_STR if stats[:block_counts][code] == 1}literal #{code.chr.inspect[1 .. -2]}".ljust_d(50) unless quiet
+      puts code.chr.inspect[1 .. -2] unless quiet
       stats[:lit_blocks] += 1
     elsif code == 256
-      puts "@#{at} #{key} - #{code} - end of block"
+      puts "@#{at} #{key} - #{code} - end of block" unless quiet
       puts "#" * 80
-      return bfinal
+      if bfinal && extrapolate
+        bit_reader.start_random!
+      else
+        return bfinal
+      end
     else
       extra = bit_reader.get_bits extra_bits[code-257] rescue p [key, code]
       okey, ocode = bit_reader.read_huffman offset_codes
@@ -317,30 +350,41 @@ def show_parse_block bit_reader, out_buf, stats
       buf_start = out_buf.length - offset
       buf_before = [buf_start - 5, 0].max
       if out_buf.size < offset
-        puts "offset = #{offset} but only #{out_buf.size} bytes in output buffer"
+        puts "offset = #{offset} but only #{out_buf.size} bytes in output buffer" unless quiet
         exit
       end
       length.times{last_buf << out_buf[-offset]; out_buf << out_buf[-offset]}
       buf_end = out_buf.length - offset
       buf_after = [buf_end + 5, out_buf.length].min
-      puts ("@#{at} #{key} #{extra.join} #{okey} #{oextra.join} - repeat" +
-           " #{"new " if stats[:block_counts][code] == 1}#{length}" +
-           " #{"new " if stats[:offset_counts][ocode] == 1}#{offset}").ljust(45) +
-           "\e[31m#{out_buf[buf_before ... buf_start].inspect[1 .. -2]}\e[0m" +
-           "#{out_buf[buf_start ... buf_end].inspect[1 .. -2]}" +
-           "\e[31m#{out_buf[buf_end ... buf_after].inspect[1 .. -2]}\e[0m"
+      unless quiet
+        puts ("@#{at} #{key} #{extra.join} #{okey} #{oextra.join} - repeat" +
+             " #{NEW_STR if stats[:block_counts][code] == 1}#{length}" +
+             " #{NEW_STR if stats[:offset_counts][ocode] == 1}#{offset}").ljust_d(45) +
+             "\e[31m#{out_buf[buf_before ... buf_start].inspect[1 .. -2]}\e[0m" +
+             "#{out_buf[buf_start ... buf_end].inspect[1 .. -2]}" +
+             "\e[31m#{out_buf[buf_end ... buf_after].inspect[1 .. -2]}\e[0m"
+      end
       stats[:rep_blocks] += 1
     end
   end
 end
 
-def define_more
+def check_scan(str, scan_to) # hack :-(
+  scan_to.nil? || str =~ /^@(\d+)/ && $1.to_i > scan_to.to_i
+end
+
+def define_more(scan_to)
   orig_puts = method(:puts)
   fiber = Fiber.new do
-    IO.console.winsize[0].times{orig_puts[Fiber.yield]}
+    (str = Fiber.yield; orig_puts[str]) until check_scan(str, scan_to)
     loop do
       case key = $stdin.getch
-      when " " then (IO.console.winsize[0] - 2).times{orig_puts[Fiber.yield]}
+      when " "
+        (IO.console.winsize[0] - 2).times do 
+          line = Fiber.yield
+          orig_puts[line]
+          break if line.include? NEW_STR
+        end
       when "\n" then orig_puts[Fiber.yield]
       else orig_puts["key pressed: #{key}"]
       end
@@ -387,15 +431,34 @@ def digest_hash hash, key_transform: :inspect.to_proc, value_transform: :inspect
   r
 end
 
+################################################################################
+
+
 if $0 == __FILE__
+
+  extrapolate = ARGV.include?("--extrapolate")
+  ARGV.delete("--extrapolate")
+  scan_arg_ix = ARGV.find_index("--scan")
+  if scan_arg_ix
+    scan_to = ARGV[scan_arg_ix + 1]
+    ARGV.slice!(scan_arg_ix, 2)
+  end
   if ARGV.include?("--slow")
     ARGV.delete("--slow")
     orig_puts = method(:puts)
-    define_method(:puts){|*strs| orig_puts.call(*strs); sleep 0.1}
+    scan_done = false
+    define_method(:puts) do |*strs|
+      orig_puts.call(*strs)
+      scan_done ||= strs.any?{|str| check_scan(str, scan_to)}
+      sleep 0.1 if scan_done
+    end
   elsif ARGV.include?("--more")
     ARGV.delete("--more")
-    define_more
+    define_more(scan_to)
   end
+  
+  quiet = ARGV.include?("--headers-only")
+  ARGV.delete("--headers-only")
   
   hash_stats = %i{block_counts offset_counts}
   bit_reader = BitReader.new ARGF
@@ -403,13 +466,13 @@ if $0 == __FILE__
   stats_sum = {lit_blocks: 0, rep_blocks: 0, compressed_size: 0, uncompressed_size: 0, 
                block_counts: Hash[(0..285).map{|k| [k,0]}], offset_counts: Hash[(0..29).map{|k| [k,0]}]}
 
-  show_parse_header
+  show_parse_header bit_reader
   last_cs = 0
   last_ucs = 0
   loop do
     stats = {lit_blocks: 0, rep_blocks: 0, 
              block_counts: Hash[(0..285).map{|k| [k,0]}], offset_counts: Hash[(0..29).map{|k| [k,0]}]}
-    last = show_parse_block bit_reader, out_buf, stats
+    last = show_parse_block bit_reader, out_buf, stats, quiet: quiet, extrapolate: extrapolate
     stats[:compressed_size] = ARGF.pos - last_cs; last_cs = ARGF.pos
     stats[:uncompressed_size] = out_buf.size - last_ucs; last_ucs = out_buf.size
 
@@ -428,7 +491,7 @@ if $0 == __FILE__
     break if last
   end
   
-  puts "CRC32: " + to_bytes_str(bit_reader.get_bytes(4).bytes)
-  puts "uncompressed size (reported): " + bit_reader.get_bytes(4).bytes.bytes_to_int.to_s
+  puts "CRC32: " + to_bytes_str(bit_reader.get_bytes(4))
+  puts "uncompressed size (reported): " + bit_reader.get_bytes(4).bytes_to_int.to_s
   puts "file size: " + ARGF.pos.to_s
 end

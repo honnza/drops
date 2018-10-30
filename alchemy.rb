@@ -46,7 +46,7 @@ class String
 end
 
 class Array
-  def lossy_inpect(max_len)
+  def lossy_inspect(max_len)
     return inspect if inspect.length <= max_len
     copy = dup
     skipped = 0
@@ -190,7 +190,8 @@ class Pair < Array
   def priority
     [
       $eager_skip && self.any?(&:done) ? 1 : 0,
-      self.map(&:priority).reduce(:+),
+      self.map(&:successes).sort.reverse,
+      self.map(&:tries).sort.reverse,
       self.map{|e|-e.complexity}.reduce(:+)
     ]
   end
@@ -201,7 +202,7 @@ class Pair < Array
   alias eql? ==
   
   def update_text
-    @via_parts = first.bitonic_path_to(last)[1..-2].map(&:name) 
+    @via_parts = first.path_to(last)[1..-2].map(&:name) 
     @elem_strs = map &:to_s
   end
   
@@ -282,15 +283,15 @@ module Future
     
     def delete(pair); @near_future.delete(pair) || @far_future.delete(pair); end
 
+    def elem_tries(elem)
+      elem.tries - @near_future.flatten.count(elem)
+    end
     def elem_done?(elem)
-      if elem.tries == $elems.count + 1
-        remaining = @near_future.select{|pa| pa.include?(elem) && !pa.any?(&:done)}
-                                .flat_map{|pa| pa - [elem]}.map(&:name)
-        #puts "#{elem.name} is almost done. Remaining pairs: #{remaining}" if remaining.count > 0
-        remaining.empty?
-      else
-        false
-      end
+      elem.tries == $elems.count + 1 && !@near_future.any?{|pa| pa.include?(elem) && !pa.any?(&:done)}
+    end
+    
+    def inspect
+      @near_future.map.with_index{|pa, ix| "@#{ix} #{pa}\n"}.join + "... x #{@far_future.size}"
     end
   end
   
@@ -299,10 +300,7 @@ module Future
 end
 
 class ElemElevatorEnumerator
-  def initialize
-    @prev_elem = Elem::ROOT
-    @prev_dir = :>
-  end
+  def initialize(state = nil); set_state(state); end
   
   def next
     case @prev_dir
@@ -316,6 +314,13 @@ class ElemElevatorEnumerator
     @prev_elem = r
   end
   
+  def peek
+    s = get_state
+    r = self.next
+    set_state(s)
+    r
+  end
+  
   def each
     if block_given?
       loop{yield self.next}
@@ -324,7 +329,19 @@ class ElemElevatorEnumerator
     end
   end
   
-  include Enumerable
+  def get_state
+    ix = $elems.find_index(@prev_elem)
+    ix && @prev_dir == :< ? ~ix : ix
+  end
+  
+  def set_state(state)
+    @prev_elem, @prev_dir =
+        case
+        when state.nil? then [Elem::ROOT,     :>]
+        when state < 0  then [$elems[~state], :<]
+        else                 [$elems[state],  :>]
+        end
+  end
 end
 
 $board_elevator = ElemElevatorEnumerator.new
@@ -421,8 +438,16 @@ end
        @bit_buffer = []
      end
    end
+   def zero_pad    
+     unless @bit_buffer.empty?
+       @bit_buffer << false until @bit_buffer.size == @word_width
+       @char_buffer.concat bits_to_chars @bit_buffer
+       @bit_buffer = []
+     end
+   end
 
    def result; pad; @char_buffer.join; end
+   def result_trimmed; c = bits_to_chars []; result[/^.*?(?=#{c}*$)/]; end 
  
    def chars_to_bits chars
      chars << "0" until chars.length == (@word_width == 13 ? 2 : 1)
@@ -455,6 +480,7 @@ def add elem_name, parent_names
     (puts "unknown element #{p_name}"; return nil) unless parent
     parent
   end
+  Future.rewind
   parents << Elem::ROOT if parents.count == 0
   elem = $elems.find{|e| e.name == elem_name}
   if elem
@@ -463,7 +489,7 @@ def add elem_name, parent_names
     elem = Elem.new elem_name, [parents]
     $elems << elem
     @elems_by_last_seen << elem
-    Future.rewind.concat $elems.map{|e2| Pair.new(e2, elem)}
+    Future.concat $elems.map{|e2| Pair.new(e2, elem)}
   end
   $cur_element = nil
   $cur_category = elem.category
@@ -521,45 +547,58 @@ def pop(only_skip: false)
     Future.pop
     (puts out_pair.to_s; redo) if pair.any?(&:done)
 
-    if $elem_board
-      new_elems = pair.uniq - $elem_board
-      $stats[:cache_misses] += new_elems.size
-      space_needed = new_elems.size - $elem_board.count(nil)
+    if $elem_board && !pair.all?{|el| $elem_board.include?(el)}
+      new_board = $elem_board.dup
+      pair.each do |el| 
+        loop do
+          ee = $board_elevator.peek
+          new_board.delete ee
+          new_board << ee unless ee.done 
+          break if new_board.include? el
+          $board_elevator.next
+        end
+      end
+      $stats[:cache_misses] += (pair - $elem_board).size      
+      while new_board.include?(nil) && new_board.size > $elem_board.size
+        new_board.delete_at(new_board.find_index nil)
+      end
+      
+      space_needed = new_board.size - $elem_board.size
       if space_needed > 0
-        candidates = ($elem_board.compact - pair).sort_by{|e|[e.name.size, e.name]}
+        removals = (new_board - pair).sort_by{|e|[e.name.size, e.name]}
         n_pairs_all = 0
         n_pairs = 0
         print_time_to "plan for the future" do
-          obv_candidates = candidates.select{|e|Future.elem_done? e}
+          obv_removals = removals.select{|e|Future.elem_done? e}
           ww = IO.console.winsize[1]
           Future.each do |npair|
-            if obv_candidates.size >= space_needed
-              candidates = obv_candidates
-              puts candidates.count > 1 ? "#{candidates.join ", "} are out of pairs"
-                                        : "#{candidates.first} is out of pairs"
+            if obv_removals.size >= space_needed
+              puts "#{obv_removals.map(&:name).join ", "} are out of pairs"
+              removals = obv_removals.sample space_needed
               break
             end
             
             n_pairs_all += 1
             if npair.any?(&:done)
-              obv_candidates = npair.select{|e| candidates.include?(e) && Future.elem_done?(e)}
-              print candidates.map(&:name).lossy_inpect(ww).ljust(ww, " ") + "\e[1A"
+              obv_removals += npair.select{|e| removals.include?(e) && Future.elem_done?(e)}
+              print removals.map(&:name).lossy_inspect(ww).ljust(ww, " ") + "\e[1A"
               next
             end
             n_pairs += 1
-            candidates.delete npair[0]
-            break if candidates.size == space_needed
-            candidates.delete npair[1]
-            break if candidates.size == space_needed
+            removals.delete npair[0]
+            break if removals.size == space_needed
+            removals.delete npair[1]
+            break if removals.size == space_needed
             
-            print candidates.map(&:name).lossy_inpect(ww).ljust(ww, " ") + "\e[1A"
+            print removals.map(&:name).lossy_inspect(ww).ljust(ww, " ") + "\e[1A"
           end
         end
         puts "#{n_pairs}/#{n_pairs_all} future pairs condsidered"
-        candidates.sample(new_elems.size).each{|e| puts "-" + e.name; $elem_board.delete e}
+        new_board -= removals
       end
-      new_elems.size.times{ix = $elem_board.find_index(nil); $elem_board.delete_at(ix) if ix}
-      new_elems.each{|e| puts "+" + e.name; $elem_board << e}
+      ($elem_board - new_board).compact.each{|e| puts "-" + e.name}
+      (new_board - $elem_board).each{|e| puts "+" + e.name}
+      $elem_board = new_board
     end
     puts out_pair.to_s
     $stats[:pairs_used] += 1
@@ -596,9 +635,11 @@ def p_stats
   groups = $elems.map(&:successes).group_by{|x| x}
   (0..groups.keys.max).each{|k| p [k, groups.fetch(k, []).length]}
   puts "pairs by distance"
-  Future.unordered.map{|pair| pair.reduce(&:distance_to)}.sort.group_by{|x| x}.to_a.sort.each{|a| p [a[0], a[1].size]}
+  histogram = Future.unordered.map{|pair| pair.reduce(&:distance_to)}.sort.group_by{|x| x}
+  (0..histogram.keys.max).each{|i| p [i, histogram.fetch(i, []).size]}
   puts "pairs by bitonic distance"
-  Future.unordered.map{|pair| pair.bitonic_length}.sort.group_by{|x| x}.to_a.sort.each{|a| p [a[0], a[1].size]}
+  histogram = Future.unordered.map{|pair| pair.bitonic_length}.sort.group_by{|x| x}
+  (0..histogram.keys.max).each{|i| p [i, histogram.fetch(i, []).size]}
   
   pairs_total = $elems.count * ($elems.count + 1) / 2
   p elems_open: $elems.count{|e| !e.done}, elems_done: $elems.count{|e| e.done},
@@ -646,7 +687,7 @@ def show_elems key, topo_sort = true, successor: nil, nonsuccessors: nil, parent
   
   triples.each do |ix, e, pp|
     e.update_text
-    puts "@#{ix} #{pp.empty? ? "add" : "#{pp.map(&:name).join " + "}"} = #{e}"
+    puts "@#{ix} #{pp.empty? ? "add" : "#{pp.join " + "}"} = #{e}"
   end
 end
 
@@ -661,6 +702,7 @@ def serialize_data word_width = 6, pad = false
     live_elems[0 .. i1].each{|e2| bit_packer.push_bit(!!pair_set.delete?(Pair.new e2, e1))}
     bit_packer.pad if pad
   end
+  bit_packer.zero_pad
   raise "bug: pairs #{pair_set.map{|pair| pair.map(&:name)}} unaccounted for" unless pair_set.empty?
   {
     e: $elems.map{|e| [
@@ -669,6 +711,7 @@ def serialize_data word_width = 6, pad = false
          e.done ? 1 : 0
        ]},
     b: $elem_board&.map{|be| be && $elems.index(be)}&.sort_by{|e| [e.nil? ? 1 : 0, e]},
+    be: $board_elevator&.get_state,
     st: $stats.values, 
     pt: word_width.to_s + (pad ? "p" : ""),
     p: bit_packer.result[/^(.*[^0])*(?=0*$)/]
@@ -686,7 +729,7 @@ def deserialize_data data
       pair.each{|p|p.update_text; p.successes += 1; p.children |= [elem]}
     end
   end
-  bit_packer = BitPacker.new word_width, data[:pt].nil?, data[:p]
+
   if data[:b]
     $elem_board = data[:b]&.map{|i| i && $elems[i]} #TODO: handle resize
     puts "board size = #{$elem_board.size}"
@@ -697,14 +740,23 @@ def deserialize_data data
       removed_elems = $elem_board.slice!(board_size_arg[/\d+/].to_i .. -1).compact
       removed_elems.each{|e| puts "#{e.name} dropped from board"}
     end
+    $board_elevator = ElemElevatorEnumerator.new(data[:be])
   end
+
   Future.initialize
+  bit_packer = BitPacker.new word_width, data[:pt].nil?, data[:p]
   $elems.each_with_index do |e1, i1|
     $elems[0 .. i1].each do |e2|
-      if bit_packer.shift_bit then Future << Pair.new(e2, e1) else e1.tries +=1 ; e2.tries += 1; end
+      if bit_packer.shift_bit 
+        Future << Pair.new(e2, e1)
+      else 
+        e1.tries += 1
+        e2.tries += 1
+      end
     end
     bit_packer.skip_pad if pad
   end
+
   @categories = $elems.map(&:category).uniq
   [*$elems, Elem::ROOT].each(&:recalc_distances)
   @elems_by_last_seen = $elems.sort_by{|el| [-el.priority, rand]}
@@ -733,8 +785,25 @@ def mk_save
 end
 
 def mk_save_opt
-  $elems.sort_by!.with_index{|el, ix| [el.tries, ix]}
-  #puts word_wrap $elems.map{|el| "#{el.name}"}.inspect
+  tail = []
+  tries_min = 0
+  tries_max = $elems.count + 1
+  ww = IO.console.winsize[1]
+  loop do
+    new_tail = $elems.select{|e| Future.elem_tries(e) == tries_max}
+    tries_min += new_tail.size
+    tail.unshift(*new_tail)
+    puts "new tail: #{new_tail.map(&:name).lossy_inspect(ww - 10)}"
+    break if new_tail.empty? && tail.any? || tail.size == $elems.size
+    
+    new_tail = $elems.select{|e| Future.elem_tries(e) == tries_min}
+    tries_max -= new_tail.size
+    tail.unshift(*new_tail)
+    puts "new tail: #{new_tail.map(&:name).lossy_inspect(ww - 10)}"
+    break if new_tail.empty? || tail.size == $elems.size
+  end
+  puts "elems left: " + ($elems - tail).map{|e| "#{e.name} (#{Future.elem_tries(e)})"}.lossy_inspect(ww - 12)
+  $elems = ($elems - tail) + tail
   mk_save
 end
 
@@ -776,6 +845,7 @@ loop do
       when /^show history$/ then show_elems "history"
       when /^next chapter$/ then (reset_pairs; puts "ok")
       when /^show board$/ then puts word_wrap $elem_board&.map{|e|e&.name}&.sort_by(&:inspect).inspect
+      when /^show future$/ then puts Future.inspect
       when /^skip (.*)$/
         elem = $elems.find{|e| e.name == $1}
         if elem
