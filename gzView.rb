@@ -326,8 +326,8 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
     stats[:block_counts][code] += 1
     if code < 256
       out_buf << code.chr
-      print "@#{at} #{key} - #{code} - #{NEW_STR if stats[:block_counts][code] == 1}literal #{code.chr.inspect[1 .. -2]}".ljust_d(50) unless quiet
-      puts code.chr.inspect[1 .. -2] unless quiet
+      puts "@#{at} #{key} - #{code} - #{NEW_STR if stats[:block_counts][code] == 1}"\
+           "literal #{code.chr.inspect[1 .. -2]}".ljust_d(50) + code.chr.inspect[1 .. -2] unless quiet
       stats[:lit_blocks] += 1
     elsif code == 256
       puts "@#{at} #{key} - #{code} - end of block" unless quiet
@@ -360,9 +360,9 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
         puts ("@#{at} #{key} #{extra.join} #{okey} #{oextra.join} - repeat" +
              " #{NEW_STR if stats[:block_counts][code] == 1}#{length}" +
              " #{NEW_STR if stats[:offset_counts][ocode] == 1}#{offset}").ljust_d(45) +
-             "\e[31m#{out_buf[buf_before ... buf_start].inspect[1 .. -2]}\e[0m" +
-             "#{out_buf[buf_start ... buf_end].inspect[1 .. -2]}" +
-             "\e[31m#{out_buf[buf_end ... buf_after].inspect[1 .. -2]}\e[0m"
+             "\e[31m#{out_buf[buf_before ... buf_start].inspect[1 .. -2].gsub(" ", "•")}\e[0m" +
+             "#{out_buf[buf_start ... buf_end].inspect[1 .. -2].gsub(" ", "•")}" +
+             "\e[31m#{out_buf[buf_end ... buf_after].inspect[1 .. -2].gsub(" ", "•")}\e[0m"
       end
       stats[:rep_blocks] += 1
     end
@@ -380,8 +380,9 @@ def define_more(scan_to)
     loop do
       case key = $stdin.getch
       when " "
-        (IO.console.winsize[0] - 2).times do 
+        (IO.console.winsize[0] - 2).times do |i|
           line = Fiber.yield
+          p line unless line.is_a? String
           orig_puts[line]
           break if line.include? NEW_STR
         end
@@ -390,7 +391,7 @@ def define_more(scan_to)
       end
     end
   end
-  define_method(:puts){|*strs| strs.each{|str| fiber.resume str}}
+  define_method(:puts){|*args| args.each{|arg| [*arg].each{|str| fiber.resume str}}}
 end
 
 ################################################################################

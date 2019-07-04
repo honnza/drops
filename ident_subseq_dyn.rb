@@ -13,9 +13,57 @@ end
 class IdentSubseqCalc
   def subseq_enum str
     Enumerator.new do |y|
-      ([(str.length-1 if @slow_mode), @min_chars].compact.max .. str.length).each do |sublen|
-        enum = str.chars.combination(sublen)
-        if @sort != [:ix]
+      str_capitals = str.count "A-Z"
+      str_minuscules = str.count "a-z"
+      str_symbols = str.length - str_capitals - str_minuscules
+      p [str, :all, str_symbols, str_minuscules, str_capitals] unless @recursive_mode
+      ([(str.length-1 if @slow_mode), [@min_chars, str.length].min].compact.max .. str.length).each do |sublen|
+        enum = Enumerator.new do |y2|
+          vals_uniq = Set.new
+          vals_total = 0
+          str.chars.combination(sublen).each do |sub|
+            y2.yield(sub) unless @count_uniq && vals_uniq.include?(sub)
+            vals_uniq << sub if @count_uniq && @sort != [:caps_first, :ix]
+            vals_total += 1
+          end
+          if !@recursive_mode && @sort != [:caps_first, :ix]
+            if @count_uniq
+              p [str, sublen, "#{vals_uniq.count}/#{vals_total}"]
+            else
+              p [str, sublen, "???/#{vals_total}"]
+            end
+          end
+        end
+        case @sort
+        when [:ix] then nil
+        when [:caps_first, :ix]
+          length_enum = enum
+          enum = Enumerator.new do |y2|
+            0.upto([str_symbols, sublen].min) do |sub_symbols|
+              0.upto([str_minuscules, sublen - sub_symbols].min) do |sub_minuscules|
+                sub_capitals = sublen - sub_minuscules - sub_symbols
+                if sub_capitals <= str_capitals
+                  vals_uniq = Set.new
+                  vals_total = 0
+                  length_enum.each do |sub|
+                    if sub.join.count("A-Z") == sub_capitals && sub.join.count("a-z") == sub_minuscules
+                      y2.yield(sub) unless @count_uniq && vals_uniq.include?(sub)
+                      vals_uniq << sub if @count_uniq
+                      vals_total += 1
+                    end
+                  end
+                  if !@recursive_mode
+                    if @count_uniq
+                      p [str, sub_symbols, sub_minuscules, sub_capitals, "#{vals_uniq.count}/#{vals_total}"]
+                    else
+                      p [str, sub_symbols, sub_minuscules, sub_capitals, "???/#{vals_total}"]
+                    end
+                  end
+                end
+              end
+            end
+          end
+        else
           enum = enum.sort_by.with_index do |elem, ix| 
             [*@sort].map do |key|
               case key
@@ -30,7 +78,7 @@ class IdentSubseqCalc
         end
         case @tiebreak
         when :first
-          enum.each{|c|puts "#{highlight_diff(str, c.join, "")}\eK\eA" if rand < 0.001; y.yield c.join}
+          enum.each{|c|puts "#{highlight_diff(str, c.join, "")}\e[1A" if rand < 0.001; y.yield c.join}
         when :all
           y.yield enum.to_a.map(&:join)#.uniq.sort
         else
@@ -41,20 +89,24 @@ class IdentSubseqCalc
   end
 
   attr_reader :strs
-  def initialize(letter_only: false, tiebreak: :first, slow_mode: false, sort: nil, redundant_mode: false, min_chars: 0)
+  def initialize(letter_only: false, tiebreak: :first, slow_mode: false, sort: nil,
+                 count_uniq: false, redundant_mode: false, min_chars: 0, recursive_mode: false)
     @strs = []
     @enums = []
     @tiebreak = tiebreak
     @letter_only = letter_only
     @slow_mode = slow_mode
     @sort = [*sort] | [:ix]
+    @count_uniq = count_uniq
     @redundant_mode = redundant_mode
     @min_chars = min_chars
+    @recursive_mode = recursive_mode
+    @result_cache = []
   end
   
   def dup_empty
     IdentSubseqCalc.new(letter_only: @letter_only, tiebreak: @tiebreak,
-      slow_mode: @slow_mode, sort: @sort, redundant_mode: @redundant_mode,
+      slow_mode: @slow_mode, sort: @sort, count_uniq: @count_uniq, redundant_mode: @redundant_mode,
       min_chars: @min_chars)
   end
 
@@ -75,8 +127,7 @@ class IdentSubseqCalc
     self
   end
   
-  def regexp_for k
-    redundancy = @redundant_mode ? 1 : 0
+  def regexp_for k, redundancy
     sub_regexps = k.chars.combination(k.size - redundancy).map do |ks|
       ks.map{|c| Regexp.escape c}.join(".*")
     end
@@ -88,12 +139,34 @@ class IdentSubseqCalc
     str = strs[ix]
     enum = @enums[ix]
     str = str.gsub(/[^a-zA-Z]/, "") if @letter_only
-    strRegex = regexp_for str
+    strRegex = regexp_for str, 0
+    strRegex2 = regexp_for str, 1
     conflicts = @strs.reject {|s2| s2 =~ strRegex}
+    conflicts2 = @strs.reject {|s2| s2 =~ strRegex2}
+    new_conflicts = @strs.drop(@result_cache.size) & conflicts
+    new_conflicts2 = @strs.drop(@result_cache.size) & conflicts2
 
-    filter = lambda do |str|
-      strRegex = regexp_for str
-      conflicts.any? {|s2| s2 =~ strRegex}
+    filter = if @redundant_mode
+      conflicts -= conflicts2
+      new_conflicts -= new_conflicts2
+      lambda do |str|
+        strRegex = regexp_for str, 0
+        strRegex2 = regexp_for str, 1
+        if @result_cache[ix] == str
+          new_conflicts2.any? {|s2| s2 =~ strRegex2} || new_conflicts.any? {|s2| s2 =~ strRegex}
+        else
+          conflicts2.any? {|s2| s2 =~ strRegex2} || conflicts.any? {|s2| s2 =~ strRegex}
+        end
+      end
+    else
+      lambda do |str|
+        strRegex = regexp_for str, 0
+        if @result_cache[ix] == str
+          new_conflicts.any? {|s2| s2 =~ strRegex}
+        else
+          conflicts.any? {|s2| s2 =~ strRegex}
+        end
+      end
     end
 
     enum.next unless enum.peek
@@ -124,7 +197,7 @@ class IdentSubseqCalc
     end
   end
   
-  def results; (0...strs.count).map{|i| result i}; end
+  def results; @result_cache = (0...strs.count).map{|i| result i}; end
 end
 
 ################################################################################
@@ -176,7 +249,7 @@ def highlight_diff in_str, new_str, old_str
             when [true, true]   then "33;1" # bright yellow
             end
     "\e[#{color}m#{c}\e[0m"
-  end.join
+  end.join.gsub(" ", "•")
 end
 
 ################################################################################
@@ -192,6 +265,7 @@ if $0 == __FILE__
   recursive_mode = ARGV.include?("-r") || animation_mode
   slow_mode = ARGV.include?("-s")
   show_time = ARGV.include?("-t")
+  count_uniq = ARGV.include?("--count-uniq")
   letter_only = ARGV.include?("-w")
   tiebreak = ARGV.include?("--all") ? :all : :first
 
@@ -204,8 +278,8 @@ if $0 == __FILE__
     exit
   end
 
-  calc = IdentSubseqCalc.new(tiebreak: tiebreak, letter_only: letter_only, sort: sort, 
-                             slow_mode: slow_mode, redundant_mode: redundant_mode, min_chars: min_chars)
+  calc = IdentSubseqCalc.new(tiebreak: tiebreak, letter_only: letter_only, sort: sort, count_uniq: count_uniq,
+                             slow_mode: slow_mode, redundant_mode: redundant_mode, min_chars: min_chars, recursive_mode: recursive_mode)
   calc = RecursiveSubseqCalc.new(calc, animation_mode: animation_mode, slow_mode: slow_mode) if recursive_mode
                 
   results = []

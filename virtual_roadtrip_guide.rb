@@ -1,11 +1,20 @@
 require 'json'
 
+RAD2DEG = 180 / Math::PI
+
 USE_GEO = ARGV.include?("--use-geo")
 USE_LENGTHS = ARGV.include?("--use-length")
+CONTINUITY = ARGV.include?("--continuity")
 ARGV.replace([])
 
 Dest = Struct.new :ix, :name, :size, :indegree, :outdegree, :lat, :lon do
-  def to_s; "#{name} (#{outdegree}x out, #{indegree}x in)"; end
+  def to_s
+    if USE_GEO
+      "%.6f, %.6f (%s)" % [lat * RAD2DEG, lon * RAD2DEG, name]
+    else
+      "#{name} (#{outdegree}x out, #{indegree}x in)"
+    end
+  end
 end
 
 class Array
@@ -28,12 +37,20 @@ class PairEnum
     @elems.each{|x| @elems.each{|y| yield [x, y] unless x == y || @exclusions.include?([x, y])}}
   end
   
+  attr_reader :exclusions
   def delete(pair); @exclusions |= [pair]; end
   def empty?; !any?; end
   
-  def weighted_sample(&block)
+  def weighted_sample
     needle = rand * reduce(0){|a, d| a + yield(d)}
     find{|e| needle -= yield(e); needle <= 0}
+  end
+  
+  def max_by
+    reduce([nil, nil]) do |(a, w_a), d|
+      w_d = yield d
+      w_a.nil? || (w_d <=> w_a) > 0 ? [d, w_d] : [a, w_a]
+    end.first
   end
 end
 
@@ -45,47 +62,65 @@ EARTH_DIAMETER = 2 * 6371 # uses mean Earth radius
 def geo_dist(from, to)
   return 40000 if [from.lat, from.lon, to.lat, to.lon].any?(&:nil?)
   EARTH_DIAMETER * Math.asin(Math.sqrt(
-    Math.cos(from.lon) * Math.cos(to.lon) *
-    Math.sin((from.lat - to.lat)/2) ** 2 +
-    Math.sin((from.lon - to.lon)/2) ** 2
+    Math.cos(from.lat) * Math.cos(to.lat) *
+    Math.sin((from.lon - to.lon)/2) ** 2 +
+    Math.sin((from.lat - to.lat)/2) ** 2
   ))
 end
 
 puts "To gather the desired data, please adjust the following line of Javascript, then run at the appropriate page:"
 puts %`copy(JSON.stringify($(".sortable tbody tr").get().map(row => [row.cells[<NAME_COL>], row.cells[<SIZE_COL>]].map(e => e.textContent))))`
 
-dests = JSON.parse(gets).map.with_index do |row, ix|
+input = gets
+if(input.strip == "[")
+  loop{line = gets; input += line; break if line.strip == "]"}
+end
+
+dests = JSON.parse(input, symbolize_names: true).map.with_index do |row, ix|
    row = [row, 1] if row.is_a?(String)
    row = {name: row[0], size: row[1]} if row.is_a?(Array)
    size = size.tr("^0-9.", "").to_f if size.is_a?(String)
    
    if row[:lat].nil? && USE_GEO
-     print "#{row[:name]} east latitude? (D M S.S or D M.M or D.D) "
+     print "#{row[:name]} north latitude? (D M S.S or D M.M or D.D) "
      row[:lat] = gets
    end
    if row[:lon].nil? && USE_GEO
-     print "#{row[:name]} north longitude? (D M S.S or D M.M or D.D) "
+     print "#{row[:name]} east longitude? (D M S.S or D M.M or D.D) "
      row[:lon] = gets
    end
    
-   row[:lat] = dms_to_radians row[:lat]
-   row[:lon] = dms_to_radians row[:lon]
+   if USE_GEO
+     row[:lat] = dms_to_radians row[:lat]
+     row[:lon] = dms_to_radians row[:lon]
+   end
    Dest.new(ix, row[:name], row[:size], 0r, 0r, row[:lat], row[:lon])
  end
+
+last_dest = dests[0]
+
 pairs = PairEnum.new dests
 if USE_LENGTHS
   pair_lengths = Array.new(dests.size){|i|Array.new(dests.size){|j| i == j ? 0 : 40000}}
+  path_next = Array.new(dests.size){|i|Array.new(dests.size){|j| j}}
 end
+
+
 
 puts "#{dests.size} destinations loaded, resulting in #{pairs.count} pairs."
 
 until pairs.empty?
-  if USE_LENGTHS
-    pair = pairs.reduce do |a, d| 
-      pair_lengths[a[0].ix][a[1].ix] / geo_dist(*a) < pair_lengths[d[0].ix][d[1].ix] / geo_dist(*d) ? d : a
+  if USE_LENGTHS || USE_GEO
+    pair = pairs.max_by do |pair|
+      [
+        CONTINUITY && pair[0] == last_dest ? 1 : 0,
+        (USE_LENGTHS ? pair_lengths[pair[0].ix][pair[1].ix] : 1.0) /  
+        (pairs.exclusions.map{|i, j|
+          pair_lengths[i.ix][j.ix] - pair_lengths[i.ix][pair[0].ix] - pair_lengths[pair[1].ix][j.ix]
+        } + [geo_dist(*pair)]).max, # descending by min length guaranteed by triangle inequality
+        USE_GEO ? 0 : rand
+      ]
     end
-  elsif USE_GEO
-    pair = pairs.reduce{|a, d| geo_dist(*a) > geo_dist(*d) ? d : a}
   else
     pair = pairs.weighted_sample do |x, y|
       x.size * (x.indegree + 1) / (x.outdegree + 1) ** 2 *
@@ -95,18 +130,27 @@ until pairs.empty?
   pair[0].outdegree += 1
   pair[1].indegree += 1
   pairs.delete pair
+  last_dest = pair[1]
   geo_dist_str = USE_GEO ? " (distance #{geo_dist(*pair)} km)" : ""
-  length_str = USE_LENGTHS ? "(shortest path #{pair_lengths[pair[0].ix][pair[1].ix]} min)" : ""
-  puts "#{pair[0]} => #{pair[1]}#{geo_dist_str}#{length_str}"
+  length_str = if USE_LENGTHS
+    path_ixes = [pair[0].ix];
+    path_ixes << path_next[path_ixes.last][pair[1].ix] until path_ixes.last == pair[1].ix 
+    via_str = path_ixes.length > 2 ? " via #{path_ixes[1..-2].map{|ix| dests[ix].name}.join(", ")}" : ""
+    "(shortest path #{pair_lengths[pair[0].ix][pair[1].ix].to_f} km#{via_str})"
+  else ""
+  end
+  puts "from: #{pair[0]} to: #{pair[1]}#{geo_dist_str}#{length_str}"
   
   if USE_LENGTHS
-    print "path length? (min) "
-    len = gets.to_f
+    print "path length? (km) "
+    len_pair = gets.to_r
     (0...dests.size).each{|i|(0...dests.size).each{|j|
-      pair_lengths[i][j] = [
-        pair_lengths[i][j],
-        pair_lengths[i][pair[0].ix] + len + pair_lengths[pair[1].ix][j]
-      ].min
+      len_ij = pair_lengths[i][pair[0].ix] + len_pair + pair_lengths[pair[1].ix][j]
+      if pair_lengths[i][j] > len_ij
+        puts "path from #{dests[i].name} to #{dests[j].name} shortened from #{pair_lengths[i][j].to_f} to #{len_ij.to_f}"
+        pair_lengths[i][j] = len_ij
+        path_next[i][j] = i == pair[0].ix ? pair[1].ix : path_next[i][pair[0].ix]
+      end
     }}
   end
   
