@@ -251,7 +251,7 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
   end
   
   if btype == [0, 0]
-    len0, len1, nlen0, nlen1 = bit_reader.get_bytes(4).bytes
+    len0, len1, nlen0, nlen1 = bit_reader.get_bytes(4)
     len = [len0, len1].bytes_to_int
     nlen = ~[nlen0, nlen1].bytes_to_int ^ (-1 << 16)
     if len != nlen
@@ -260,7 +260,7 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
     end
     puts "#{to_bytes_str [len0, len1, nlen0, nlen1]} - #{len} bytes of literal data: " unless quiet
     data = bit_reader.get_bytes(len)
-    out_buf << data
+    out_buf.concat *data
     unless quiet
       if len > 25
         puts "#{data[0..9]} ... #{data[-10..-1]}"

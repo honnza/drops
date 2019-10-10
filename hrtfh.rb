@@ -7,105 +7,129 @@ $chaos_mode = ARGV.include? "-c"
 
 #todo: move to a separate file
 default_cfg = [
+  #tier 0 lands
+  {type: "land", code: "ICYL", prereqs: [], name: "Icy Land"},
+  {type: "land", code: "LIVC", prereqs: [], name: "Living Cave"},
+  {type: "land", code: "DESE", prereqs: [], name: "Desert"},
+  {type: "land", code: "HUNT", prereqs: [], name: "Hunting Ground"},
+  {type: "land", code: "LANE", prereqs: [], name: "Land of Eternal Motion"},
+  {type: "land", code: "JUNL", prereqs: [], name: "Jungle"},
+  {type: "land", code: "ALCH", prereqs: [], name: "Alchemist Lab"},
 
-  {land: true, code: "CYL", prereqs: [], name: "Icy Land"},
-  {land: true, code: "VV",  prereqs: [], name: "Living Cave"},
-  {land: true, code: "DSE", prereqs: [], name: "Desert"},
-  {land: true, code: "HG",  prereqs: [], name: "Hunting Ground"},
-  {land: true, code: "FN",  prereqs: [], name: "Land of Eternal Motion"},
-  {land: true, code: "JU",  prereqs: [], name: "Jungle"},
-  {land: true, code: "LB",  prereqs: [], name: "Alchemist Lab"},
+  #tier 1 lands
+  {type: "land", code: "HALO", prereqs: [30],         name: "Hall of Mirrors"},
+  {type: "land", code: "MINF", prereqs: [30],         name: "Minefield"},
+  {type: "land", code: "PAAC", prereqs: [30],         name: "Palace"},
+  {type: "land", code: "ZEBR", prereqs: [30, "LANE"], name: "Zebra"},
+  {type: "land", code: "JELY", prereqs: [30, "ALCH"], name: "Jelly Kingdom"},
+  {type: "land", code: "REPT", prereqs: [30, "ALCH"], name: "Reptiles"},
+  #coastal/aquatic lands
+  {type: "land", code: "OCEN", prereqs: [30],     name: "Ocean"},
+  {type: "land", code: "WAPD", prereqs: [30],     name: "Warped Coast"},
+  {type: "land", code: "LIFJ", prereqs: [30],     name: "Living Fjord"},
+  {type: "land", code: "KRAK", prereqs: ["LIFJ"], name: "Kraken Depths"},
+  {type: "land", code: "CABB", prereqs: [30],     name: "Caribbean"},
+  {type: "land", code: "BROW", prereqs: [30],     name: "Brown Island"},
+  {type: "land", code: "WHIR", prereqs: [30],     name: "Whirlpool"},
+  {type: "land", code: "RLYE", prereqs: [60],     name: "R'Lyeh"},
+  {type: "land", code: "TEMP", prereqs: ["RLYE"], name: "Temple of Cthulhu"},
+  #gravity lands
+  #FRFA / DUNO / LOSM only requre five treasure of each, but this script doesn't model that
+  {type: "land", code: "IVOR", prereqs: [30],             name: "Ivory Tower"},
+  {type: "land", code: "YEIA", prereqs: ["IVOR"],         name: "Yendorian Forest"},
+  {type: "land", code: "FRFA", prereqs: ["IVOR", "LANE"], name: "Free Fall"},
+  {type: "land", code: "DUNO", prereqs: ["IVOR", "PAAC"], name: "Dungeon"},
+  {type: "land", code: "LOSM", prereqs: ["IVOR", "JUNL"], name: "Lost Mountain"},
 
-  {land: true,  code: "MIR", prereqs: [3],       name: "Mirror Land"},
-  {land: true,  code: "MIF", prereqs: [3],       name: "Minefield"},
-  {land: true,  code: "ZE",  prereqs: [3, "FN"], name: "Zebra"},
-  {land: true,  code: "JY",  prereqs: [3, "LB"], name: "Jelly Kingdom"},
-  {land: true,  code: "PAL", prereqs: [3],       name: "Palace"},
-  {land: false, code: "Q",   prereqs: ["vk"],    name: "Palace Quest"},
-  {land: true,  code: "OCN", prereqs: [3],       name: "Ocean"},
-  {land: true,  code: "LJ",  prereqs: [3],       name: "Living Fjord"},
-  {land: true,  code: "WC",  prereqs: [3],       name: "Warped Coast"},
+  #tier 2 goals
+  {type: "pasv", code: "100K", prereqs: [],       name: "100 kills"},
+  {type: "pasv", code: "20DK", prereqs: [],       name: "20 different kills"},
+  {type: "goal", code: "SKEL", prereqs: ["PAAC"], name: "Skeleton kill"},
+  {type: "goal", code: "VIZI", prereqs: ["PAAC"], name: "Vizier kill"},
+  #tier 2 lands
+  {type: "land", code: "DRYF", prereqs: [60],             name: "Dry Forest"},
+  {type: "land", code: "VNEY", prereqs: [60],             name: "Vineyard"},
+  {type: "land", code: "DEAD", prereqs: [60, "LIVC"],     name: "Dead Cave"},
+  {type: "land", code: "GRAV", prereqs: ["100K"],         name: "Graveyard"},
+  {type: "land", code: "HAUE", prereqs: ["GRAV"],         name: "Haunted Woods"},
+  {type: "land", code: "HIVE", prereqs: [60, "100K"],     name: "Hive"},
+  {type: "land", code: "REDK", prereqs: [60, "DESE"],     name: "Red Rock Valley"},
+  {type: "land", code: "VOLC", prereqs: [60, "ALCH"],     name: "Volcanic Wasteland"},
+  {type: "land", code: "DRAG", prereqs: ["20DK"],         name: "Dragon Chasms"},
+  {type: "land", code: "GALA", prereqs: ["20DK"],         name: "Galapagos"},
+  {type: "land", code: "OVER", prereqs: [60, "JUNL"],     name: "Overgrown Woods"},
+  {type: "land", code: "CLER", prereqs: ["OVER"],         name: "Clearing"}, #only needs 5 treasure
+  {type: "land", code: "ANST", prereqs: [60],             name: "Land of Storms"},
+  {type: "land", code: "BURI", prereqs: ["KRAK"],         name: "Burial Grounds"},
+  {type: "land", code: "WIND", prereqs: [60],             name: "Windy Plains"},
+  {type: "land", code: "BLIZ", prereqs: ["WIND", "ICYL"], name: "Blizzard"},
+  {type: "land", code: "RUIE", prereqs: ["SKEL"],         name: "Ruined City"},
+  {type: "land", code: "EMER", prereqs: [[["DRYF", "LIVC"], ["VIZI"]]], name: "Emerald Mine"},
+  {type: "land", code: "IRRD", prereqs: ["RUIE", "EMER", "GRAV"],       name: "Irradiated Field"},
 
-  #The water-based worlds are only accessible through the ocean,
-  #but the ocean treasure is only present on the beach.
-  #The in-game help is vague here, but the official guide on steam says r'lyeh unlocks at $60
-  {land: true, code: "RB",  prereqs: [3],    name: "Carribean"},
-  {land: true, code: "WH",  prereqs: [3],    name: "Whirlpool"},
-  {land: true, code: "YH",  prereqs: [6],    name: "R'Lyeh"},
-  {land: true, code: "TF",  prereqs: ["YH"], name: "Temple of Cthulhu"},
-
-  #technically, 100k can be reached with zero treasure, but it's not fun.
-  #20dk is possible, if unlikely, to reach with just the 30-treasure lands.
-  {land: false, code: "100k", prereqs: [[]],    name: "100 kills"},
-  {land: false, code: "20dk", prereqs: [[]],    name: "20 different kills"},
-  {land: false, code: "vk",   prereqs: ["PAL"], name: "kill a vizier"},
-
-  {land: true, code: "DYF", prereqs: [6],         name: "Dry Forest"},
-  {land: true, code: "VIY", prereqs: [6],         name: "Vineyard"},
-  {land: true, code: "DED", prereqs: [6, "VV"],   name: "Dead Cave"},
-  {land: true, code: "GY",  prereqs: ["100k"],    name: "Graveyard"},
-  {land: true, code: "HW",  prereqs: ["GY"],      name: "Haunted Woods"},
-  {land: true, code: "HV",  prereqs: [6, "100k"], name: "Hive"},
-  {land: true, code: "DK",  prereqs: [6, "DSE"],  name: "Red Rock Valley"},
-  {land: true, code: "CW",  prereqs: [6, "LB"],   name: "Volcanic Wasteland"},
-  {land: true, code: "YW",  prereqs: [3],         name: "Ivory Tower"},
-  {land: true, code: "YEN", prereqs: ["YW"],      name: "Yendorian Forest"},
-  {land: true, code: "GH",  prereqs: ["20dk"],    name: "Dragon Chasms"},
-  {land: true, code: "GP",  prereqs: ["20dk"],    name: "Galapagos"},
-
-  {land: true, code: "GW",  prereqs: [6, 'JU'],     name: "Overgrown Woods"},
-  {land: true, code: "CG",  prereqs: ["GW"],        name: "Clearing"},
-  {land: true, code: "LFS", prereqs: [6],           name: "Land of Storms"},
-  {land: true, code: "WY",  prereqs: [6],           name: "Windy Plains"},
-  {land: true, code: "BZ",  prereqs: ["CYL", "WY"], name: "Blizzard"},
-  {land: true, code: "UC",  prereqs: ["PAL"],       name: "Ruined City"},
-  {land: true, code: "MY",  prereqs: [9],           name: "Terracotta Army"},
-  {land: true, code: "SG",  prereqs: [9],           name: "Rose Garden"},
-
-  {land: true,  code: "MM",   prereqs: [[["DYF", "VV"], ["vk"]]], name: "Emerald Mine"},
-  {land: false, code: "CAO",  prereqs: ["MM", "GY"],              name: "Camelot"},
-  {land: true,  code: "ELP",  prereqs: ["GH", "DED", "LJ", "WY"], name: "Elemental Planes"},
-  {land: true,  code: "HELL", prereqs: [9],                       name: "Hell"},
-  {land: true,  code: "YU",   prereqs: ["HELL", "CYL"],           name: "Cocytus"},
-  {land: true,  code: "OP",   prereqs: ["HELL"],                  name: "Land of Power"},
-  
-  #version 9.4 lands
-  
-  {land: true, code: "RPI", prereqs: [3, "LB"],                              name: "Reptiles"},
-  {land: true, code: "KR",  prereqs: ["LJ"],                                 name: "Kraken Depths"},
-  {land: true, code: "DU",  prereqs: ["YW", "PAL"],                          name: "Dungeon"},
-  {land: true, code: "SU",  prereqs: ["YW", "JU"],                           name: "Lost Mountain"},
-  {land: true, code: "BG",  prereqs: ["KR"],                                 name: "Burial Grounds"},
-  {land: true, code: "PRA", prereqs: [9],                                    name: "Prairie"},
-  {land: true, code: "BH",  prereqs: [9],                                    name: "Bull Dash"},
-  {land: true, code: "TRH", prereqs: ["VV", "LJ", "DED", "LFS", "GW", "DK"], name: "Trollheim"}
-  
+  #Tier 3 lands
+  {type: "land", code: "PRAI", prereqs: [90], name: "Prairie"},
+  {type: "land", code: "BULL", prereqs: [90], name: "Bull Dash"},
+  {type: "land", code: "TERR", prereqs: [90], name: "Terracotta Army"},
+  {type: "land", code: "ROSE", prereqs: [60], name: "Rose Garden"},
+  #Elementals
+  {type: "goal", code: "AIRE", prereqs: ["WIND"], name: "kill Air Elemental"},
+  {type: "goal", code: "WATE", prereqs: ["LIFJ"], name: "kill Water Elemental"},
+  {type: "goal", code: "EATH", prereqs: ["DEAD"], name: "kill Earth Elemental"},
+  {type: "goal", code: "FIEE", prereqs: ["DRAG"], name: "kill Fire Elemental"},
+  {type: "land", code: "ELEM", prereqs: %w{AIRE WATE EATH FIEE}, name: "Elemental Planes"},
+  #Trolls
+  {type: "goal", code: "ROCK", prereqs: [],           name: "kill Rock Troll"},
+  {type: "goal", code: "DARK", prereqs: [60, "LIVC"], name: "kill Dark Troll"},
+  {type: "goal", code: "RDTR", prereqs: [60, "DESE"], name: "kill Red Troll"},
+  {type: "goal", code: "STOR", prereqs: [60],         name: "kill Storm Troll"},
+  {type: "goal", code: "FOES", prereqs: [60, "JUNL"], name: "kill Forest Troll"},
+  {type: "goal", code: "FJOD", prereqs: [30],         name: "kill Fjord Troll"},
+  {type: "land", code: "TOLL", prereqs: %w{ROCK DARK RDTR STOR FOES FJOD}, name: "Trollheim"},
+  #Hell
+  {type: "land", code: "HELL", prereqs: [90],             name: "Hell"}, #requires 9x10 treasure
+  {type: "land", code: "COCY", prereqs: ["HELL", "ICYL"], name: "Cocytus"},
+  {type: "land", code: "LNPW", prereqs: ["HELL"],         name: "Land of Power"},
+  #Main quests
+  #PALQ, CAME do generate treasure, but they aren't required for HYPE.
+  #Counting them as goels matters exactly twice, and even then only a little.
+  {type: "goal", code: "PALQ", prereqs: ["VIZI"],         name: "Palace Quest"},
+  {type: "goal", code: "CAME", prereqs: ["EMER", "GRAV"], name: "Camelot Quest"}, #listed as "Camelot" in-game
+  {type: "goal", code: "YEQU", prereqs: ["HELL", "GRAV"], name: "Yendor Quest"},
+  {type: "goal", code: "HYPE",                            name: "Hyperstone Quest"},
 ]
 
 if $chaos_mode
   default_cfg.reject! do |land| 
-    %w{vk Q RB WH HW YW YEN CG CAO DU SU PRA}.include? land[:code]
+    puts "gotta unlock chaos mode first!"
+    quit
+    %w{}.include? land[:code]
   end
   default_cfg.find{|land| land[:code] == "MM"}[:prereqs] = ["DYF", "VV"]
 end
 
+default_cfg.last[:prereqs] = default_cfg.select{|land| land[:type] == "land"}.map{|land| land[:code]}
+
 class Land
-  def initialize(land:, code:, prereqs:, name:)
-    @land = land
+  def initialize(type:, code:, prereqs:, name:)
+    @type = type
     @code = code
     @prereqs = prereqs
     @name = name
     @survivals = 0.0
     @deaths = 0.0
   end
-  attr_reader :code, :name, :land
+  attr_reader :code, :name, :type
   attr_accessor :survivals, :deaths, :done
+
+  def land?; @type == "land"; end
+  def passive?; @type == "pasv"; end
 
   def priority
     if $heaven_mode
-      Rational(@survivals + 1, @deaths + @survivals + 1)
+      [Rational(@survivals + 1, @deaths + @survivals + 1)]
     else
-      Rational(@deaths + 1, @deaths + @survivals + 1)
+      [Rational(@deaths + 1, @deaths + @survivals + 1)]
     end
   end
 
@@ -118,7 +142,7 @@ class Land
   # check if a single prerequisite has been satisfied
   private def prereq_sat prereq
     case prereq
-    when Numeric then $lands_done >= prereq
+    when Numeric then $lands_done >= prereq / 10
     when String then $lands.find{|l| l.code == prereq}.done rescue raise ArgumentError, "unknown land or goal #{prereq}"
     when Array then prereq.any?{|q| prereqs_sat q}
     else raise ArgumentError, "unknown prerequisite type #{prereq.Class.name}"
@@ -147,9 +171,9 @@ class Land
 end
 
 def p_stats
-  $lands.select(&:land).each do |land|
+  $lands.reject(&:passive?).each do |land|
     puts "%22s: %f deaths, %f survivals, %f %s" %
-      [land.name, land.deaths, land.survivals, land.priority, $heaven_mode ? "survival rate" : "death rate"]
+      [land.name, land.deaths, land.survivals, land.priority.last, $heaven_mode ? "survival rate" : "death rate"]
   end
 end
 
@@ -200,7 +224,9 @@ loop do
     loop do
       stack.pop while stack.last[:prereqs].empty?
       land = stack.last[:prereqs].pop
-      if land.unlocked?
+      if land.passive?
+        puts "#{land} is awaiting completion"
+      elsif land.unlocked?
         puts "#{land} is unlocked."
         break
       else
@@ -216,27 +242,27 @@ loop do
 
   begin
     case $stdin.gets.chomp
-    when /survived (.+)/
-      land = $lands.find{|land| land.name == $1 || land.code == $1}
+    when /survived (.+)/i
+      land = $lands.find{|land| land.name.casecmp($1) == 0 || land.code.casecmp($1) == 0}
       land.survivals += 1
-      $lands_done += 1 if land.land
+      $lands_done += 1 if land.land?
       land.done = true
-    when /skip (.+)/
-      land = $lands.find{|land| land.name == $1 || land.code == $1}
-      $lands_done += 1 if land.land
+    when /skip (.+)/i
+      land = $lands.find{|land| land.name.casecmp($1) == 0 || land.code.casecmp($1) == 0}
+      $lands_done += 1 if land.land?
       land.done = true
-    when /died in (.+)/
-      land = $lands.find{|land| land.name == $1 || land.code == $1}
+    when /died in (.+)/i
+      land = $lands.find{|land| land.name.casecmp($1) == 0 || land.code.casecmp($1) == 0}
       land.survivals -= 1 if land.done
       land.deaths += 1
       restart
       p_stats
-    when /died en-route/
+    when /died en-route/i
       restart
       p_stats
-    when /quit/
+    when /quit/i
       break
-    when /help/
+    when /help/i
       puts "I'm sorry, the help section is under construction"
     else
       puts "I didn't understand"

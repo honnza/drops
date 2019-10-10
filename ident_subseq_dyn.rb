@@ -26,12 +26,8 @@ class IdentSubseqCalc
             vals_uniq << sub if @count_uniq && @sort != [:caps_first, :ix]
             vals_total += 1
           end
-          if !@recursive_mode && @sort != [:caps_first, :ix]
-            if @count_uniq
-              p [str, sublen, "#{vals_uniq.count}/#{vals_total}"]
-            else
-              p [str, sublen, "???/#{vals_total}"]
-            end
+          if @count_uniq
+            p [str, sublen, "#{vals_uniq.count}/#{vals_total}"]
           end
         end
         case @sort
@@ -52,12 +48,8 @@ class IdentSubseqCalc
                       vals_total += 1
                     end
                   end
-                  if !@recursive_mode
-                    if @count_uniq
-                      p [str, sub_symbols, sub_minuscules, sub_capitals, "#{vals_uniq.count}/#{vals_total}"]
-                    else
-                      p [str, sub_symbols, sub_minuscules, sub_capitals, "???/#{vals_total}"]
-                    end
+                  if @count_uniq
+                    p [str, sub_symbols, sub_minuscules, sub_capitals, "#{vals_uniq.count}/#{vals_total}"]
                   end
                 end
               end
@@ -78,7 +70,7 @@ class IdentSubseqCalc
         end
         case @tiebreak
         when :first
-          enum.each{|c|puts "#{highlight_diff(str, c.join, "")}\e[1A" if rand < 0.001; y.yield c.join}
+          enum.each{|c|puts "#{highlight_diff(str, c.join, "")}\e[1A" if rand < 1e-4; y.yield c.join}
         when :all
           y.yield enum.to_a.map(&:join)#.uniq.sort
         else
@@ -90,7 +82,8 @@ class IdentSubseqCalc
 
   attr_reader :strs
   def initialize(letter_only: false, tiebreak: :first, slow_mode: false, sort: nil,
-                 count_uniq: false, redundant_mode: false, min_chars: 0, recursive_mode: false)
+                 count_uniq: false, redundant_mode: false, min_chars: 0,
+                 recursive_mode: false, reverse_regex: false)
     @strs = []
     @enums = []
     @tiebreak = tiebreak
@@ -102,6 +95,9 @@ class IdentSubseqCalc
     @min_chars = min_chars
     @recursive_mode = recursive_mode
     @result_cache = []
+    @reverse_regex = reverse_regex
+
+    @regexp_rev_cache = Hash.new
   end
   
   def dup_empty
@@ -133,6 +129,20 @@ class IdentSubseqCalc
     end
     Regexp.new(sub_regexps.join("|"), (//i if @letter_only))
   end
+  
+  def regexp_rev k, redundancy
+    @regexp_rev_cache[[k, redundancy]] ||= begin
+      substr_bits = k.chars.map{|c| Regexp.escape(c) + "?"}
+      regexp_str = case redundancy
+      when 0 then substr_bits.join
+      when 1
+        #produces string in the form of .f?o?o?|f?.o?o?|f?o?.o?|f?o?o?.
+        (0..k.length).map{|ix| substr_bits.dup.insert(ix, ".?").join}.join "|"
+      else raise "redundancy > 1 not implemented for reverse regex strategy"
+      end
+      Regexp.new "^(#{regexp_str})$"
+    end
+  end
 
   def result ix
     ix = strs.find_index ix if ix.is_a? String
@@ -146,7 +156,25 @@ class IdentSubseqCalc
     new_conflicts = @strs.drop(@result_cache.size) & conflicts
     new_conflicts2 = @strs.drop(@result_cache.size) & conflicts2
 
-    filter = if @redundant_mode
+    filter = if @redundant_mode && @reverse_regex
+      conflicts -= conflicts2
+      new_conflicts -= new_conflicts2
+      lambda do |str|
+        if @result_cache[ix] == str
+          new_conflicts2.any? {|s2| str =~ regexp_rev(s2, 1)} || new_conflicts.any? {|s2| str =~ regexp_rev(s2, 0)}
+        else
+          conflicts2.any? {|s2| str =~ regexp_rev(s2, 1)} || conflicts.any? {|s2| str =~ regexp_rev(s2, 0)}
+        end
+      end
+    elsif @reverse_regex
+      lambda do |str|
+        if @result_cache[ix] == str
+          new_conflicts.any? {|s2| str =~ regexp_rev(s2, 0)}
+        else
+          conflicts.any? {|s2| str =~ regexp_rev(s2, 0)}
+        end
+      end
+    elsif @redundant_mode
       conflicts -= conflicts2
       new_conflicts -= new_conflicts2
       lambda do |str|
@@ -265,9 +293,10 @@ if $0 == __FILE__
   recursive_mode = ARGV.include?("-r") || animation_mode
   slow_mode = ARGV.include?("-s")
   show_time = ARGV.include?("-t")
-  count_uniq = ARGV.include?("--count-uniq")
   letter_only = ARGV.include?("-w")
   tiebreak = ARGV.include?("--all") ? :all : :first
+  count_uniq = ARGV.include?("--count-uniq")
+  reverse_regex = ARGV.include?("--rer")
 
   suppress_output = false
   
@@ -279,7 +308,8 @@ if $0 == __FILE__
   end
 
   calc = IdentSubseqCalc.new(tiebreak: tiebreak, letter_only: letter_only, sort: sort, count_uniq: count_uniq,
-                             slow_mode: slow_mode, redundant_mode: redundant_mode, min_chars: min_chars, recursive_mode: recursive_mode)
+                             slow_mode: slow_mode, redundant_mode: redundant_mode, min_chars: min_chars, 
+                             recursive_mode: recursive_mode, reverse_regex: reverse_regex)
   calc = RecursiveSubseqCalc.new(calc, animation_mode: animation_mode, slow_mode: slow_mode) if recursive_mode
                 
   results = []

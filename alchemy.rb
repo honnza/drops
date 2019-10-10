@@ -53,6 +53,8 @@ class Array
     (copy.pop; skipped += 1) while copy.inspect.length + skipped.to_s.length + 7 > max_len
     copy.inspect.sub "]", ", ...(#{skipped})]"
   end
+  
+  def rjust(n, elem = nil); [elem] * [n - size, 0].max + self; end
 end
 
 
@@ -246,7 +248,7 @@ module Future
         @far_future.delete pair
         str = "peering into the future (@#{n} #{pair})"
         ww = IO.console.winsize[1]
-        if n > 0
+        if n > 1
           str_len = str.gsub(/\e\[[^a-z]*[a-z]/i, "").length
           if str_len > ww
             puts str 
@@ -267,6 +269,7 @@ module Future
     
     def pop; ensure_near 0; @near_future.shift; end
     def peek; ensure_near 0; @near_future.first; end
+    def [](i); ensure_near i; @near_future[i]; end
     def concat(pairs); @far_future.concat pairs; end
     def <<(pair); @far_future << pair; end
     def unordered; @near_future + @far_future; end
@@ -535,6 +538,7 @@ def pop(only_skip: false)
     out_pair = pair.sort_by{|e| [
       e == $cur_element ? 0 : 1,
       e.category == $cur_category ? 0 : 1,
+      Future[1]&.include?(e) ? 0 : 1,
       - @categories.index(e.category),
       @elems_by_last_seen.index(e)
     ]}
@@ -596,8 +600,13 @@ def pop(only_skip: false)
         puts "#{n_pairs}/#{n_pairs_all} future pairs condsidered"
         new_board -= removals
       end
-      ($elem_board - new_board).compact.each{|e| puts "-" + e.name}
-      (new_board - $elem_board).each{|e| puts "+" + e.name}
+      
+      tab_width = $elems.map{|e| e ? e.name.length : 0}.max
+      additions = new_board - $elem_board
+      removals = ($elem_board - new_board).compact.rjust(additions.count)
+      removals.zip(additions) do |r, a| 
+        puts "#{(r ? r.name : "").rjust(tab_width)} => #{a.name}"
+      end
       $elem_board = new_board
     end
     puts out_pair.to_s
@@ -633,13 +642,13 @@ def p_stats
   $elems.map{|e|$elems.size - e.tries + 1}.group_by{|x| x}.to_a.sort.reverse.each{|a| p [a[0], a[1].size]}
   puts "elements by outdegree"
   groups = $elems.map(&:successes).group_by{|x| x}
-  (0..groups.keys.max).each{|k| p [k, groups.fetch(k, []).length]}
+  (0..groups.keys.max||0).each{|k| p [k, groups.fetch(k, []).length]}
   puts "pairs by distance"
   histogram = Future.unordered.map{|pair| pair.reduce(&:distance_to)}.sort.group_by{|x| x}
-  (0..histogram.keys.max).each{|i| p [i, histogram.fetch(i, []).size]}
+  (0..histogram.keys.max||0).each{|i| p [i, histogram.fetch(i, []).size]}
   puts "pairs by bitonic distance"
   histogram = Future.unordered.map{|pair| pair.bitonic_length}.sort.group_by{|x| x}
-  (0..histogram.keys.max).each{|i| p [i, histogram.fetch(i, []).size]}
+  (0..histogram.keys.max||0).each{|i| p [i, histogram.fetch(i, []).size]}
   
   pairs_total = $elems.count * ($elems.count + 1) / 2
   p elems_open: $elems.count{|e| !e.done}, elems_done: $elems.count{|e| e.done},

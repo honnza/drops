@@ -46,6 +46,39 @@ def ext_euclid(m, n)
   end
 end
 
+def snake_boxing(w,h)
+  snakes = [*0...h].product([*0...w]).map{|pt| [pt]}
+  free_ends = snakes.map{|s| [s[0], s]} * 2
+  loop do
+    pair = free_ends.combination(2).to_a.shuffle.find{|((x1, y1), s1), ((x2, y2), s2)|
+      # s1.product(s2).count{|((x1, y1), (x2, y2))| (x1-x2).abs + (y1-y2).abs == 1} == 1 &&
+      s1 != s2 && (x1-x2).abs + (y1-y2).abs == 1
+    }
+    return snakes if pair.nil?
+    
+    pair[0][1].reverse! unless pair[0][1].last == pair[0][0]
+    pair[1][1].reverse! unless pair[1][1].first == pair[1][0]
+    new_snake = pair[0][1] + pair[1][1]
+    snakes << new_snake
+
+    pair.each do |es|
+      snakes.delete(es[1])
+      free_ends.delete_at(free_ends.find_index(es))
+      free_ends.find{|(e2, s2)| s2 == es[1]}[1] = new_snake
+    end
+  end
+end
+
+def generate_hypergrid(total, &op)
+  r = [rand(total)]
+  until r.size >= total
+    gen = rand(total)
+    r |= r.map{|x| op.(x, gen)}
+    p [gen, r.size]
+  end
+  r
+end
+
 def generate_group(first, gens, &op)
   gen_at = gens.map{0}
   elems = [first]
@@ -62,9 +95,38 @@ end
 
 def digitwise_sum(b)
   f = Proc.new{|x, y| (x + y) % b + (x < b && y < b ? 0 : f[x/b, y/b] * b)}
+end
 
-x=[*0..99].shuffle; x.each_slice(20).map{|x| puts x.join " "}
-puts x.map{|x|(x/10).to_s}.join; puts x.map{|x|(x%10).to_s}.join
-x.map{|e|puts e;g=gets; x<< g+e.to_s if g[/./]}
+x = generate_group(rand(144), x=[*0..143].shuffle, &digitwise_sum(12))
+
+#x=[*0..99].shuffle; x.each_slice(20).map{|x| puts x.join " "}
+puts x.map{|x|(x/12).to_s(12)}.join; puts x.map{|x|(x%12).to_s(12)}.join
+#x.map{|e|puts e;g=gets; x<< g+e.to_s if g[/./]}
 
 h="";loop{h+=rand(2).to_s;print h;h="" if gets[/./]}
+
+def inversion_count_histogram(n)
+  r = Hash.new {|h, k| h[k] = 0}
+  [*1 .. n].permutation{|x| r[x.combination(2).count{|c| c[0] > c[1]}] += 1}
+  p r.values.join(", ")
+  p r.values.sum
+
+end
+
+#algorithm taken from https://oeis.org/A008302
+def inversion_count_table(n)
+  res = Hash.new do |h, (n, k)|
+    # puts "evaluating [%d, %d]" % [n, k]
+    h[[n, k]] = if n == 1
+                  (k == 0) ? 1 : 0
+                elsif k < 0
+                  0
+                else
+                  res[[n, k-1]] + res[[n-1, k]] - res[[n-1, k-n]]
+                end
+    # puts "res[[%d, %d]] = %d" % [n, k, res[[n, k]]]
+    res[[n, k]]
+  end
+  
+  (0..).lazy.map{|k| res[[n, k]]}.take_while{|r| r > 0}.force
+end
