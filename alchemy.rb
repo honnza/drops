@@ -192,8 +192,8 @@ class Pair < Array
   def priority
     [
       $eager_skip && self.any?(&:done) ? 1 : 0,
-      self.map(&:successes).sort.reverse,
-      self.map(&:tries).sort.reverse,
+      self.map(&:successes).sort,
+      self.map(&:tries).sort,
       self.map{|e|-e.complexity}.reduce(:+)
     ]
   end
@@ -552,20 +552,9 @@ def pop(only_skip: false)
     (puts out_pair.to_s; redo) if pair.any?(&:done)
 
     if $elem_board && !pair.all?{|el| $elem_board.include?(el)}
-      new_board = $elem_board.dup
-      pair.each do |el| 
-        loop do
-          ee = $board_elevator.peek
-          new_board.delete ee
-          new_board << ee unless ee.done 
-          break if new_board.include? el
-          $board_elevator.next
-        end
-      end
-      $stats[:cache_misses] += (pair - $elem_board).size      
-      while new_board.include?(nil) && new_board.size > $elem_board.size
-        new_board.delete_at(new_board.find_index nil)
-      end
+      $stats[:cache_misses] += 1;
+      new_board = $elems.reject(&:done).sort_by(&:name)
+      new_board << nil until new_board.size >= $elem_board.size
       
       space_needed = new_board.size - $elem_board.size
       if space_needed > 0

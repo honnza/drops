@@ -17,7 +17,7 @@ class IdentSubseqCalc
       str_minuscules = str.count "a-z"
       str_symbols = str.length - str_capitals - str_minuscules
       p [str, :all, str_symbols, str_minuscules, str_capitals] unless @recursive_mode
-      ([(str.length-1 if @slow_mode), [@min_chars, str.length].min].compact.max .. str.length).each do |sublen|
+      ([(str.length-1 if @slow_mode != :normal), [@min_chars, str.length].min].compact.max .. str.length).each do |sublen|
         enum = Enumerator.new do |y2|
           vals_uniq = Set.new
           vals_total = 0
@@ -81,9 +81,9 @@ class IdentSubseqCalc
   end
 
   attr_reader :strs
-  def initialize(letter_only: false, tiebreak: :first, slow_mode: false, sort: nil,
+  def initialize(letter_only: false, tiebreak: :first, slow_mode: :normal, sort: nil,
                  count_uniq: false, redundant_mode: false, min_chars: 0,
-                 recursive_mode: false, reverse_regex: false)
+                 recursive_mode: false, reverse_regex: false, verbose: false)
     @strs = []
     @enums = []
     @tiebreak = tiebreak
@@ -96,6 +96,7 @@ class IdentSubseqCalc
     @recursive_mode = recursive_mode
     @result_cache = []
     @reverse_regex = reverse_regex
+    @verbose = verbose
 
     @regexp_rev_cache = Hash.new
   end
@@ -103,7 +104,7 @@ class IdentSubseqCalc
   def dup_empty
     IdentSubseqCalc.new(letter_only: @letter_only, tiebreak: @tiebreak,
       slow_mode: @slow_mode, sort: @sort, count_uniq: @count_uniq, redundant_mode: @redundant_mode,
-      min_chars: @min_chars)
+      min_chars: @min_chars, recursive_mode: @recursive_mode)
   end
 
   def push str
@@ -111,9 +112,9 @@ class IdentSubseqCalc
     return false if @strs.include? str
     @strs << str
     if @letter_only
-      @enums << subseq_enum(str.gsub(/[^a-z]/, ""))
+      @enums << subseq_enum(str.gsub(/[^a-z]/, "")).with_index
     else
-      @enums << subseq_enum(str)
+      @enums << subseq_enum(str).with_index
     end
     true
   end
@@ -144,7 +145,7 @@ class IdentSubseqCalc
     end
   end
 
-  def result ix
+  def result_with_index ix
     ix = strs.find_index ix if ix.is_a? String
     str = strs[ix]
     enum = @enums[ix]
@@ -196,16 +197,17 @@ class IdentSubseqCalc
         end
       end
     end
+    
 
     enum.next unless enum.peek
     case @tiebreak
     when :first
-      enum.next while filter[enum.peek]
+      enum.next while filter[enum.peek.first]
       enum.peek
     when :all
-      enum.next while enum.peek.all? &filter
-      enum.peek.reject! &filter #here, we mutate a peek result for side effects. Sorry!
-      enum.peek.dup
+      enum.next while enum.peek.first.all? &filter
+      enum.peek.first.reject! &filter #here, we mutate a peek result for side effects. Sorry!
+      enum.peek.map &:dup
     else
       raise "unknown tiebreak #{@tiebreak.inspect}"
     end
@@ -217,7 +219,7 @@ class IdentSubseqCalc
     when :first
       cur_size = result(ix).size
       return if cur_size == @strs[ix].size
-      @enums[ix].pop until @enums[ix].peek.size > cur_size
+      @enums[ix].pop until @enums[ix].peek.first.size > cur_size
     when :all
       @enums[ix].replace []
     else
@@ -225,7 +227,9 @@ class IdentSubseqCalc
     end
   end
   
-  def results; @result_cache = (0...strs.count).map{|i| result i}; end
+  def result ix; result_with_index(ix).first; end
+  def results_with_index; @result_cache = (0...strs.count).map{|i| result_with_index i}; end
+  def results; results_with_index.map &:first; end
 end
 
 ################################################################################
@@ -235,6 +239,7 @@ class RecursiveSubseqCalc
     @opts = opts
     @slow_mode = opts[:slow_mode]
     @animation_mode = opts[:animation_mode]
+    @verbose = opts[:verbose]
     @top = calc
   end
   
@@ -242,15 +247,25 @@ class RecursiveSubseqCalc
   def push str; @top.push str; end
   
   def results
-    strs = @slow_mode ? @top.strs : @top.results
+    strs = @slow_mode == :normal ? @top.results : @top.strs
     loop do
       calc = @top.dup_empty.push_all(strs)
       (puts "", strs; sleep 0.1) if @animation_mode
-      ml = strs.map(&:length).max
-      if @slow_mode
-        r = strs.map.with_index{|str, ix| str.length == ml ? calc.result(ix) : str}
-      else
-        r = calc.results
+      r = case @slow_mode
+      when :super_slow
+        changes = strs.zip(calc.results_with_index).filter{|x, (y, _)| x != y}
+        chlen_max = changes.map{|x, _| x.length}.max
+        changes.filter!{|x, _| x.length == chlen_max}
+        chpos_min = changes.map{|_, (_, ix)| ix}.min
+        changes.filter!{|_, (_, ix)| ix == chpos_min}
+        changes = Hash[changes]
+        puts "#{changes.size} changes at position #{chpos_min}/#{chlen_max}" if @verbose
+        strs.map{|str| changes.include?(str) ? changes[str][0] : str}
+      when :slow
+        ml = strs.map(&:length).max
+        puts "#{changes.size} changes at length #{chlen_max}" if @verbose
+        strs.map.with_index{|str, ix| str.length == ml ? calc.result(ix) : str}
+      else calc.results
       end
       return r if r == strs
       strs = r
@@ -286,13 +301,17 @@ if $0 == __FILE__
   sort = ARGV.include?("-a") ? [:alpha] : []
   sort.unshift :caps_first if ARGV.include?("-c")
   redundant_mode = ARGV.include?("-d")
-  show_histogram = ARGV.include?("-h")
   min_chars = ARGV.find{|arg| arg.start_with? "-m"}
   min_chars = min_chars ? min_chars[2..-1].to_i : 0
   animation_mode = ARGV.include?("-ra")
   recursive_mode = ARGV.include?("-r") || animation_mode
-  slow_mode = ARGV.include?("-s")
+  slow_mode = case 
+              when ARGV.include?("-ss") then :super_slow
+              when ARGV.include?("-s") then :slow
+              else :normal
+              end
   show_time = ARGV.include?("-t")
+  verbose_mode = ARGV.include?("-v")
   letter_only = ARGV.include?("-w")
   tiebreak = ARGV.include?("--all") ? :all : :first
   count_uniq = ARGV.include?("--count-uniq")
@@ -300,7 +319,7 @@ if $0 == __FILE__
 
   suppress_output = false
   
-  puts "warning: -s is best used with -r" if slow_mode && !recursive_mode
+  puts "warning: -s is best used with -r" if slow_mode != :normal && !recursive_mode
   
   if tiebreak == :all && recursive_mode
     puts "error: -a is incompatible with -r"
@@ -309,8 +328,8 @@ if $0 == __FILE__
 
   calc = IdentSubseqCalc.new(tiebreak: tiebreak, letter_only: letter_only, sort: sort, count_uniq: count_uniq,
                              slow_mode: slow_mode, redundant_mode: redundant_mode, min_chars: min_chars, 
-                             recursive_mode: recursive_mode, reverse_regex: reverse_regex)
-  calc = RecursiveSubseqCalc.new(calc, animation_mode: animation_mode, slow_mode: slow_mode) if recursive_mode
+                             recursive_mode: recursive_mode, reverse_regex: reverse_regex, verbose: verbose_mode)
+  calc = RecursiveSubseqCalc.new(calc, animation_mode: animation_mode, slow_mode: slow_mode, verbose: verbose_mode) if recursive_mode
                 
   results = []
   td_cummulative = 0
@@ -353,13 +372,9 @@ if $0 == __FILE__
  
       count_hsh = results.map{|e| tiebreak == :all ? e[0].length : e.length}.group_by(&:itself)
       counts = (count_hsh.keys.min .. count_hsh.keys.max).map{|k|count_hsh.fetch(k, []).length}
-      scale = (IO.console.winsize[1] - 1) / Math.log(counts.max + 1)
-      p counts if show_histogram
-      if show_histogram && tiebreak == :all
-        p (count_hsh.keys.min .. count_hsh.keys.max)
-            .map{|k| results.reduce(0){|a, d| d[0].length == k ? a + d.length : a}}
-      end
-      counts.each{|c| puts "*" * (Math.log(c + 1) * scale)}
+      cwidth = counts.max.to_s.size
+      scale = (IO.console.winsize[1] - cwidth - 2) / Math.log(counts.max + 1)
+      counts.each{|c| puts c.to_s.ljust(cwidth + 1) + "*" * (Math.log(c + 1) * scale)}
       puts "%.6fs (%.6fs)" % [td_cummulative, time_delta] if show_time
       
       print "\a" if time_delta > 60

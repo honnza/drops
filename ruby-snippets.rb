@@ -130,3 +130,41 @@ def inversion_count_table(n)
   
   (0..).lazy.map{|k| res[[n, k]]}.take_while{|r| r > 0}.force
 end
+
+def grid_sampler(h, w, torus: false, neighbor_count: 8, show: true)
+  neighbors = [
+    [-1, 0], [0, -1], [0, 1], [1, 0],
+    [-1, -1], [-1, 1], [1, -1], [1,1]
+  ][0 ... neighbor_count]
+  
+  considered = (0...h).map{|y| (0...w).map{|x| [y, x]}}.flatten(1)
+  rejected = []
+  
+  until considered.empty?
+    s = considered.sample
+    (0...h).each{|y| puts (0...w).map{|x|
+      case
+      when s == [y, x] then "\#"
+      when considered.include?([y, x]) then " "
+      when rejected.include?([y, x]) then "x"
+      else "-"
+      end
+    }.join}
+    p s
+    case gets.strip
+    when "x"
+      considered.delete s
+      rejected << s
+    when '-'
+      considered.delete s
+    when '' then nil
+    when '+'
+      neighbors.each{|n| 
+        s2 = s.zip(n).map{|i, j| i + j}
+        next if s2.any?{|i| i < 0} || s2.first >= h || s2.last >= w
+        considered << s2 unless rejected.include? s2
+      }
+    else puts "unknown input"
+    end
+  end
+end

@@ -5,6 +5,7 @@ RAD2DEG = 180 / Math::PI
 USE_GEO = ARGV.include?("--use-geo")
 USE_LENGTHS = ARGV.include?("--use-length")
 CONTINUITY = ARGV.include?("--continuity")
+PRIM = ARGV.include?("--prim")
 ARGV.replace([])
 
 Dest = Struct.new :ix, :name, :size, :indegree, :outdegree, :lat, :lon do
@@ -100,7 +101,7 @@ dests = JSON.parse(input, symbolize_names: true).map.with_index do |row, ix|
 last_dest = dests[0]
 
 pairs = PairEnum.new dests
-if USE_LENGTHS
+if USE_LENGTHS || USE_GEO
   pair_lengths = Array.new(dests.size){|i|Array.new(dests.size){|j| i == j ? 0 : 40000}}
   path_next = Array.new(dests.size){|i|Array.new(dests.size){|j| j}}
 end
@@ -114,7 +115,8 @@ until pairs.empty?
     pair = pairs.max_by do |pair|
       [
         CONTINUITY && pair[0] == last_dest ? 1 : 0,
-        (USE_LENGTHS ? pair_lengths[pair[0].ix][pair[1].ix] : 1.0) /  
+        PRIM && pair_lengths[0][pair[0].ix] < 40000 ? 1 : 0,
+        (USE_LENGTHS || USE_GEO ? pair_lengths[pair[0].ix][pair[1].ix] : 1.0) /  
         (pairs.exclusions.map{|i, j|
           pair_lengths[i.ix][j.ix] - pair_lengths[i.ix][pair[0].ix] - pair_lengths[pair[1].ix][j.ix]
         } + [geo_dist(*pair)]).max, # descending by min length guaranteed by triangle inequality
@@ -141,9 +143,9 @@ until pairs.empty?
   end
   puts "from: #{pair[0]} to: #{pair[1]}#{geo_dist_str}#{length_str}"
   
-  if USE_LENGTHS
-    print "path length? (km) "
-    len_pair = gets.to_r
+  if USE_LENGTHS || USE_GEO    
+    len_pair = USE_LENGTHS ? (print "path length? (km)"; gets.to_r) : geo_dist(*pair)
+    
     (0...dests.size).each{|i|(0...dests.size).each{|j|
       len_ij = pair_lengths[i][pair[0].ix] + len_pair + pair_lengths[pair[1].ix][j]
       if pair_lengths[i][j] > len_ij
