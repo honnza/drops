@@ -1,12 +1,13 @@
 def run_intcode(mem, input = [])
-  ip = 0
+  ip = 0; rbo = 0
   Enumerator.new do |output|
     loop do
       param_modes = mem[ip].digits.drop(2)
       read = lambda do |pos|
         case param_modes[pos - 1] || 0
-        when 0 then mem[mem[ip + pos]]
-        when 1 then mem[ip + pos]
+        when 0 then mem[mem[ip + pos] || 0] || 0
+        when 1 then mem[ip + pos] || 0
+        when 2 then mem[(mem[ip + pos] || 0) + rbo] || 0
         else 
           puts "unkonwn param mode at #{ip}"
           p [param_modes, pos]
@@ -14,7 +15,9 @@ def run_intcode(mem, input = [])
       end
       write = lambda do |pos, val|
         case param_modes[pos - 1] || 0
-        when 0 then mem[mem[ip + pos]] = val
+        when 0 then mem[mem[ip + pos] || 0] = val
+      # when 1 then mem[ip + pos] = val # guaranteed unused
+        when 2 then mem[(mem[ip + pos] || 0) + rbo] = val
         else 
           puts "unkonwn param mode at #{ip}"
           p [param_modes, pos]
@@ -44,6 +47,9 @@ def run_intcode(mem, input = [])
       when 8
         write[3, read[1] == read[2] ? 1 : 0]
         ip += 4
+      when 9
+        rbo += read[1]
+        ip += 2
       when 99
         break
       else
@@ -199,3 +205,24 @@ def day7b(xss)
   end.max
 end
 #day7b IO::read("github/drops/aoc2019/day7.in").split(",").map(&:to_i)
+
+def day8a(w, h, xs)
+  xs.scan(/.{#{w*h}}/).map{|l| [l.count('0'), l.count('1') * l.count('2')]}.min.last
+end
+#day8a 25, 6, IO::read("github/drops/aoc2019/day8.in").chomp
+
+def day8b(w, h, xs)
+  layers = xs.scan /.{#{w*h}}/
+  (0...h).each {|y| puts (0...w).map{|x| layers.map{|l| l[w*y+x]}.find{|l| l !='2'}}.join.tr("01", "# ")}
+end
+#day8b 25, 6, IO::read("github/drops/aoc2019/day8.in").chomp
+
+def day9a(xs)
+  p run_intcode(xs, [1]).to_a
+end
+day9a IO::read("github/drops/aoc2019/day9.in").split(",").map(&:to_i)
+
+def day9a(xs)
+  p run_intcode(xs, [2]).to_a
+end
+day9a IO::read("github/drops/aoc2019/day9.in").split(",").map(&:to_i)
