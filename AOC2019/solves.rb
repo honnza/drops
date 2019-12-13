@@ -32,6 +32,7 @@ def run_intcode(mem, input = [])
         write[3, read[1] * read[2]]
         ip += 4
       when 3
+        raise "read from empty input" if input.empty?
         write[1, input.pop]
         ip += 2
       when 4
@@ -220,9 +221,172 @@ end
 def day9a(xs)
   p run_intcode(xs, [1]).to_a
 end
-day9a IO::read("github/drops/aoc2019/day9.in").split(",").map(&:to_i)
+#day9a IO::read("github/drops/aoc2019/day9.in").split(",").map(&:to_i)
 
 def day9a(xs)
   p run_intcode(xs, [2]).to_a
 end
-day9a IO::read("github/drops/aoc2019/day9.in").split(",").map(&:to_i)
+#day9a IO::read("github/drops/aoc2019/day9.in").split(",").map(&:to_i)
+
+def day10a(xss)
+  locations = xss.map.with_index do |xs, i|
+    xs.map.with_index{|x, j| [i, j] if x == "#"}
+  end.flatten(1).compact
+  locations.map do |loc|
+    locations.map do |loc2|
+      dx = loc[0] - loc2[0]
+      dy = loc[1] - loc2[1]
+      gcd = dx.gcd(dy)
+      [dx / gcd, dy / gcd] if gcd > 0
+    end.compact.uniq.count
+  end.max
+end
+#day10a IO::read("github/drops/aoc2019/day10.in").lines.map{|l| l.chomp.chars}
+
+def day10b(asteroid_ix, xss)
+  dir = lambda do |loc, loc2|
+    dx = loc2[0] - loc[0]
+    dy = loc2[1] - loc[1]
+    gcd = dx.gcd(dy)
+    case
+    when dx == 0 && dy < 0 then [0, Float::INFINITY]
+    when dx > 0 then [1, Rational(dy, dx)]
+    when dx == 0 && dy > 0 then [2, Float::INFINITY]
+    when dx < 0 then [3, Rational(dy, dx)]
+    end
+  end
+  
+  sqdist = lambda do |loc, loc2|
+    dx = loc[0] - loc2[0]
+    dy = loc[1] - loc2[1]
+    dx * dx + dy * dy
+  end
+
+  locations = xss.map.with_index do |xs, i|
+    xs.map.with_index{|x, j| [j, i] if x == "#"}
+  end.flatten(1).compact
+  laser_at = locations.map do |loc|
+    lcount = locations.map{|loc2| dir[loc, loc2]}.compact.uniq.count
+    [lcount, loc]
+  end.max[1]
+  locations.delete laser_at
+  locations.map!{|loc| [loc, dir[laser_at, loc], sqdist[laser_at, loc]]}
+  
+  laser_dir = [-1]
+  loop.with_index(1) do |_, ix|
+    next_target = locations.sort_by{|l, d, s| [(d <=> laser_dir) > 0 ? 0 : 1, d, s]}.first
+    locations.delete next_target
+    laser_dir = next_target[1]
+    return next_target[0][0] * 100 + next_target[0][1] if ix == asteroid_ix
+  end
+end
+#day10b 200, IO::read("github/drops/aoc2019/day10.in").lines.map{|l| l.chomp.chars}
+
+def day11a(xs)
+  in_pipe = []
+  out_pipe = run_intcode xs, in_pipe
+  
+  robot_at = 0i
+  robot_dir = 1i
+  paint_log = Hash.new{0}
+  
+  loop do 
+    in_pipe << paint_log[robot_at]
+    paint_log[robot_at] = out_pipe.next
+    p [paint_log.size, robot_at, paint_log[robot_at]]
+    robot_dir *= out_pipe.next == 1 ? 1i : -1i
+    robot_at += robot_dir
+  end
+  
+  paint_log.size
+end
+#day11a IO::read("github/drops/aoc2019/day11.in").split(",").map(&:to_i)
+
+def day11b(xs)
+  in_pipe = []
+  out_pipe = run_intcode xs, in_pipe
+  
+  robot_at = 0i
+  robot_dir = 1i
+  paint_log = Hash.new{0}
+  paint_log[0i] = 1
+  
+  loop do 
+    in_pipe << paint_log[robot_at]
+    paint_log[robot_at] = out_pipe.next
+    p [paint_log.size, robot_at, paint_log[robot_at]]
+    robot_dir *= out_pipe.next == 1 ? -1i : 1i
+    robot_at += robot_dir
+  end
+  
+  row_minmax = paint_log.keys.map(&:imaginary).minmax
+  col_minmax = paint_log.keys.map(&:real).minmax
+  
+  Range.new(*row_minmax).to_a.reverse_each do |row|
+    puts Range.new(*col_minmax).map {|col| ".#"[paint_log[col + row * 1i]]}.join
+  end
+end
+#day11b IO::read("github/drops/aoc2019/day11.in").split(",").map(&:to_i)
+
+def day12a(steps, moons)
+  len = ->v{v.map(&:abs).sum}
+  moons.map!{|x| {pos: x, vel: [0, 0, 0]}}
+  
+  steps.times do |ix|
+    puts "", "@#{ix}"
+    moons.each{|m1| moons.each{|m2| [0, 1, 2].each{|d| m1[:vel][d] += m2[:pos][d] <=> m1[:pos][d]}}}
+    moons.each{|m| [0, 1, 2].each{|d| m[:pos][d] += m[:vel][d]}; p m}
+  end
+  
+  moons.map{|m| len[m[:pos]] * len[m[:vel]]}.sum
+end
+#day12a 1000, [[-6, -5, -8], [0, -3, -13], [-15, 10, -11], [-3, -8, 3]]
+
+def day12b(moons)
+  moons.transpose.map do |xs|
+    poss = xs.dup
+    vels = xs.map{0}
+    
+    period = (1..).find do |t|
+      poss.each_with_index{|p1, i1| poss.each{|p2| vels[i1] += p2 <=> p1}}
+      vels.each_with_index{|v, i| poss[i] += v}
+      poss == xs && vels.all?{|v| v == 0}
+    end
+    p period
+  end.reduce(&:lcm)
+end
+#day12b [[-6, -5, -8], [0, -3, -13], [-15, 10, -11], [-3, -8, 3]]
+
+def day13a(xs)
+  screen = Hash.new{|h, k| 0}
+  run_intcode(xs).each_slice(3).map{|x, y, type| screen[[x, y]] = type}
+  screen.values.count(2)
+end
+#day13a IO::read("github/drops/aoc2019/day13.in").split(",").map(&:to_i)
+
+def day13b(xs)
+  xs[0] = 2
+  stick = []
+  paddle_at = 0
+  screen = {}
+  p_screen = lambda do
+    puts "", screen[[-1, 0]], ""
+    w = screen.keys.map(&:first).max
+    h = screen.keys.map(&:last).max
+    (0..h).each{|y| puts (0..w).map{|x| screen[[x, y]]}.join.tr("0-4", " #+\\-o")}
+  end
+  
+  run_intcode(xs, stick).lazy.each_slice(3).map{|x|p x}.each do |x, y, type|
+    screen[[x, y]] = type
+    paddle_at = x if type == 3
+    if type == 4
+      p_screen[]
+      sleep 0.1
+      stick << (x <=> paddle_at)
+    end
+  end
+rescue
+  p screen
+  p $!
+end
+day13b IO::read("github/drops/aoc2019/day13.in").split(",").map(&:to_i)

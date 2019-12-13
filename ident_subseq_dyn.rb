@@ -259,11 +259,11 @@ class RecursiveSubseqCalc
         chpos_min = changes.map{|_, (_, ix)| ix}.min
         changes.filter!{|_, (_, ix)| ix == chpos_min}
         changes = Hash[changes]
-        puts "#{changes.size} changes at position #{chpos_min}/#{chlen_max}" if @verbose
+        p [changes.size, chpos_min, chlen_max]  if @verbose
         strs.map{|str| changes.include?(str) ? changes[str][0] : str}
       when :slow
         ml = strs.map(&:length).max
-        puts "#{changes.size} changes at length #{chlen_max}" if @verbose
+        p [changes.size, chlen_max]  if @verbose
         strs.map.with_index{|str, ix| str.length == ml ? calc.result(ix) : str}
       else calc.results
       end

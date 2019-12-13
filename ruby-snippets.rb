@@ -157,8 +157,7 @@ def grid_sampler(h, w, torus: false, neighbor_count: 8, show: true)
       rejected << s
     when '-'
       considered.delete s
-    when '' then nil
-    when '+'
+    when '' 
       neighbors.each{|n| 
         s2 = s.zip(n).map{|i, j| i + j}
         next if s2.any?{|i| i < 0} || s2.first >= h || s2.last >= w
