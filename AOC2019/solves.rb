@@ -1,3 +1,5 @@
+class IntcodeNoInputException < Exception; end
+
 def run_intcode(mem, input = [])
   ip = 0; rbo = 0
   Enumerator.new do |output|
@@ -32,8 +34,8 @@ def run_intcode(mem, input = [])
         write[3, read[1] * read[2]]
         ip += 4
       when 3
-        raise "read from empty input" if input.empty?
-        write[1, input.pop]
+        raise IntcodeNoInputException if input.empty?
+        write[1, input.shift]
         ip += 2
       when 4
         output.yield read[1]
@@ -321,7 +323,6 @@ def day11b(xs)
   
   row_minmax = paint_log.keys.map(&:imaginary).minmax
   col_minmax = paint_log.keys.map(&:real).minmax
-  
   Range.new(*row_minmax).to_a.reverse_each do |row|
     puts Range.new(*col_minmax).map {|col| ".#"[paint_log[col + row * 1i]]}.join
   end
@@ -376,12 +377,13 @@ def day13b(xs)
     (0..h).each{|y| puts (0..w).map{|x| screen[[x, y]]}.join.tr("0-4", " #+\\-o")}
   end
   
-  run_intcode(xs, stick).lazy.each_slice(3).map{|x|p x}.each do |x, y, type|
+  run_intcode(xs, stick).lazy.each_slice(3).each do |x, y, type|
     screen[[x, y]] = type
+    p type  if x < 0
     paddle_at = x if type == 3
     if type == 4
-      p_screen[]
-      sleep 0.1
+      #p_screen[]
+      #sleep 0.1
       stick << (x <=> paddle_at)
     end
   end
@@ -389,4 +391,412 @@ rescue
   p screen
   p $!
 end
-day13b IO::read("github/drops/aoc2019/day13.in").split(",").map(&:to_i)
+#day13b IO::read("github/drops/aoc2019/day13.in").split(",").map(&:to_i)
+
+def day14a(recipes, fuel = 1)
+  recipes = recipes.map{|recipe| recipe.map{|parts| Hash[parts.map(&:reverse)]}}
+  makeable = ["ORE"]
+  schedule = []
+  orders = Hash.new(0); orders["FUEL"] = fuel
+  until recipes.empty?
+    recipe = recipes.find{|recipe| recipe.first.keys.all?{|key| makeable.include? key}}
+    recipes.delete recipe
+    recipe.last.keys.each{|key| makeable << key}
+    schedule << recipe
+  end
+  schedule.reverse_each do |recipe|
+    count = recipe.last.keys.map{|key| orders[key].fdiv(recipe.last[key]).ceil}.max
+    [count, recipe]
+    recipe.first.keys.each{|key| orders[key] += count * recipe.first[key]}
+  end
+  orders["ORE"]
+end
+#day14a IO::read("github/drops/aoc2019/day14.in").lines.map{|l| l.split("=>").map{|h| h.split(", ").map{|p| ck=p.split(" "); [ck[0].to_i, ck[1]]}}}
+
+def day14b(recipes)
+  ore_1 = day14a(recipes)
+  p [1, ore_1]
+  fuel_est = (1e12 / ore_1).floor
+  loop do 
+    ore = day14a(recipes, fuel_est)
+    p [fuel_est, ore]
+    fuel_est += ((1e12 - ore) / ore_1).floor
+    fuel_est += 1 if ore + ore_1 > 1e12
+    return fuel_est - 1  if ore > 1e12
+  end
+end
+#day14b IO::read("github/drops/aoc2019/day14.in").lines.map{|l| l.split("=>").map{|h| h.split(", ").map{|p| ck=p.split(" "); [ck[0].to_i, ck[1]]}}}
+
+def day15(xs, part)
+  in_pipe = []
+  out_pipe = run_intcode(xs, in_pipe)
+  
+  dir_op = {0+1i => 1, 0-1i => 2, -1+0i => 3, 1+0i => 4}
+  loc_visits = Hash.new(0)
+  status_log = Hash.new(" ")
+  status_log[0+0i] = "<"
+  loc = 0+0i
+  
+  loop do 
+    choices = p dir_op.keys.map{|dir| [loc_visits[loc + dir], rand,  dir]}.sort
+    next_visits, _, dir = choices[0]
+    loc_visits[loc] += 1
+    break if loc_visits[loc] == Float::INFINITY
+    if choices[1][0] == Float::INFINITY
+      loc_visits[loc] = Float::INFINITY
+      neighbors = choices[1..3].map{|_, _, dir| status_log[loc + dir]}.join
+      status_log[loc] = neighbors =~ /^[#-]+$/ ? "-" : '+' if status_log[loc] == "."
+    end
+    in_pipe << dir_op[dir]
+    case out_pipe.next
+    when 0 then status_log[loc + dir] = "#"; loc_visits[loc + dir] = Float::INFINITY
+    when 1 then status_log[loc + dir] = "." unless status_log.has_key?(loc + dir); loc += dir
+    when 2 then status_log[loc + dir] = ">"; loc += dir
+    else raise "invalid status reply"
+    end
+    
+    row_minmax = status_log.keys.map(&:imaginary).minmax
+    col_minmax = status_log.keys.map(&:real).minmax
+    Range.new(*row_minmax).to_a.reverse_each do |row|
+      puts " " + Range.new(*col_minmax).map{|col|
+        at = col + row * 1i
+        at == loc ? "@" : status_log[at]
+      }.join
+    end
+    sleep 0.1
+  end
+  
+  return status_log.values.count("+") + 1 if part == :a
+  
+  next_oxygen = status_log.select{|k, v| v == ">"}.keys
+  (0..).find do |t|
+    last_oxygen = next_oxygen.uniq
+    next_oxygen = []
+    last_oxygen.each do |loc|
+      status_log[loc] = "O"
+      dir_op.keys.each do |dir|
+        next_oxygen << loc + dir if status_log[loc + dir] =~ /[^#O]/
+      end
+    end
+
+    row_minmax = status_log.keys.map(&:imaginary).minmax
+    col_minmax = status_log.keys.map(&:real).minmax
+    Range.new(*row_minmax).to_a.reverse_each do |row|
+      puts " " + Range.new(*col_minmax).map{|col|
+        at = col + row * 1i
+        at == loc ? "@" : status_log[at]
+      }.join
+    end
+    puts t
+    sleep 0.1
+
+    next_oxygen.empty?
+  end
+end
+#day15 IO::read("github/drops/aoc2019/day15.in").split(",").map(&:to_i), :b
+
+def day16a (rounds, digits, skip: 0)
+  fft = lambda do |v| 
+    w = v.size
+    sums = [0] * (skip + 1); v[skip..].each{|v| sums << v + sums.last}
+    [nil] * skip + (skip + 1 .. w).map do |n| 
+      #for pattern n, we are asked to sum v[(4k+1)n] ... v[(4k+2)n]
+      #that is, partial sum before (4k+2)n minus partial sum before (4k+1)n
+      #and subtract all v[(4k+3)n] ... v[(4k+4)n]
+      #similarly derived from partial sums
+      #so before each k*n, we want to subtract, add, add, subtract
+      #the corresponding partial sums, and then once at the very end to pair the previous one
+      r = 0
+      (1..).each{|k| 
+        break if n * k > w && k.odd?
+        #p [n, k, [-1, -1, 1, 1][k % 4] * sums[[k * n - 1, w].min]]
+        r += [-1, -1, 1, 1][k % 4] * sums[[k * n - 1, w].min]
+      }
+      r.abs % 10
+    end
+  end
+  rounds.times{|i| digits = fft[digits]; p [digits.join[0..99], i]}
+  digits.join
+end
+#day16a 100, IO::read("github/drops/aoc2019/day16.in").chars.map(&:to_i)
+
+def day16b(rounds, digits)
+  day16a(rounds, digits * 10000, skip: digits.take(7).join.to_i)[0..7]
+end
+#day16b 100, IO::read("github/drops/aoc2019/day16.in").chars.map(&:to_i)
+
+def day17a(xs)
+  cam = run_intcode(xs).map(&:chr).join.lines
+  (1 .. cam.size - 2).map do |y|
+    (1 .. cam[y].size - 2).map do |x|
+      x * y unless [cam[y][x], cam[y][x-1], cam[y][x+1], cam[y-1][x], cam[y+1][x]].include?(".")
+    end.compact
+  end.flatten.sum
+end
+#day17a IO::read("github/drops/aoc2019/day17.in").split(",").map(&:to_i)
+
+def day17b(xs)
+  cam = run_intcode(xs.dup).map(&:chr).join.lines
+  puts cam
+  bot_y = cam.find_index{|row| row =~ /[<>v^]/}
+  bot_x = cam[bot_y].index /[<>v^]/
+  bot_dir = cam[bot_y][bot_x]
+  path = ""
+  
+  left = {"^" => "<", "<" => "v", "v" => ">", ">" => "^"}
+  right = {"^" => ">", ">" => "v", "v" => "<", "<" => "^"}
+  dx = {"<" => -1, ">" => 1, "^" => 0, "v" => 0}
+  dy = {"<" => 0, ">" => 0, "^" => -1, "v" => 1}
+  
+  loop do 
+    case
+    when cam[bot_y + dy[bot_dir]][bot_x + dx[bot_dir]] == "#" then nil
+    when cam[bot_y + dy[left[bot_dir]]][bot_x + dx[left[bot_dir]]] == "#"
+      bot_dir = left[bot_dir]; path += "L,"
+    when cam[bot_y + dy[right[bot_dir]]][bot_x + dx[right[bot_dir]]] == "#"
+      bot_dir = right[bot_dir]; path += "R,"
+    else break
+    end
+    bot_x += dx[bot_dir]; bot_y += dy[bot_dir]; path += "1,"
+  end
+  path.gsub!(/1(,1)+/){$&.length / 2 + 1}
+  puts path
+  
+  find_compression = lambda do |lengths, unset|
+    if unset.size > 0
+      (2..21).each do |len|
+        new_lengths = lengths.merge({unset[0] => len})
+        catch(unset[0]){find_compression[new_lengths, unset[1..]]}
+      end
+    else
+      path_ix = 0
+      main = ""
+      funcs = {}
+      loop do
+        key = lengths.keys.find do |key|
+          funcs[key] ||= path[path_ix, lengths[key]]
+          unless funcs[key][-1] == ","
+            throw key
+          end
+          path[path_ix, lengths[key]] == funcs[key]
+        end
+        if key
+          main += key.to_s + ","
+          path_ix += funcs[key].length
+          if main.length > 21
+            throw lengths.keys.last
+          end
+        elsif path_ix == path.length
+          throw :found, [main, *funcs.values]
+        else 
+          throw lengths.keys.last
+        end
+      end
+      nil
+    end
+  end
+  
+  lines = catch(:found){find_compression[{}, [:A, :B, :C]]} + ["n,"]
+  lines.each{|l| l[/,$/] = "\n"}
+  
+  xs[0] = 2
+  puts lines.join
+  out_pipe = run_intcode(xs, lines.join.chars.map(&:ord))
+  loop{c = out_pipe.next; print c.chr}
+end
+#day17b IO::read("github/drops/aoc2019/day17.in").split(",").map(&:to_i)
+
+def day18a(xss)
+  mid_y = xss.find_index{|xs| xs =~ /@/}
+  mid_x = xss[mid_y].index("@")
+  dx = {"<" => -1, ">" => 1, "^" => 0, "v" => 0}
+  dy = {"<" => 0, ">" => 0, "^" => -1, "v" => 1}
+  item_paths = {}
+  scan = lambda do |path, y, x|
+    return if xss[y][x] == "#"
+    item_paths[xss[y][x]] = path unless xss[y][x] == "."
+    scan[path + "<", y, x - 1] if path.length != 1 && path[-1] != ">" && x != mid_x + 1
+    scan[path + ">", y, x + 1] if path.length != 1 && path[-1] != "<" && x != mid_x - 1
+    scan[path + "^", y - 1, x] if path.length != 0 && path[-1] != "v" && y != mid_y + 1
+    scan[path + "v", y + 1, x] if path.length != 0 && path[-1] != "^" && y != mid_y - 1
+  end
+  scan["", mid_y, mid_x]
+  
+  item_paths.sort.each{|k, v| p [k, v.length, v]}
+  
+  behind = Hash.new {|h, (key, lock)| h[[key, lock]] = item_paths[lock.upcase] && item_paths[key].start_with?(item_paths[lock.upcase])}
+  dists = Hash.new do |h, (x, y)| 
+    px=item_paths[x].dup; py = item_paths[y].dup
+    (px.slice!(1); py.slice!(1)) if px[1] == py[1]
+    (px.slice!(0); py.slice!(0)) while px[0] == py[0]
+    p [x, y, px.length, py.length]
+    h[[x, y]] = px.length + py.length
+  end
+  
+  sequence = Hash.new do |h, (last, unused)|
+    if unused.empty?
+      h[[last, unused]] = [0, last]
+    else
+      next_keys = unused.reject{|k| unused.any?{|l| behind[[k, l]]}}
+      options = p next_keys.map{|k| sequence[[k, unused - [k]]]}
+      subcost, suborder = options.min
+      h[[last, unused]] = [dists[[last, suborder[0]]] + subcost, last + suborder]
+    end
+  end
+  sequence[["@", item_paths.keys.select{|k| k =~ /[a-z]/}, 0]]
+end
+#day18a IO::read("github/drops/aoc2019/day18.in").lines
+
+def day19a(xs)
+  out = 0
+  (0..49).map do |y|
+    puts((0..49).map do |x|
+      r = run_intcode(xs.dup, [x, y]).next
+      out += r
+      " #"[r]
+    end.join)
+  end
+  out
+end
+#day19a IO::read("github/drops/aoc2019/day19.in").split(",").map(&:to_i)
+
+def day19b(xs)
+  x = 0; y = 0
+  loop do
+    case 
+    when run_intcode(xs.dup, [x + 99, y]).next == 0 then y += 1
+    when run_intcode(xs.dup, [x, y + 99]).next == 0 then x += 1
+    else return x * 10000 + y
+    end
+  end
+end
+#day19b IO::read("github/drops/aoc2019/day19.in").split(",").map(&:to_i)
+
+def day21a(xs)
+  r = run_intcode(xs, <<END.gsub("; ", "\n").chars.map(&:ord))
+NOT C J; NOT B T; OR T J; NOT A T; OR T J; AND D J; WALK
+END
+  puts r.peek > 127 ? r.next : r.map(&:chr).join
+end
+#day21a IO::read("github/drops/aoc2019/day21.in").split(",").map(&:to_i)
+
+def day21b(xs)
+  r = run_intcode(xs, <<END.gsub("; ", "\n").chars.map(&:ord))
+NOT C J; NOT B T; OR T J; NOT A T; OR T J; AND D J; NOT A T; OR H T; AND T J; RUN
+END
+  puts r.peek > 127 ? r.next : r.map(&:chr).join
+end
+#day21b IO::read("github/drops/aoc2019/day21.in").split(",").map(&:to_i)
+
+def day22a(xs)
+  card_at = 2019
+  xs.each do |x|
+    case x
+    when /deal into new stack/
+      card_at = 10006 - card_at
+    when /cut (-?\d+)/
+      card_at = (card_at - $1.to_i) % 10007
+    when /deal with increment (\d+)/
+      card_at = (card_at * $1.to_i) % 10007
+    end
+  end
+  card_at
+end
+#day22a IO::read("github/drops/aoc2019/day22.in").lines
+
+def day22b(xs)
+  modulus = 119315717514047
+  zero_at = 0
+  increment = 1
+  xs.each do |x|
+    case x
+    when /deal into new stack/
+      zero_at = modulus - zero_at - 1
+      increment = modulus - increment - 1 
+    when /cut (-?\d+)/
+      zero_at = (zero_at - $1.to_i) % modulus
+    when /deal with increment (\d+)/
+      zero_at = (zero_at * $1.to_i) % modulus
+      increment = (increment * $1.to_i) % modulus
+    end
+    p [zero_at, increment, x]
+  end
+
+  zero_n_times = 0
+  increment_n = 1
+  n = 0
+  101741582076661.to_s(2).chars.each do |bit|
+    # 0 -> z -> zi+z
+    zero_n_times = (zero_n_times * increment_n + zero_n_times) % modulus
+    increment_n = increment_n * increment_n % modulus
+    n *= 2 
+    if bit == '1'
+      zero_n_times = (zero_n_times * increment + zero_at) % modulus
+      increment_n = increment_n * increment % modulus
+      n += 1
+    end
+    p [n, zero_n_times, increment_n]
+  end
+
+  quot = [nil, nil]
+  rem = [modulus, increment_n]  
+  c_m = [1, 0]
+  c_i = [0, 1]
+  while rem.last > 0
+    quot << rem[-2] / rem[-1]
+    rem << rem[-2] - quot.last * rem[-1]
+    c_m << c_m[-2] - quot.last * c_m[-1]
+    c_i << c_i[-2] - quot.last * c_i[-1]
+    p [quot.last, rem.last, c_m.last, c_i.last, c_i.last * increment_n + c_m.last * modulus]
+  end
+  
+  # ci + z = 2020 => c = (2020-z)/i
+  (2020 - zero_n_times) * c_i[-2] % modulus
+end
+#day22b IO::read("github/drops/aoc2019/day22.in").lines
+
+def day23(xs, part)
+  in_pipes = (0..49).map{|x| [x]}
+  out_pipes = in_pipes.map{|pipe| run_intcode(xs.dup, pipe)}
+  packet_queues = Array.new(50){[]}
+  nat_data = nil
+  nat_prev_y = nil
+  
+  loop.with_index do |_, t|
+    puts "at #{t}:"
+    if packet_queues.all? &:empty?
+      puts "network idle", ""
+      return nat_prev_y if nat_data && nat_prev_y == nat_data[1]
+      packet_queues[0] << nat_data
+    end
+    
+    (0..49).each do |ip_addr|
+      if t == 0 || packet_queues[ip_addr].size > 0
+        xy = packet_queues[ip_addr].shift
+        in_pipes[ip_addr].concat(xy || [-1])
+        puts "PC #{ip_addr} received #{in_pipes[ip_addr]}"
+
+        loop do
+          begin
+            out_addr = out_pipes[ip_addr].next
+              puts "PC #{ip_addr} sent #{[out_addr]}"
+            if out_addr != -1
+              out_xy = [out_pipes[ip_addr].next, out_pipes[ip_addr].next]
+              puts "PC #{ip_addr} sent #{(out_xy)}"
+              packet_queues[out_addr] &.<< out_xy
+            end
+            if out_addr == 255
+              return out_xy[1] if part == :a
+              nat_data = out_xy
+            end
+          rescue IntcodeNoInputException
+            puts "PC #{ip_addr} expects input"
+            break
+          end
+        end
+        sleep 1
+      end
+    end
+  end
+end
+#day23 IO::read("github/drops/aoc2019/day23.in").split(",").map(&:to_i), :b
