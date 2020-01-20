@@ -167,3 +167,69 @@ def grid_sampler(h, w, torus: false, neighbor_count: 8, show: true)
     end
   end
 end
+
+def relax_rescale(grid, strength, suppressed_modes = [])
+  fmt = lambda do |val|
+    case val
+    when nil then " " * 18
+    when 0.0 .. 0.2 then "\e[31;1m%.16f\e[0m"
+    when 0.2 .. 0.4 then "\e[33;1m%.16f\e[0m"
+    when 0.4 .. 0.6 then "\e[37;1m%.16f\e[0m"
+    when 0.6 .. 0.8 then "\e[36;1m%.16f\e[0m"
+    when 0.8 .. 1.0 then "\e[36m%.16f\e[0m"
+    else "\e[32;1m%.16f\e[0m"
+    end % val
+  end
+  grid = grid.split(/[\n\/]/).map{|row| row.chars.map{|c|
+    {?- => 0.0, ?. => 0.5, ?+ => 1.0, ?? => rand}[c]
+  }} if grid.is_a? String
+  grid.each{|row| row << nil}
+  grid << []
+  
+  suppressed_modes = suppressed_modes.map{|mode| mode.map{|row| row.dup}}
+  suppressed_modes.each do |mode|
+    avg = mode.flatten.compact.sum / mode.flatten.compact.size
+    mode.each{|row| row.map! {|val| val && val - avg}}
+    norm = mode.map{|row| row.map{|val| val && val * val}}.flatten.compact.sort.sum ** 0.5
+    mode.each{|row| row.map!{|val| val && val / norm}}
+  end
+
+  old_grids = []
+  loop.with_index do |_, t|
+    energy = 0
+    grid = (0 ... grid.size).map do |i|
+      (0 ... grid[i].size).map &lambda{|j|
+        return nil if grid[i][j].nil?
+        delta = [[-1, 0], [0, -1], [0, 1], [1, 0]].map do |di, dj|
+          grid[i+di][j+dj] - grid[i][j] if grid[i+di] && grid[i+di][j+dj]
+        end.compact.sort.sum
+        energy += delta.abs
+        grid[i][j] + delta * strength
+      }
+    end
+
+    suppression_factors = suppressed_modes.map do |mode|
+      factor = (0 ... grid.size).map do |i|
+        (0 ... grid[i].size).map {|j| grid[i][j] && mode[i][j] && grid[i][j] * mode[i][j]}
+      end.flatten.compact.sum
+      (0 ... grid.size).each do |i|
+        (0 ... grid[i].size).each do |j|
+          grid[i][j] -= factor * mode[i][j] if grid[i][j] && mode[i][j]
+        end
+      end
+      factor
+    end
+
+    min, max = grid.flatten.compact.minmax
+    grid.each{|row| row.map!{|val| val && (val - min) / (max - min)}}
+
+    grid.each{|row| puts row.map(&fmt).join(" ").rstrip}
+    puts "@#{t}"
+    puts "energy = %.16f" % [energy]
+    puts "delta_1 = %.16f" % [(1 - max + min) / strength]
+    puts "suppression factors = %p" % [suppression_factors]
+    return grid if old_grids.include? grid
+    old_grids << grid
+    sleep 0.1
+  end
+end

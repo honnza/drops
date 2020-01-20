@@ -2,10 +2,10 @@ require 'json'
 
 RAD2DEG = 180 / Math::PI
 
-USE_GEO = ARGV.include?("--use-geo")
-USE_LENGTHS = ARGV.include?("--use-length")
-CONTINUITY = ARGV.include?("--continuity")
-PRIM = ARGV.include?("--prim")
+USE_GEO = ARGV.include?("--use-geo") || ARGV.include?("-g")
+USE_LENGTHS = ARGV.include?("--use-length") || ARGV.include?("-l")
+CONTINUITY = ARGV.include?("--continuity") || ARGV.include?("-c")
+PRIM = ARGV.include?("--prim") || ARGV.include?("-p")
 ARGV.replace([])
 
 Dest = Struct.new :ix, :name, :size, :indegree, :outdegree, :lat, :lon do
@@ -16,6 +16,8 @@ Dest = Struct.new :ix, :name, :size, :indegree, :outdegree, :lat, :lon do
       "#{name} (#{outdegree}x out, #{indegree}x in)"
     end
   end
+  
+  def to_hash; {name: name, lat: lat, lon: lon}; end
 end
 
 class Array
@@ -72,12 +74,9 @@ end
 puts "To gather the desired data, please adjust the following line of Javascript, then run at the appropriate page:"
 puts %`copy(JSON.stringify($(".sortable tbody tr").get().map(row => [row.cells[<NAME_COL>], row.cells[<SIZE_COL>]].map(e => e.textContent))))`
 
-input = gets
-if(input.strip == "[")
-  loop{line = gets; input += line; break if line.strip == "]"}
-end
-
-dests = JSON.parse(input, symbolize_names: true).map.with_index do |row, ix|
+input = gets("\n\n").chomp.each_line.map(&:chomp)
+dests = JSON.parse(input, symbolize_names: true) rescue input
+dests.map!.with_index do |row, ix|
    row = [row, 1] if row.is_a?(String)
    row = {name: row[0], size: row[1]} if row.is_a?(Array)
    size = size.tr("^0-9.", "").to_f if size.is_a?(String)
@@ -97,6 +96,8 @@ dests = JSON.parse(input, symbolize_names: true).map.with_index do |row, ix|
    end
    Dest.new(ix, row[:name], row[:size], 0r, 0r, row[:lat], row[:lon])
  end
+ 
+ puts JSON.pretty_generate(dests)
 
 last_dest = dests[0]
 

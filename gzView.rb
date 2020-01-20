@@ -1,4 +1,5 @@
 require "io/console"
+require 'base64'
 
 def to_bytes_str(bytes)
   bytes.map{|byte| byte.to_s(16).rjust(4, "0x00") }.join " "
@@ -19,9 +20,11 @@ class String
 end
 
 class BitReader
-  def initialize io
+  def initialize io, base64:
     @io = io
+    @bits_read = 0
     @buffer = []
+    @base64 = base64
   end
   
   def start_random!
@@ -35,22 +38,36 @@ class BitReader
     end
   end
   
-  def p_byte b; print "\e[30;1m%02X\e[0m " % b; end
+  def p_byte b; print "\e[30;1m%02X\e[0m " % b; b; end
+  def p_str s; print "\e[30;1m%02s\e[0m " % s; s; end
   
-  def get_bits(n)
+  def peek_bits(n)
     while @buffer.size < n
-      byte_in = @io.read(1).ord
-      p_byte byte_in
-      (0..7).map{|i| @buffer.push byte_in[i]}
+      chars = if @base64
+        Base64.decode64(@io.read(4))
+      else
+        @io.read(1)
+      end
+      chars.each_byte{|b| p_byte b;(0..7).map{|i| @buffer.push b[i]}}
     end
     
-    @buffer.shift(n)
+    @buffer.take(n)
   end
   
-  def get_bytes(n)
-    @buffer = []
-    @io.read(n).bytes.each{|b| p_byte b}
+  def get_bits(n)
+    r = peek_bits(n)
+    @bits_read += n
+    @buffer.shift(n)
+    r
   end
+    
+  def get_bytes(n, is_peek: false)
+    pad = -@bits_read % 8
+    bits = is_peek ? peek_bits(8 * n + pad) : get_bits(8 * n + pad)
+    bits.drop(pad).each_slice(8).map(&:bits_to_int)
+  end
+  
+  def peek_bytes(n); get_bytes(n, is_peek: true); end
   
   def read_asciiz
     bytes = []
@@ -122,57 +139,64 @@ end
 ################################################################################
 
 def show_parse_header bit_reader
-  header = bit_reader.get_bytes(10)
-  puts
+  catch :not_gzip do
+    header = bit_reader.peek_bytes(10)
+    puts
 
-  if header[0] != 0x1f || header[1] != 0x8b
-    puts "invalid file type ID #{header[0..1].inspect}"
-    exit
+    if header[0] != 0x1f || header[1] != 0x8b
+      puts "invalid file type ID #{header[0..1].inspect}"
+      throw :not_gzip
+    end
+    puts "0x1f 0x8b - Magic ID"
+
+    if header[2] != 0x08
+      puts "unknown compression method #{header[2].inspect}"
+      throw :not_gzip
+    end
+    puts "0x08 - compression method (Deflate)"
+
+    flags = header[3]
+    if flags > 31
+      puts "reserved flag bit set"
+      exit
+    end
+    
+    bit_reader.get_bytes(10)
+
+    ftext = flags[0]
+    fhcrc = flags[1]
+    fextra = flags[2]
+    fname = flags[3]
+    fcomment = flags[4]
+
+    puts
+    puts "flags:"
+    puts "#{ftext} - text file?"
+    puts "#{fhcrc} - CRC16 present?"
+    puts "#{fextra} - extra fields present?"
+    puts "#{fname} - file name set?"
+    puts "#{fcomment} - comment present?"
+    puts
+
+    puts "#{to_bytes_str header[4..7]} - time modified (#{Time.at(header[4..7].bytes_to_int)})"
+
+    puts "#{header[8]} - extra flags (2 = maximum compression, 4 = fastest)"
+    puts "#{header[9]} - OS (3 = Unix)"
+
+    if fextra == 1
+      length = bit_reader.get_bytes(2).bytes_to_int
+      puts "extra field: ", bit_reader.get_bytes(length)
+    end
+    puts "filename: ", bit_reader.read_asciiz if fname == 1
+    puts "comment: ", bit_reader.read_asciiz if fcomment == 1
+    if fhcrc == 1
+      puts "crc: " + bit_reader.get_bytes(2).bytes_to_int.to_s(16).rjust(6, "0x0000")
+    end
+    puts
+    return
   end
-  puts "0x1f 0x8b - Magic ID"
-
-  if header[2] != 0x08
-    puts "unknown compression method #{header[2].inspect}"
-    exit
-  end
-  puts "0x08 - compression method (Deflate)"
-
-  flags = header[3]
-  if flags > 31
-    puts "reserved flag bit set"
-    exit
-  end
-
-  ftext = flags[0]
-  fhcrc = flags[1]
-  fextra = flags[2]
-  fname = flags[3]
-  fcomment = flags[4]
-
-  puts
-  puts "flags:"
-  puts "#{ftext} - text file?"
-  puts "#{fhcrc} - CRC16 present?"
-  puts "#{fextra} - extra fields present?"
-  puts "#{fname} - file name set?"
-  puts "#{fcomment} - comment present?"
-  puts
-
-  puts "#{to_bytes_str header[4..7]} - time modified (#{Time.at(header[4..7].bytes_to_int)})"
-
-  puts "#{header[8]} - extra flags (2 = maximum compression, 4 = fastest)"
-  puts "#{header[9]} - OS (3 = Unix)"
-
-  if fextra == 1
-    length = bit_reader.get_bytes(2).bytes_to_int
-    puts "extra field: ", bit_reader.get_bytes(length)
-  end
-  puts "filename: ", bit_reader.read_asciiz if fname == 1
-  puts "comment: ", bit_reader.read_asciiz if fcomment == 1
-  if fhcrc == 1
-    puts "crc: " + bit_reader.get_bytes(2).bytes_to_int.to_s(16).rjust(6, "0x0000")
-  end
-  puts
+  
+  puts "not gzip; assuming raw deflate"
 end
 
 ################################################################################
@@ -460,9 +484,11 @@ if $0 == __FILE__
   
   quiet = ARGV.include?("--headers-only")
   ARGV.delete("--headers-only")
+  base64 = ARGV.include?("--base64")
+  ARGV.delete("--base64")
   
   hash_stats = %i{block_counts offset_counts}
-  bit_reader = BitReader.new ARGF
+  bit_reader = BitReader.new ARGF, base64: base64
   out_buf = String.new encoding:"ASCII-8BIT"
   stats_sum = {lit_blocks: 0, rep_blocks: 0, compressed_size: 0, uncompressed_size: 0, 
                block_counts: Hash[(0..285).map{|k| [k,0]}], offset_counts: Hash[(0..29).map{|k| [k,0]}]}

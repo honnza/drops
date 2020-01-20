@@ -1,3 +1,5 @@
+require 'set'
+
 class IntcodeNoInputException < Exception; end
 
 def run_intcode(mem, input = [])
@@ -763,10 +765,9 @@ def day23(xs, part)
   nat_prev_y = nil
   
   loop.with_index do |_, t|
-    puts "at #{t}:"
-    if packet_queues.all? &:empty?
-      puts "network idle", ""
-      return nat_prev_y if nat_data && nat_prev_y == nat_data[1]
+    if packet_queues.all?(&:empty?) && t > 0
+      return nat_prev_y if nat_prev_y == nat_data[1]
+      nat_prev_y = nat_data[1]
       packet_queues[0] << nat_data
     end
     
@@ -774,15 +775,12 @@ def day23(xs, part)
       if t == 0 || packet_queues[ip_addr].size > 0
         xy = packet_queues[ip_addr].shift
         in_pipes[ip_addr].concat(xy || [-1])
-        puts "PC #{ip_addr} received #{in_pipes[ip_addr]}"
 
         loop do
           begin
             out_addr = out_pipes[ip_addr].next
-              puts "PC #{ip_addr} sent #{[out_addr]}"
             if out_addr != -1
               out_xy = [out_pipes[ip_addr].next, out_pipes[ip_addr].next]
-              puts "PC #{ip_addr} sent #{(out_xy)}"
               packet_queues[out_addr] &.<< out_xy
             end
             if out_addr == 255
@@ -790,13 +788,73 @@ def day23(xs, part)
               nat_data = out_xy
             end
           rescue IntcodeNoInputException
-            puts "PC #{ip_addr} expects input"
             break
           end
         end
-        sleep 1
       end
     end
   end
 end
 #day23 IO::read("github/drops/aoc2019/day23.in").split(",").map(&:to_i), :b
+
+def day24a(state)
+  state = state.tr("\n", "").tr(".#", "01").reverse.to_i(2)
+  prev_states = Set.new [state]
+  loop do
+    ss = [state << 5 & 0b11111_11111_11111_11111_00000,
+          state << 1 & 0b11110_11110_11110_11110_11110,
+          state >> 1 & 0b01111_01111_01111_01111_01111,
+          state >> 5 & 0b00000_11111_11111_11111_11111]
+    ns = 0
+    (0..24).each do |bit| 
+      c = ss.map{|s| s[bit]}.sum
+      ns |= 1 << bit if c == 1 || c + state[bit] == 2
+    end
+    p ns.to_s(2).ljust(25, '0').reverse.scan(/...../)
+    return ns if prev_states.include? ns
+    prev_states << ns
+    state = ns
+  end
+end
+#day24a "#####...###..#.#....#...#"
+
+def day24b(state)
+  neighs_0 = Hash.new{|h, k| h[k] = []}
+  neighs_0[?H] = [[1, ?A], [1, ?B], [1, ?C], [1, ?D], [1, ?E]]
+  neighs_0[?L] = [[1, ?A], [1, ?F], [1, ?K], [1, ?P], [1, ?U]]
+  neighs_0[?N] = [[1, ?E], [1, ?J], [1, ?O], [1, ?T], [1, ?Y]]
+  neighs_0[?R] = [[1, ?U], [1, ?V], [1, ?W], [1, ?X], [1, ?Y]]
+  %w{A B C D E}.each {|k| neighs_0[k] << [-1, ?H]}
+  %w{A F K P U}.each {|k| neighs_0[k] << [-1, ?L]}
+  %w{E J O T Y}.each {|k| neighs_0[k] << [-1, ?N]}
+  %w{U V W X Y}.each {|k| neighs_0[k] << [-1, ?R]}
+  "ABCDFGHIKNPQRSUVWX".chars.each{|k| neighs_0[k] << [0, k.next]; neighs_0[k.next] << [0, k]}
+  "ABCDEFGIJKLNOPQRST".chars.each{|k| neighs_0[k] << [0, (k.ord+5).chr]; neighs_0[(k.ord+5).chr] << [0, k]}
+  neighs = ->((tier, tile)){neighs_0[tile].map{|dt, t| [tier + dt, t]}}
+  
+  state = (?A .. ?Y).zip(state.chars).map{|c, s| [0, c] if s == ?#}.compact
+  200.times do |t|
+    neigh_count = Hash.new{|h,k| h[k] = 0}
+    state.each{|bug| neighs[bug].each{|neigh| neigh_count[neigh] += 1}}
+    state = Set.new neigh_count.keys.select{|tile| neigh_count[tile] == 1 || neigh_count[tile] == 2 && !state.include?(tile)}
+    p [t, state.min, state.max, state.size]
+  end
+  state.size
+end
+#day24b "#####...###..#.#....#...#"
+
+def day25a(xs)
+  in_pipe = []
+  out_pipe = run_intcode(xs, in_pipe)
+  last_line = ""
+  
+  loop do
+    last_line += out_pipe.next.chr
+    if last_line[-1] == "\n"
+      puts last_line
+      in_pipe.concat gets.chars.map(&:ord) if last_line == "Command?\n"
+      last_line = ""
+    end
+  end
+end
+#day25a IO::read("github/drops/aoc2019/day25.in").split(",").map(&:to_i)

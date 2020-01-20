@@ -9,91 +9,91 @@ $chaos_mode = ARGV.include? "-c"
 default_cfg = [
   #tier 0 lands
   {type: "land", code: "ICYL", prereqs: [], name: "Icy Land"},
-  {type: "land", code: "LIVC", prereqs: [], name: "Living Cave"},
+  {type: "land", code: "LICA", prereqs: [], name: "Living Cave"},
   {type: "land", code: "DESE", prereqs: [], name: "Desert"},
   {type: "land", code: "HUNT", prereqs: [], name: "Hunting Ground"},
-  {type: "land", code: "LANE", prereqs: [], name: "Land of Eternal Motion"},
+  {type: "land", code: "LAEE", prereqs: [], name: "Land of Eternal Motion"},
   {type: "land", code: "JUNL", prereqs: [], name: "Jungle"},
-  {type: "land", code: "ALCH", prereqs: [], name: "Alchemist Lab"},
+  {type: "land", code: "ALHM", prereqs: [], name: "Alchemist Lab"},
 
   #tier 1 lands
   {type: "land", code: "HALO", prereqs: [30],         name: "Hall of Mirrors"},
   {type: "land", code: "MINF", prereqs: [30],         name: "Minefield"},
-  {type: "land", code: "PAAC", prereqs: [30],         name: "Palace"},
-  {type: "land", code: "ZEBR", prereqs: [30, "LANE"], name: "Zebra"},
-  {type: "land", code: "JELY", prereqs: [30, "ALCH"], name: "Jelly Kingdom"},
-  {type: "land", code: "REPT", prereqs: [30, "ALCH"], name: "Reptiles"},
+  {type: "land", code: "PACE", prereqs: [30],         name: "Palace"},
+  {type: "land", code: "ZEBR", prereqs: [30, "LAEE"], name: "Zebra"},
+  {type: "land", code: "JELY", prereqs: [30, "ALHM"], name: "Jelly Kingdom"},
+  {type: "land", code: "REPI", prereqs: [30, "ALHM"], name: "Reptiles"},
   #coastal/aquatic lands
   {type: "land", code: "OCEN", prereqs: [30],     name: "Ocean"},
-  {type: "land", code: "WAPD", prereqs: [30],     name: "Warped Coast"},
+  {type: "land", code: "WRPE", prereqs: [30],     name: "Warped Coast"},
   {type: "land", code: "LIFJ", prereqs: [30],     name: "Living Fjord"},
   {type: "land", code: "KRAK", prereqs: ["LIFJ"], name: "Kraken Depths"},
-  {type: "land", code: "CABB", prereqs: [30],     name: "Caribbean"},
+  {type: "land", code: "CARI", prereqs: [30],     name: "Caribbean"},
   {type: "land", code: "BROW", prereqs: [30],     name: "Brown Island"},
   {type: "land", code: "WHIR", prereqs: [30],     name: "Whirlpool"},
   {type: "land", code: "RLYE", prereqs: [60],     name: "R'Lyeh"},
-  {type: "land", code: "TEMP", prereqs: ["RLYE"], name: "Temple of Cthulhu"},
+  {type: "land", code: "TEMP", prereqs: ["RLYE"], name: "Temple of Cthulhu"}, #only needs 5 treasure
   #gravity lands
-  #FRFA / DUNO / LOSM only requre five treasure of each, but this script doesn't model that
+  #FRFA / DUNG / LOSM only requre five treasure of each, but this script doesn't model that
   {type: "land", code: "IVOR", prereqs: [30],             name: "Ivory Tower"},
   {type: "land", code: "YEIA", prereqs: ["IVOR"],         name: "Yendorian Forest"},
-  {type: "land", code: "FRFA", prereqs: ["IVOR", "LANE"], name: "Free Fall"},
-  {type: "land", code: "DUNO", prereqs: ["IVOR", "PAAC"], name: "Dungeon"},
+  {type: "land", code: "FRFA", prereqs: ["IVOR", "LAEE"], name: "Free Fall"},
+  {type: "land", code: "DUNG", prereqs: ["IVOR", "PACE"], name: "Dungeon"},
   {type: "land", code: "LOSM", prereqs: ["IVOR", "JUNL"], name: "Lost Mountain"},
 
   #tier 2 goals
   {type: "pasv", code: "100K", prereqs: [],       name: "100 kills"},
   {type: "pasv", code: "20DK", prereqs: [],       name: "20 different kills"},
-  {type: "goal", code: "SKEL", prereqs: ["PAAC"], name: "Skeleton kill"},
-  {type: "goal", code: "VIZI", prereqs: ["PAAC"], name: "Vizier kill"},
+  {type: "goal", code: "SKEL", prereqs: ["PACE"], name: "kill Skeleton"},
+  {type: "goal", code: "VIZI", prereqs: ["PACE"], name: "kill Vizier"},
   #tier 2 lands
   {type: "land", code: "DRYF", prereqs: [60],             name: "Dry Forest"},
-  {type: "land", code: "VNEY", prereqs: [60],             name: "Vineyard"},
-  {type: "land", code: "DEAD", prereqs: [60, "LIVC"],     name: "Dead Cave"},
+  {type: "land", code: "VINY", prereqs: [60],             name: "Vineyard"},
+  {type: "land", code: "DEAD", prereqs: [60, "LICA"],     name: "Dead Cave"},
   {type: "land", code: "GRAV", prereqs: ["100K"],         name: "Graveyard"},
   {type: "land", code: "HAUE", prereqs: ["GRAV"],         name: "Haunted Woods"},
   {type: "land", code: "HIVE", prereqs: [60, "100K"],     name: "Hive"},
-  {type: "land", code: "REDK", prereqs: [60, "DESE"],     name: "Red Rock Valley"},
-  {type: "land", code: "VOLC", prereqs: [60, "ALCH"],     name: "Volcanic Wasteland"},
+  {type: "land", code: "RERO", prereqs: [60, "DESE"],     name: "Red Rock Valley"},
+  {type: "land", code: "VOLC", prereqs: [60, "ALHM"],     name: "Volcanic Wasteland"},
   {type: "land", code: "DRAG", prereqs: ["20DK"],         name: "Dragon Chasms"},
   {type: "land", code: "GALA", prereqs: ["20DK"],         name: "Galapagos"},
   {type: "land", code: "OVER", prereqs: [60, "JUNL"],     name: "Overgrown Woods"},
   {type: "land", code: "CLER", prereqs: ["OVER"],         name: "Clearing"}, #only needs 5 treasure
-  {type: "land", code: "ANST", prereqs: [60],             name: "Land of Storms"},
+  {type: "land", code: "LAST", prereqs: [60],             name: "Land of Storms"},
   {type: "land", code: "BURI", prereqs: ["KRAK"],         name: "Burial Grounds"},
   {type: "land", code: "WIND", prereqs: [60],             name: "Windy Plains"},
   {type: "land", code: "BLIZ", prereqs: ["WIND", "ICYL"], name: "Blizzard"},
-  {type: "land", code: "RUIE", prereqs: ["SKEL"],         name: "Ruined City"},
-  {type: "land", code: "EMER", prereqs: [[["DRYF", "LIVC"], ["VIZI"]]], name: "Emerald Mine"},
-  {type: "land", code: "IRRD", prereqs: ["RUIE", "EMER", "GRAV"],       name: "Irradiated Field"},
+  {type: "land", code: "RUIN", prereqs: ["SKEL"],         name: "Ruined City"},
+  {type: "land", code: "EMER", prereqs: [[["DRYF", "LICA"], ["VIZI"]]], name: "Emerald Mine"},
+  {type: "land", code: "IRRD", prereqs: ["RUIN", "EMER", "GRAV"],       name: "Irradiated Field"},
 
   #Tier 3 lands
   {type: "land", code: "PRAI", prereqs: [90], name: "Prairie"},
   {type: "land", code: "BULL", prereqs: [90], name: "Bull Dash"},
-  {type: "land", code: "TERR", prereqs: [90], name: "Terracotta Army"},
+  {type: "land", code: "TRRA", prereqs: [90], name: "Terracotta Army"},
   {type: "land", code: "ROSE", prereqs: [60], name: "Rose Garden"},
   #Elementals
-  {type: "goal", code: "AIRE", prereqs: ["WIND"], name: "kill Air Elemental"},
+  {type: "goal", code: "AIRL", prereqs: ["WIND"], name: "kill Air Elemental"},
   {type: "goal", code: "WATE", prereqs: ["LIFJ"], name: "kill Water Elemental"},
-  {type: "goal", code: "EATH", prereqs: ["DEAD"], name: "kill Earth Elemental"},
+  {type: "goal", code: "EART", prereqs: ["DEAD"], name: "kill Earth Elemental"},
   {type: "goal", code: "FIEE", prereqs: ["DRAG"], name: "kill Fire Elemental"},
-  {type: "land", code: "ELEM", prereqs: %w{AIRE WATE EATH FIEE}, name: "Elemental Planes"},
+  {type: "land", code: "ELEM", prereqs: %w{AIRL WATE EART FIEE}, name: "Elemental Planes"},
   #Trolls
   {type: "goal", code: "ROCK", prereqs: [],           name: "kill Rock Troll"},
-  {type: "goal", code: "DARK", prereqs: [60, "LIVC"], name: "kill Dark Troll"},
-  {type: "goal", code: "RDTR", prereqs: [60, "DESE"], name: "kill Red Troll"},
+  {type: "goal", code: "DARK", prereqs: [60, "LICA"], name: "kill Dark Troll"},
+  {type: "goal", code: "RETL", prereqs: [60, "DESE"], name: "kill Red Troll"},
   {type: "goal", code: "STOR", prereqs: [60],         name: "kill Storm Troll"},
-  {type: "goal", code: "FOES", prereqs: [60, "JUNL"], name: "kill Forest Troll"},
+  {type: "goal", code: "FORS", prereqs: [60, "JUNL"], name: "kill Forest Troll"},
   {type: "goal", code: "FJOD", prereqs: [30],         name: "kill Fjord Troll"},
-  {type: "land", code: "TOLL", prereqs: %w{ROCK DARK RDTR STOR FOES FJOD}, name: "Trollheim"},
+  {type: "land", code: "TROL", prereqs: %w{ROCK DARK RETL STOR FORS FJOD}, name: "Trollheim"},
   #Hell
   {type: "land", code: "HELL", prereqs: [90],             name: "Hell"}, #requires 9x10 treasure
   {type: "land", code: "COCY", prereqs: ["HELL", "ICYL"], name: "Cocytus"},
-  {type: "land", code: "LNPW", prereqs: ["HELL"],         name: "Land of Power"},
+  {type: "land", code: "LAPW", prereqs: ["HELL"],         name: "Land of Power"},
   #Main quests
-  #PALQ, CAME do generate treasure, but they aren't required for HYPE.
+  #PAQU, CAME do generate treasure, but they aren't required for HYPE.
   #Counting them as goels matters exactly twice, and even then only a little.
-  {type: "goal", code: "PALQ", prereqs: ["VIZI"],         name: "Palace Quest"},
+  {type: "goal", code: "PAQU", prereqs: ["VIZI"],         name: "Palace Quest"},
   {type: "goal", code: "CAME", prereqs: ["EMER", "GRAV"], name: "Camelot Quest"}, #listed as "Camelot" in-game
   {type: "goal", code: "YEQU", prereqs: ["HELL", "GRAV"], name: "Yendor Quest"},
   {type: "goal", code: "HYPE",                            name: "Hyperstone Quest"},
