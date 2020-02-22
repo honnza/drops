@@ -39,7 +39,7 @@ when 1
     next if edges.all?
     die "node #{node_labels.values[ix]} missing an outgoing edge" if edges.any?
     candidates = node_labels.select{|k, v| node_ids[k] != ix && v == node_labels.values[ix]}.keys
-    die "cannot find match for node #{$node_labels.values[ix]} without outedges; candidates = #{candidates.inspect}" if candidates.size != 1
+    die "cannot find match for node #{node_labels.values[ix]} without outedges; candidates = #{candidates.inspect}" if candidates.size != 1
     edgeses.each{|edges| edges.map!{|edge| edge == ix ? node_ids[candidates[0]] : edge}}
   end
   

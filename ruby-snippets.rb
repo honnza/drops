@@ -168,33 +168,39 @@ def grid_sampler(h, w, torus: false, neighbor_count: 8, show: true)
   end
 end
 
-def relax_rescale(grid, strength, suppressed_modes = [])
-  fmt = lambda do |val|
+def relax_rescale(grid, strength, suppressed_modes = [->{1}])
+  fmt = lambda do |i, j, val|
+    eps = 1e-10
+    min, max = (i-1..i+1).map{|ii| (j-1..j+1).map{|jj| grid[ii][jj]}}.flatten.compact.minmax
     case val
     when nil then " " * 18
-    when 0.0 .. 0.2 then "\e[31;1m%.16f\e[0m"
-    when 0.2 .. 0.4 then "\e[33;1m%.16f\e[0m"
-    when 0.4 .. 0.6 then "\e[37;1m%.16f\e[0m"
-    when 0.6 .. 0.8 then "\e[36;1m%.16f\e[0m"
-    when 0.8 .. 1.0 then "\e[36m%.16f\e[0m"
+    when    -eps ..     eps then "\e[37;1m%.16f\e[0m"
+    when min-eps .. min+eps then "\e[31;1m%.16f\e[0m"
+    when max-eps .. max+eps then "\e[36m%.16f\e[0m"
+    when -0.5 .. 0  then "\e[33;1m%.16f\e[0m"
+    when 0 .. 0.5  then "\e[36;1m%.16f\e[0m"
     else "\e[32;1m%.16f\e[0m"
-    end % val
+    end % val &.abs
   end
   grid = grid.split(/[\n\/]/).map{|row| row.chars.map{|c|
-    {?- => 0.0, ?. => 0.5, ?+ => 1.0, ?? => rand}[c]
+    {?- => -1.0, ?. => 0.0, ?+ => 1.0, ?? => rand}[c]
   }} if grid.is_a? String
   grid.each{|row| row << nil}
   grid << []
   
-  suppressed_modes = suppressed_modes.map{|mode| mode.map{|row| row.dup}}
+  suppressed_modes = suppressed_modes.map do |mode|
+    case mode
+    when Array then mode.map{|row| row.dup}
+    when Proc 
+      (0...grid.size).map{|y| (0...grid[y].size).map{|x| grid[y][x] && mode.call(*[y, x][0...mode.arity])}}
+    end
+  end
   suppressed_modes.each do |mode|
-    avg = mode.flatten.compact.sum / mode.flatten.compact.size
-    mode.each{|row| row.map! {|val| val && val - avg}}
     norm = mode.map{|row| row.map{|val| val && val * val}}.flatten.compact.sort.sum ** 0.5
     mode.each{|row| row.map!{|val| val && val / norm}}
   end
 
-  old_grids = []
+  old_grids = Set.new
   loop.with_index do |_, t|
     energy = 0
     grid = (0 ... grid.size).map do |i|
@@ -210,7 +216,7 @@ def relax_rescale(grid, strength, suppressed_modes = [])
 
     suppression_factors = suppressed_modes.map do |mode|
       factor = (0 ... grid.size).map do |i|
-        (0 ... grid[i].size).map {|j| grid[i][j] && mode[i][j] && grid[i][j] * mode[i][j]}
+        (0 ... grid[i].size).map {|j| mode[i][j] && grid[i][j] && mode[i][j] * grid[i][j]}
       end.flatten.compact.sum
       (0 ... grid.size).each do |i|
         (0 ... grid[i].size).each do |j|
@@ -220,16 +226,25 @@ def relax_rescale(grid, strength, suppressed_modes = [])
       factor
     end
 
-    min, max = grid.flatten.compact.minmax
-    grid.each{|row| row.map!{|val| val && (val - min) / (max - min)}}
+    scale = grid.flatten.compact.minmax.map(&:abs).max
+    grid.each{|row| row.map!{|val| val &./ scale}}
 
-    grid.each{|row| puts row.map(&fmt).join(" ").rstrip}
-    puts "@#{t}"
-    puts "energy = %.16f" % [energy]
-    puts "delta_1 = %.16f" % [(1 - max + min) / strength]
-    puts "suppression factors = %p" % [suppression_factors]
-    return grid if old_grids.include? grid
-    old_grids << grid
-    sleep 0.1
+    cout = [""]
+    grid.each.with_index{|row, i| cout << row.map.with_index{|val, j| fmt[i, j, val]}.join(" ").rstrip}
+    cout << ""
+    cout << "@#{t}"
+    cout << "energy = %.16f" % [energy]
+    cout << "delta_1 = %.16f" % [(1 - scale) / strength]
+    cout << "suppression factors = %p" % [suppression_factors.map{|f| "%.1e" % f}]
+    # \e[A moves cursor up; \e[?25l hides it; \e[?25h shows it again
+    print "\e[#{cout.size}A\e[?25l" if t > 1
+    puts cout.join("\n")
+
+    r = grid.map{|row| row.map{|val| val&.round(16)}}
+    return grid.map{|row| row.map{|val| val&.round(13)}} if old_grids.include? r
+    old_grids << r
+    #sleep 0.1
   end
+ensure
+  print "\e[0m\e[?25h"
 end
