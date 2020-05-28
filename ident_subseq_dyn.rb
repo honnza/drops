@@ -310,12 +310,12 @@ if $0 == __FILE__
               when ARGV.include?("-s") then :slow
               else :normal
               end
-  show_time = ARGV.include?("-t")
   verbose_mode = ARGV.include?("-v")
   letter_only = ARGV.include?("-w")
   tiebreak = ARGV.include?("--all") ? :all : :first
   count_uniq = ARGV.include?("--count-uniq")
   reverse_regex = ARGV.include?("--rer")
+  show_stats = ARGV.include?("--stats")
 
   suppress_output = false
   
@@ -332,7 +332,9 @@ if $0 == __FILE__
   calc = RecursiveSubseqCalc.new(calc, animation_mode: animation_mode, slow_mode: slow_mode, verbose: verbose_mode) if recursive_mode
                 
   results = []
-  td_cummulative = 0
+  time_delta_sum = 0
+  res_delta_sum = 0
+
   loop do
     print suppress_output ? "> " : ">"
     str = $stdin.gets.chomp
@@ -356,9 +358,11 @@ if $0 == __FILE__
       old_results = results
       results = calc.results
       time_delta = Time.now - time_start
-      td_cummulative += time_delta
+      time_delta_sum += time_delta
             
-      calc.strs.zip(old_results, results).sort.each do |in_str, old_str, new_str|
+      results_changed = calc.strs.zip(old_results, results).filter{|_, old_str, new_str| old_str != new_str}.sort
+      res_delta_sum += results_changed.count
+      results_changed.each do |in_str, old_str, new_str|
         if old_str == new_str
           nil
         elsif tiebreak == :all && old_str && new_str[0].length == old_str[0].length
@@ -375,7 +379,11 @@ if $0 == __FILE__
       cwidth = counts.max.to_s.size
       scale = (IO.console.winsize[1] - cwidth - 2) / Math.log(counts.max + 1)
       counts.each{|c| puts c.to_s.ljust(cwidth + 1) + "*" * (Math.log(c + 1) * scale)}
-      puts "%.6fs (%.6fs)" % [td_cummulative, time_delta] if show_time
+
+      if show_stats
+        puts "%.6fs (%.6fs)" % [time_delta_sum, time_delta]
+        puts "%d (%d) results" % [res_delta_sum, results_changed.count]
+      end
       
       print "\a" if time_delta > 60
     end

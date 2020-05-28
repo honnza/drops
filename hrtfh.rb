@@ -23,6 +23,8 @@ default_cfg = [
   {type: "land", code: "ZEBR", prereqs: [30, "LAEE"], name: "Zebra"},
   {type: "land", code: "JELY", prereqs: [30, "ALHM"], name: "Jelly Kingdom"},
   {type: "land", code: "REPI", prereqs: [30, "ALHM"], name: "Reptiles"},
+  {type: "land", code: "FROG", prereqs: ["REPI", "ZEBR", "JELY"], name: "Frog Park"}, #any 24 of the three types
+  {type: "land", code: "WETA", prereqs: [30],     name: "Wetlands"},
   #coastal/aquatic lands
   {type: "land", code: "OCEN", prereqs: [30],     name: "Ocean"},
   {type: "land", code: "WRPE", prereqs: [30],     name: "Warped Coast"},
@@ -44,8 +46,8 @@ default_cfg = [
   #tier 2 goals
   {type: "pasv", code: "100K", prereqs: [],       name: "100 kills"},
   {type: "pasv", code: "20DK", prereqs: [],       name: "20 different kills"},
-  {type: "goal", code: "SKEL", prereqs: ["PACE"], name: "kill Skeleton"},
-  {type: "goal", code: "VIZI", prereqs: ["PACE"], name: "kill Vizier"},
+  {type: "kill", code: "SKEL", prereqs: ["PACE"], name: "kill Skeleton"},
+  {type: "kill", code: "VIZI", prereqs: ["PACE"], name: "kill Vizier"},
   #tier 2 lands
   {type: "land", code: "DRYF", prereqs: [60],             name: "Dry Forest"},
   {type: "land", code: "VINY", prereqs: [60],             name: "Vineyard"},
@@ -58,33 +60,34 @@ default_cfg = [
   {type: "land", code: "DRAG", prereqs: ["20DK"],         name: "Dragon Chasms"},
   {type: "land", code: "GALA", prereqs: ["20DK"],         name: "Galapagos"},
   {type: "land", code: "OVER", prereqs: [60, "JUNL"],     name: "Overgrown Woods"},
-  {type: "land", code: "CLER", prereqs: ["OVER"],         name: "Clearing"}, #only needs 5 treasure
+  {type: "land", code: "CLEA", prereqs: ["OVER"],         name: "Clearing"}, #only needs 5 treasure
   {type: "land", code: "LAST", prereqs: [60],             name: "Land of Storms"},
   {type: "land", code: "BURI", prereqs: ["KRAK"],         name: "Burial Grounds"},
   {type: "land", code: "WIND", prereqs: [60],             name: "Windy Plains"},
   {type: "land", code: "BLIZ", prereqs: ["WIND", "ICYL"], name: "Blizzard"},
   {type: "land", code: "RUIN", prereqs: ["SKEL"],         name: "Ruined City"},
-  {type: "land", code: "EMER", prereqs: [[["DRYF", "LICA"], ["VIZI"]]], name: "Emerald Mine"},
-  {type: "land", code: "IRRD", prereqs: ["RUIN", "EMER", "GRAV"],       name: "Irradiated Field"},
+  {type: "land", code: "EMER", prereqs: [[["DRYF", "LICA"], ["VIZI"]]],   name: "Emerald Mine"},
+  {type: "land", code: "IRRD", prereqs: ["RUIN", "EMER", "GRAV"],         name: "Irradiated Field"},
+  {type: "land", code: "ECLC", prereqs: ["ICYL", "LAST", "PACE", "DEAD"], name: "Eclectic City"},
 
   #Tier 3 lands
   {type: "land", code: "PRAI", prereqs: [90], name: "Prairie"},
   {type: "land", code: "BULL", prereqs: [90], name: "Bull Dash"},
   {type: "land", code: "TRRA", prereqs: [90], name: "Terracotta Army"},
-  {type: "land", code: "ROSE", prereqs: [60], name: "Rose Garden"},
+  {type: "land", code: "ROSE", prereqs: [90], name: "Rose Garden"},
   #Elementals
-  {type: "goal", code: "AIRL", prereqs: ["WIND"], name: "kill Air Elemental"},
-  {type: "goal", code: "WATE", prereqs: ["LIFJ"], name: "kill Water Elemental"},
-  {type: "goal", code: "EART", prereqs: ["DEAD"], name: "kill Earth Elemental"},
-  {type: "goal", code: "FIEE", prereqs: ["DRAG"], name: "kill Fire Elemental"},
+  {type: "kill", code: "AIRL", prereqs: ["WIND"], name: "kill Air Elemental"},
+  {type: "kill", code: "WATE", prereqs: ["LIFJ"], name: "kill Water Elemental"},
+  {type: "kill", code: "EART", prereqs: ["DEAD"], name: "kill Earth Elemental"},
+  {type: "kill", code: "FIEE", prereqs: ["DRAG"], name: "kill Fire Elemental"},
   {type: "land", code: "ELEM", prereqs: %w{AIRL WATE EART FIEE}, name: "Elemental Planes"},
   #Trolls
-  {type: "goal", code: "ROCK", prereqs: [],           name: "kill Rock Troll"},
-  {type: "goal", code: "DARK", prereqs: [60, "LICA"], name: "kill Dark Troll"},
-  {type: "goal", code: "RETL", prereqs: [60, "DESE"], name: "kill Red Troll"},
-  {type: "goal", code: "STOR", prereqs: [60],         name: "kill Storm Troll"},
-  {type: "goal", code: "FORS", prereqs: [60, "JUNL"], name: "kill Forest Troll"},
-  {type: "goal", code: "FJOD", prereqs: [30],         name: "kill Fjord Troll"},
+  {type: "kill", code: "ROCK", prereqs: [],           name: "kill Rock Troll"},
+  {type: "kill", code: "DARK", prereqs: [60, "LICA"], name: "kill Dark Troll"},
+  {type: "kill", code: "RETL", prereqs: [60, "DESE"], name: "kill Red Troll"},
+  {type: "kill", code: "STOR", prereqs: [60],         name: "kill Storm Troll"},
+  {type: "kill", code: "FORS", prereqs: [60, "JUNL"], name: "kill Forest Troll"},
+  {type: "kill", code: "FJOD", prereqs: [30],         name: "kill Fjord Troll"},
   {type: "land", code: "TROL", prereqs: %w{ROCK DARK RETL STOR FORS FJOD}, name: "Trollheim"},
   #Hell
   {type: "land", code: "HELL", prereqs: [90],             name: "Hell"}, #requires 9x10 treasure
@@ -92,7 +95,7 @@ default_cfg = [
   {type: "land", code: "LAPW", prereqs: ["HELL"],         name: "Land of Power"},
   #Main quests
   #PAQU, CAME do generate treasure, but they aren't required for HYPE.
-  #Counting them as goels matters exactly twice, and even then only a little.
+  #Counting them as goals matters exactly twice, and even then only a little.
   {type: "goal", code: "PAQU", prereqs: ["VIZI"],         name: "Palace Quest"},
   {type: "goal", code: "CAME", prereqs: ["EMER", "GRAV"], name: "Camelot Quest"}, #listed as "Camelot" in-game
   {type: "goal", code: "YEQU", prereqs: ["HELL", "GRAV"], name: "Yendor Quest"},
@@ -101,11 +104,8 @@ default_cfg = [
 
 if $chaos_mode
   default_cfg.reject! do |land| 
-    puts "gotta unlock chaos mode first!"
-    quit
-    %w{}.include? land[:code]
+    %w{PAQU CARI BROW WHIR IVOR YEIA FREE DUNG LOSM HAUE CLEA CAME}.include? land[:code]
   end
-  default_cfg.find{|land| land[:code] == "MM"}[:prereqs] = ["DYF", "VV"]
 end
 
 default_cfg.last[:prereqs] = default_cfg.select{|land| land[:type] == "land"}.map{|land| land[:code]}
@@ -118,18 +118,21 @@ class Land
     @name = name
     @survivals = 0.0
     @deaths = 0.0
+    @state = "todo"
   end
   attr_reader :code, :name, :type
-  attr_accessor :survivals, :deaths, :done
+  attr_accessor :survivals, :deaths, :state
 
   def land?; @type == "land"; end
-  def passive?; @type == "pasv"; end
+  def passive?; @type == "pasv" || (@type == "kill" && $chaos_mode) || @state == "skip"; end
+  def done?; @state == "done"; end
 
   def priority
+    is_first = self == $lands.first && !@chaos_mode
     if $heaven_mode
-      [Rational(@survivals + 1, @deaths + @survivals + 1)]
+      [is_first ? 0 : 1, Rational(@survivals + 1, @deaths + @survivals + 1)]
     else
-      [Rational(@deaths + 1, @deaths + @survivals + 1)]
+      [is_first ? 0 : 1, Rational(@deaths + 1, @deaths + @survivals + 1)]
     end
   end
 
@@ -143,10 +146,12 @@ class Land
   private def prereq_sat prereq
     case prereq
     when Numeric then $lands_done >= prereq / 10
-    when String then $lands.find{|l| l.code == prereq}.done rescue raise ArgumentError, "unknown land or goal #{prereq}"
+    when String then $lands.find{|l| l.code == prereq}.done?
     when Array then prereq.any?{|q| prereqs_sat q}
-    else raise ArgumentError, "unknown prerequisite type #{prereq.Class.name}"
+    else raise ArgumentError, "unknown prerequisite type #{prereq.Class.name} of #{code}"
     end
+  rescue
+    raise ArgumentError, "unknown prerequisite #{prereq.inspect} of #{code}"
   end
 
   # generate a list of lands that contribute to unlocking this land (and haven't been completed yet)
@@ -161,13 +166,13 @@ class Land
     pres = @prereqs.flatten
     spec_pres = pres.select{|pre| pre.is_a? String}
                     .map{|pre| $lands.find{|land| land.code == pre}}
-                    .reject(&:done)
+                    .reject(&:done?)
 
     # sort specific prerequisites using the global land priority
     $lands & spec_pres
   end
   
-  def to_s; "#{name}(#{code})#{" (undefeated)" if survivals == 0}"; end
+  def to_s; "#{name}(#{code})#{" \e[36m(undefeated)\e[0m" if survivals == 0}"; end
 end
 
 def p_stats
@@ -205,8 +210,13 @@ $lands = [$lands[0]] + $lands[1..-1].sort_by{|land|[land.priority, rand]}
 $lands_done = 0
 
 def restart
-  $lands.each{|land| land.done = false; land.survivals *= 0.9; land.deaths *= 0.9}
-  $lands = [$lands[0]] + $lands[1..-1].sort_by{|land|[land.priority, rand]}
+  $lands.each do |land|
+     land.survivals += 1 if land.done?
+     land.state = "todo"
+     land.survivals *= 0.9
+     land.deaths *= 0.9
+  end
+  $lands.sort_by!{|land|[land.priority, rand]}
   $lands_done = 0
 end
 
@@ -214,21 +224,25 @@ p_stats
 puts "", "welcome to HyperRogue trainer from #{$heaven_mode ? "heaven" : "hell"}#{", chaos mode" if $chaos_mode}." + 
      " We'll try to kill you as #{$heaven_mode ? "late" : "soon"} as possible. Type 'help' for the list of commands.", ""
 loop do
-  if !$chaos_mode && !$lands.first.done
+  $lands_done = $lands.count{|land| land.land? && land.done?}
+
+  if !$chaos_mode && !$lands.first.done?
     puts "You start in the #{$lands.first}. Type \"survived #{$lands.first.code}\" after collecting ten treasure."
-  elsif $lands.all? &:done
+  elsif $lands.all? &:done?
     puts "You have completed the goals in every land except the crossroads. All that is left to do is to hoard the hyperstones."
   else
-    puts $lands.reject(&:done).map(&:code).join(" ")
-    stack = [{for: nil, prereqs: $lands.reject(&:done)}]
+    puts $lands.reject(&:done?).map(&:code).join(" ")
+    stack = [{for: nil, prereqs: $lands.reject(&:done?)}]
     loop do
       stack.pop while stack.last[:prereqs].empty?
       land = stack.last[:prereqs].pop
-      if land.passive?
-        puts "#{land} is awaiting completion"
-      elsif land.unlocked?
-        puts "#{land} is unlocked."
-        break
+      if land.unlocked?
+        if land.passive?
+          puts "\e[32m#{land} \e[32mis awaiting completion\e[0m"
+        else
+          puts "#{land} is unlocked."
+          break
+        end
       else
         prereqs = land.suggest_prereqs
         puts "#{stack.map{|h|h[:for]&.code}.join(" > ")} > #{land.code} > #{plist prereqs.map &:code}"
@@ -242,22 +256,19 @@ loop do
 
   begin
     case $stdin.gets.chomp
-    when /survived (.+)/i
+    when /(?:sr|survived) (.+)/i
       land = $lands.find{|land| land.name.casecmp($1) == 0 || land.code.casecmp($1) == 0}
-      land.survivals += 1
-      $lands_done += 1 if land.land?
-      land.done = true
-    when /skip (.+)/i
+      land.state = "done"
+    when /(?:kp|skip) (.+)/i
       land = $lands.find{|land| land.name.casecmp($1) == 0 || land.code.casecmp($1) == 0}
-      $lands_done += 1 if land.land?
-      land.done = true
-    when /died in (.+)/i
+      land.state = "skip"
+    when /(?:ii|died in) (.+)/i
       land = $lands.find{|land| land.name.casecmp($1) == 0 || land.code.casecmp($1) == 0}
-      land.survivals -= 1 if land.done
+      land.state = "todo"
       land.deaths += 1
       restart
       p_stats
-    when /died en-route/i
+    when /ee|died en-route/i
       restart
       p_stats
     when /quit/i

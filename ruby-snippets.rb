@@ -97,13 +97,13 @@ def digitwise_sum(b)
   f = Proc.new{|x, y| (x + y) % b + (x < b && y < b ? 0 : f[x/b, y/b] * b)}
 end
 
-x = generate_group(rand(144), x=[*0..143].shuffle, &digitwise_sum(12))
+# x = generate_group(rand(144), x=[*0..143].shuffle, &digitwise_sum(12))
 
-#x=[*0..99].shuffle; x.each_slice(20).map{|x| puts x.join " "}
-puts x.map{|x|(x/12).to_s(12)}.join; puts x.map{|x|(x%12).to_s(12)}.join
-#x.map{|e|puts e;g=gets; x<< g+e.to_s if g[/./]}
+# #x=[*0..99].shuffle; x.each_slice(20).map{|x| puts x.join " "}
+# puts x.map{|x|(x/12).to_s(12)}.join; puts x.map{|x|(x%12).to_s(12)}.join
+# #x.map{|e|puts e;g=gets; x<< g+e.to_s if g[/./]}
 
-h="";loop{h+=rand(2).to_s;print h;h="" if gets[/./]}
+# h="";loop{h+=rand(2).to_s;print h;h="" if gets[/./]}
 
 def inversion_count_histogram(n)
   r = Hash.new {|h, k| h[k] = 0}
@@ -168,26 +168,57 @@ def grid_sampler(h, w, torus: false, neighbor_count: 8, show: true)
   end
 end
 
-def relax_rescale(grid, strength, suppressed_modes = [->{1}])
-  fmt = lambda do |i, j, val|
-    eps = 1e-10
-    min, max = (i-1..i+1).map{|ii| (j-1..j+1).map{|jj| grid[ii][jj]}}.flatten.compact.minmax
-    case val
-    when nil then " " * 18
-    when    -eps ..     eps then "\e[37;1m%.16f\e[0m"
-    when min-eps .. min+eps then "\e[31;1m%.16f\e[0m"
-    when max-eps .. max+eps then "\e[36m%.16f\e[0m"
-    when -0.5 .. 0  then "\e[33;1m%.16f\e[0m"
-    when 0 .. 0.5  then "\e[36;1m%.16f\e[0m"
-    else "\e[32;1m%.16f\e[0m"
-    end % val &.abs
-  end
+def outercalate(str, scale = 1)
+  outercalate_line = ->x{" #{x.join} ".gsub(/(.)(?=(.))/){$1 * scale + (($1 + $2) == "  " ? " " : ".")}[1...-1].chars}
+  ary = str.split(%r[[\n\/]]).map(&:chars)
+  ary.map! &outercalate_line
+  ary = ary.transpose
+  ary.map! &outercalate_line
+  ary = ary.transpose
+  ary.map(&:join).join("\n")
+end
+
+def intercalate(str, scale = 1)
+  intercalate_line = ->x{" #{x.join} ".gsub(/(.)(?=(.))/){$1 * scale + (($1 + $2) =~ / / ? " " : ".")}[1...-1].chars}
+  ary = str.split(%r[[\n\/]]).map(&:chars)
+  ary.map! &intercalate_line
+  ary = ary.transpose
+  ary.map! &intercalate_line
+  ary = ary.transpose
+  ary.map(&:join).join("\n")
+end
+
+def upscale(str, n=2)
+  upscale_line = ->x{x.flat_map{|x| [x]*n}}
+  ary = str.split(%r[[\n\/]]).map(&:chars)
+  ary.map! &upscale_line
+  ary = ary.transpose
+  ary.map! &upscale_line
+  ary = ary.transpose
+  ary.map(&:join).join("\n")
+end
+
+require "io/console"
+def relax_rescale(grid, f: 0.1, n: :n4, s: [])
+  strength = f; neighborhood = n; suppressed_modes = s.dup
   grid = grid.split(/[\n\/]/).map{|row| row.chars.map{|c|
     {?- => -1.0, ?. => 0.0, ?+ => 1.0, ?? => rand}[c]
   }} if grid.is_a? String
-  grid.each{|row| row << nil}
-  grid << []
+  precision = IO.console.winsize[1] / grid.map(&:length).max - 3
+  precision = 16 if precision > 16
+
+  fmt = lambda do |i, j, val|
+    eps = 1e-10
+    case val
+    when nil then " " * (precision + 2)
+    when    -eps ..     eps then "\e[37;1m%.*f\e[0m"
+    when -1 .. 0  then "\e[38;2;255;#{(255*(1+val)).round};0m%.*f\e[0m"
+    when  0 .. 1  then "\e[38;2;0;#{(255*(1-val)).round};255m%.*f\e[0m"
+    else "\e[32;1m%.*f\e[0m"
+    end % [precision, val&.abs]
+  end
   
+  suppressed_modes << ->{1}
   suppressed_modes = suppressed_modes.map do |mode|
     case mode
     when Array then mode.map{|row| row.dup}
@@ -200,13 +231,24 @@ def relax_rescale(grid, strength, suppressed_modes = [->{1}])
     mode.each{|row| row.map!{|val| val && val / norm}}
   end
 
+  neighborhood = case neighborhood
+    when :n4 then [[-1, 0], [0, -1], [0, 1], [1, 0]]
+    when :n8 then [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]
+    when :n_knight then [[-2, -1], [-2, 1], [-1, 2], [1, 2], [2, 1], [2, -1], [1, -2], [-1, -2]]
+    else neighborhood
+  end
+
+  neighborhood.map{|_, j| j.abs}.max.times{grid.each{|row| row << nil}}
+  neighborhood.map{|i, _| i.abs}.max.times{grid << []}
+
   old_grids = Set.new
+  prev_frame = nil
   loop.with_index do |_, t|
     energy = 0
     grid = (0 ... grid.size).map do |i|
       (0 ... grid[i].size).map &lambda{|j|
         return nil if grid[i][j].nil?
-        delta = [[-1, 0], [0, -1], [0, 1], [1, 0]].map do |di, dj|
+        delta = neighborhood.map do |di, dj|
           grid[i+di][j+dj] - grid[i][j] if grid[i+di] && grid[i+di][j+dj]
         end.compact.sort.sum
         energy += delta.abs
@@ -229,22 +271,138 @@ def relax_rescale(grid, strength, suppressed_modes = [->{1}])
     scale = grid.flatten.compact.minmax.map(&:abs).max
     grid.each{|row| row.map!{|val| val &./ scale}}
 
-    cout = [""]
-    grid.each.with_index{|row, i| cout << row.map.with_index{|val, j| fmt[i, j, val]}.join(" ").rstrip}
-    cout << ""
-    cout << "@#{t}"
-    cout << "energy = %.16f" % [energy]
-    cout << "delta_1 = %.16f" % [(1 - scale) / strength]
-    cout << "suppression factors = %p" % [suppression_factors.map{|f| "%.1e" % f}]
-    # \e[A moves cursor up; \e[?25l hides it; \e[?25h shows it again
-    print "\e[#{cout.size}A\e[?25l" if t > 1
-    puts cout.join("\n")
+    r = [energy, strength]
 
-    r = grid.map{|row| row.map{|val| val&.round(16)}}
-    return grid.map{|row| row.map{|val| val&.round(13)}} if old_grids.include? r
+    if(t == 0 || Time.now - prev_frame > 0.1 || old_grids.include?(r))
+      cout = [""]
+      grid.each.with_index{|row, i| cout << row.map.with_index{|val, j| fmt[i, j, val]}.join(" ").rstrip}
+      cout << ""
+      cout << "@#{t}"
+      cout << "energy = %.16f" % [energy]
+      cout << "delta_1 = %.16f" % [(1 - scale) / strength]
+      # cout << "suppression factors = %p" % [suppression_factors.map{|f| "%.1e" % f}]
+      # \e[A moves cursor up; \e[?25l hides it; \e[?25h shows it again
+      cout << "\e[#{cout.size}A\e[?25l" unless old_grids.include? r
+      print cout.join("\n")
+	  
+	  return nil if scale < 1e-10
+      return grid.map{|row| row.map{|val| val&.round(13)}} if old_grids.include? r
+      prev_frame = Time.now
+    end
     old_grids << r
-    #sleep 0.1
   end
 ensure
-  print "\e[0m\e[?25h"
+  print "\e[0m\e[?25h\n"
+end
+
+def foo(x, max_modes = nil)
+  # generate channels
+  xs = x.split(/[\/\n]/)
+  modes = []
+  accepted_modes = []
+  while accepted_modes.count < (max_modes || 3)
+    modes << relax_rescale(x, n: :n4, s: modes)
+	break if modes.last.nil?
+    dot = xs.zip(modes.last).map do |cs, ms|
+      cs.chars.zip(ms).map{|c, m|m.nil? ? 0 : m * {"-" => -1, "+" => 1, "." => 0, "?" => rand}.fetch(c, c)}
+    end.flatten.sum
+	len = modes.last.map{|ms| ms.map{|m| m &.** 2}}.flatten.compact.sort.sum ** 0.5
+	
+    puts "mode #{accepted_modes.size + 1} strength = #{dot} / #{len} = #{dot / len}", "---"
+    sleep 2
+    accepted_modes << [dot / len, accepted_modes.size + 1, modes.last] if dot.abs > 1e-7
+  end
+
+  accepted_modes.sort.reverse.each{|strength, ix, _| p [strength, ix]}
+  
+  # transpose into pixels
+  g, r, b = (max_modes.nil? ? accepted_modes : accepted_modes.max(3)).map(&:last)
+  plan = (0 ... r.size).map do |i|
+    (0 ... r[i].size).map do |j|
+      if r[i][j]
+        [i, j] + [r, g, b].map {|c| [(c[i][j]*128+128).floor, 255].min}
+      end
+    end
+  end.flatten(1).compact
+  bitmap = r.map{|ri| " " * ri.size}
+  plan.each{|i, j, _, _, _| bitmap[i][j] = "."}
+
+  # including pixel coordinates in the metric to add a little bit of spatial consistency
+  d1 = -> x, y {x[2..4].zip(y[2..4]).map{|cx, cy| (cx - cy).abs}.sum}
+  d2 = -> x, y {x[2..4].zip(y[2..4]).map{|cx, cy| (cx - cy) ** 2}.sum ** 0.5}
+
+#  # nearest neighbor heuristic from all sources
+#  todo = plan
+#  plan = todo.map do |first|
+#    plan = [first]
+#    todo_rest = todo.dup
+#    todo_rest.delete first
+#    until todo_rest.empty?
+#      el = todo_rest.min_by{|el| d2[plan.last, el]}
+#      plan << el
+#      todo_rest.delete el
+#    end
+#    plan
+#  end.min_by{|plan| plan.each_cons(2).map{|x, y| d2[x, y]}.sum}
+
+  # 2.5-opt: flip strands and move individual nodes
+  [d2, d1].each do |d|
+    loop do
+      prev_plan = plan.dup
+      (0 .. plan.length - 2).each do |lix|
+        (lix + 2 .. plan.length).each do |rix|
+          dol = lix == 0 ? 0 : d[plan[lix - 1], plan[lix]]
+          dor = rix == plan.length ? 0 : d[plan[rix - 1], plan[rix]]
+          dnl = lix == 0 ? 0 : d[plan[lix - 1], plan[rix - 1]]
+          dnr = rix == plan.length ? 0 : d[plan[lix], plan[rix]]
+          if dol + dor > dnl + dnr
+            plan = plan[0 ... lix] + plan[lix ... rix].reverse + plan[rix ...]
+            puts "flipped [#{lix} ... #{rix}]; saved #{dol + dor - dnl - dnr} points"
+          end
+        end
+      end
+      (0 ... plan.length).each do |elix|
+        (0 .. plan.length).each do |gapix|
+          next if (elix - gapix).abs < 2
+          dol = elix == 0 ? 0 : d[plan[elix - 1], plan[elix]]
+          dor = elix == plan.length - 1 ? 0 : d[plan[elix], plan[elix + 1]]
+          dog = gapix == 0 || gapix == plan.length ? 0 : d[plan[gapix - 1], plan[gapix]]
+          dnl = gapix == 0 ? 0 : d[plan[gapix - 1], plan[elix]]
+          dnr = gapix == plan.length ? 0 : d[plan[elix], plan[gapix]]
+          dng = elix == 0 || elix == plan.length - 1 ? 0 : d[plan[elix - 1], plan[elix + 1]]
+          if dol + dor + dog > dnl + dnr + dng
+            plan = plan.dup
+            plan.insert(gapix, plan[elix])
+            plan.delete_at(elix > gapix ? elix + 1 : elix)
+            puts "moved [#{elix}] to #{gapix}; saved #{dol + dor + dog - dnl - dnr - dng} points"
+          end
+        end
+      end
+      break if prev_plan == plan
+      puts "---"
+    end
+  end
+
+  # display the results
+  plan.chunk{|el| el[2..4]}.each do |rgb, els|
+    puts [("#{els.count}x" if els.count > 1),rgb.inspect].compact.join " "
+    els.each{|el| bitmap[el[0]][el[1]] = "o"}
+    puts *bitmap
+    els.each{|el| bitmap[el[0]][el[1]] = "@"}
+    gets
+  end
+end
+
+def bisect(min, max, &fn)
+  mid = (min+max)/2
+  case
+  when mid == min || mid == max || yield(mid) == 0
+    mid
+  when yield(min) * yield(mid) < 0
+    bisect(min, mid, &fn)
+  when yield(mid) * yield(max) < 0
+    bisect(mid, max, &fn)
+  else
+    raise ArgumentError, "cannot bisect: " + [min, max].inspect
+  end
 end
