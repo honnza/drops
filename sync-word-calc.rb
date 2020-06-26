@@ -24,11 +24,11 @@ when 0
   avoids.map!{|a| alphabet.index a}
   targets = targets ? targets.map{|a| alphabet.index a} : 0
 when 1
-  node_labels = Hash[ARGF.take_while{|line| line !~ /^\#$/}.map{|line| line.match(/(\S+) (.*)/)[1..2]}]
+  node_labels = Hash[ARGF.take_while{|line| line.chomp !~ /^\#$/}.map{|line| line.chomp.match(/(\S+) (.*)/)[1..2]}]
   node_ids = Hash[node_labels.keys.each_with_index.to_a]
   edgeses = [Array.new(node_ids.size), Array.new(node_ids.size)]
   ARGF.each_line do |line|
-    line =~ /(\S+) (\S+) (.*)/
+    line.chomp =~ /(\S+) (\S+) (.*)/
     die "unknown edge label #{$3.inspect} from #{node_labels[$1]} to #{node_labels[$2]}" unless $3 == "0" || $3 == "1"
     die "multiple #{$3} edges from #{node_labels[$1]}" if edgeses[$3.to_i][node_ids[$1]]
     edgeses[$3.to_i][node_ids[$1]] = node_ids[$2]

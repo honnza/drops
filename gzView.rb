@@ -410,8 +410,8 @@ def define_more(scan_to)
           orig_puts[line]
           break if line.include? NEW_STR
         end
-      when "\n" then orig_puts[Fiber.yield]
-      else orig_puts["key pressed: #{key}"]
+      when "\n", "\r" then orig_puts[Fiber.yield]
+      else orig_puts["key pressed: #{key.inspect}"]
       end
     end
   end

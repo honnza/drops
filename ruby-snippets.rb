@@ -202,20 +202,22 @@ require "io/console"
 def relax_rescale(grid, f: 0.1, n: :n4, s: [])
   strength = f; neighborhood = n; suppressed_modes = s.dup
   grid = grid.split(/[\n\/]/).map{|row| row.chars.map{|c|
-    {?- => -1.0, ?. => 0.0, ?+ => 1.0, ?? => rand}[c]
+    {?- => -1.0, ?. => 0.0, ?+ => 1.0, ?? => rand, ?e => rand / 1e10}[c]
   }} if grid.is_a? String
   precision = IO.console.winsize[1] / grid.map(&:length).max - 3
   precision = 16 if precision > 16
+  (puts "warning: precision = #{precision}"; precision = 1) if precision < 1
 
   fmt = lambda do |i, j, val|
-    eps = 1e-10
+    logval = Math.log10(val.abs) / -10 if val
     case val
     when nil then " " * (precision + 2)
-    when    -eps ..     eps then "\e[37;1m%.*f\e[0m"
-    when -1 .. 0  then "\e[38;2;255;#{(255*(1+val)).round};0m%.*f\e[0m"
-    when  0 .. 1  then "\e[38;2;0;#{(255*(1-val)).round};255m%.*f\e[0m"
+    when -1 .. 0  then "\e[38;2;255;#{(255*(1+val)).round};#{(255*logval).round}m%.*f\e[0m"
+    when  0 .. 1  then "\e[38;2;#{(255*logval).round};#{(255*(1-val)).round};255m%.*f\e[0m"
     else "\e[32;1m%.*f\e[0m"
     end % [precision, val&.abs]
+  rescue
+    "\e[32;1m%.*f\e[0m" % [precision, val&.abs]
   end
   
   suppressed_modes << ->{1}
@@ -286,7 +288,10 @@ def relax_rescale(grid, f: 0.1, n: :n4, s: [])
       print cout.join("\n")
 	  
 	  return nil if scale < 1e-10
-      return grid.map{|row| row.map{|val| val&.round(13)}} if old_grids.include? r
+      return {
+	    mode: grid.map{|row| row.map{|val| val&.round(13)}},
+		delta_1: (1 - scale) / strength
+	  } if old_grids.include? r
       prev_frame = Time.now
     end
     old_grids << r
@@ -295,72 +300,71 @@ ensure
   print "\e[0m\e[?25h\n"
 end
 
-def foo(x, max_modes = nil)
+def foo(x, limit = nil, n: :n4, f: 0.1, grid: nil)
   # generate channels
   xs = x.split(/[\/\n]/)
   modes = []
   accepted_modes = []
-  while accepted_modes.count < (max_modes || 3)
-    modes << relax_rescale(x, n: :n4, s: modes)
-	break if modes.last.nil?
-    dot = xs.zip(modes.last).map do |cs, ms|
-      cs.chars.zip(ms).map{|c, m|m.nil? ? 0 : m * {"-" => -1, "+" => 1, "." => 0, "?" => rand}.fetch(c, c)}
+  loop do  
+    modes << relax_rescale(x, n: n, s: modes.map{|x| x[:mode]}, f: f)
+	break if modes.last.nil? || limit.is_a?(Float) && modes.last[:delta_1] >= limit
+
+    dot = xs.zip(modes.last[:mode]).map do |cs, ms|
+      cs.chars.zip(ms).map{|c, m|m.nil? ? 0 : m * {"-" => -1, "+" => 1, "." => 0, "?" => rand, "e" => 0}.fetch(c, c)}
     end.flatten.sum
-	len = modes.last.map{|ms| ms.map{|m| m &.** 2}}.flatten.compact.sort.sum ** 0.5
+	len = modes.last[:mode].map{|ms| ms.map{|m| m &.** 2}}.flatten.compact.sort.sum ** 0.5
 	
-    puts "mode #{accepted_modes.size + 1} strength = #{dot} / #{len} = #{dot / len}", "---"
-    sleep 2
-    accepted_modes << [dot / len, accepted_modes.size + 1, modes.last] if dot.abs > 1e-7
+	if dot.abs > 1e-7 || limit
+      puts "mode #{accepted_modes.size + 1} strength = #{dot} / #{len} = #{dot / len}", "---"
+      accepted_modes << [dot / len, accepted_modes.size + 1, modes.last[:mode]]
+	else
+	  puts "rejected mode: dot product = #{dot}"
+    end
+	puts "strongest modes: #{accepted_modes.sort.reverse.map{|_, ix, _| ix}}" if limit
+	sleep [dot / len * 2, 1].max
+	break if (limit.nil? || limit.is_a?(Integer)) && accepted_modes.size >= (limit || 3)
   end
 
-  accepted_modes.sort.reverse.each{|strength, ix, _| p [strength, ix]}
+  accepted_modes.sort.reverse.each{|strength, ix, _| p [strength, ix]} if limit
+  sleep 5 if limit
   
   # transpose into pixels
-  g, r, b = (max_modes.nil? ? accepted_modes : accepted_modes.max(3)).map(&:last)
-  plan = (0 ... r.size).map do |i|
-    (0 ... r[i].size).map do |j|
-      if r[i][j]
-        [i, j] + [r, g, b].map {|c| [(c[i][j]*128+128).floor, 255].min}
+  g, r, b = (limit.nil? ? accepted_modes : accepted_modes.max(3)).map(&:last)
+  plan = (0 ... xs.size).map do |i|
+    (0 ... xs[i].size).map do |j|
+      if xs[i][j] != ' '
+        [i, j] + [r, g, b].map {|c| [c.nil? ? 127 : (c[i][j]*128+128).floor, 255].min}
       end
     end
   end.flatten(1).compact
-  bitmap = r.map{|ri| " " * ri.size}
-  plan.each{|i, j, _, _, _| bitmap[i][j] = "."}
 
-  # including pixel coordinates in the metric to add a little bit of spatial consistency
   d1 = -> x, y {x[2..4].zip(y[2..4]).map{|cx, cy| (cx - cy).abs}.sum}
   d2 = -> x, y {x[2..4].zip(y[2..4]).map{|cx, cy| (cx - cy) ** 2}.sum ** 0.5}
+  d16 = -> x, y {x[2..4].zip(y[2..4]).map{|cx, cy| 
+    high, low = (cx - cy).abs.divmod(16)
+	4 * high + [low, 20 - low].min
+  }.sum}
 
-#  # nearest neighbor heuristic from all sources
-#  todo = plan
-#  plan = todo.map do |first|
-#    plan = [first]
-#    todo_rest = todo.dup
-#    todo_rest.delete first
-#    until todo_rest.empty?
-#      el = todo_rest.min_by{|el| d2[plan.last, el]}
-#      plan << el
-#      todo_rest.delete el
-#    end
-#    plan
-#  end.min_by{|plan| plan.each_cons(2).map{|x, y| d2[x, y]}.sum}
+  # nearest neighbor heuristic from all sources biased for space-continuity
+  todo = plan
+  plan = todo.map do |first|
+    plan = [first]
+    todo_rest = todo.dup
+    todo_rest.delete first
+    until todo_rest.empty?
+      el = todo_rest.filter do |el|
+	    plan.any?{|el2| el[0..1].zip(el2).all?{|x, y| (x - y).abs <= 1}}
+	  end.min_by{|el| d16[plan.last, el]}
+      plan << el
+      todo_rest.delete el
+    end
+    plan
+  end.min_by{|plan| plan.each_cons(2).map{|x, y| d2[x, y]}.sum}
 
   # 2.5-opt: flip strands and move individual nodes
-  [d2, d1].each do |d|
+  [d16].each do |d|
     loop do
       prev_plan = plan.dup
-      (0 .. plan.length - 2).each do |lix|
-        (lix + 2 .. plan.length).each do |rix|
-          dol = lix == 0 ? 0 : d[plan[lix - 1], plan[lix]]
-          dor = rix == plan.length ? 0 : d[plan[rix - 1], plan[rix]]
-          dnl = lix == 0 ? 0 : d[plan[lix - 1], plan[rix - 1]]
-          dnr = rix == plan.length ? 0 : d[plan[lix], plan[rix]]
-          if dol + dor > dnl + dnr
-            plan = plan[0 ... lix] + plan[lix ... rix].reverse + plan[rix ...]
-            puts "flipped [#{lix} ... #{rix}]; saved #{dol + dor - dnl - dnr} points"
-          end
-        end
-      end
       (0 ... plan.length).each do |elix|
         (0 .. plan.length).each do |gapix|
           next if (elix - gapix).abs < 2
@@ -378,16 +382,31 @@ def foo(x, max_modes = nil)
           end
         end
       end
+	  (puts "---"; redo) if prev_plan != plan
+      (0 .. plan.length - 2).reverse_each do |lix|
+        (lix + 2 .. plan.length).each do |rix|
+          dol = lix == 0 ? 0 : d[plan[lix - 1], plan[lix]]
+          dor = rix == plan.length ? 0 : d[plan[rix - 1], plan[rix]]
+          dnl = lix == 0 ? 0 : d[plan[lix - 1], plan[rix - 1]]
+          dnr = rix == plan.length ? 0 : d[plan[lix], plan[rix]]
+          if dol + dor > dnl + dnr
+            plan = plan[0 ... lix] + plan[lix ... rix].reverse + plan[rix ...]
+            puts "flipped [#{lix} ... #{rix}]; saved #{dol + dor - dnl - dnr} points"
+          end
+        end
+      end
       break if prev_plan == plan
       puts "---"
     end
   end
 
   # display the results
+  bitmap = xs.map{|x| " " * x.size}
+  plan.each{|i, j, _, _, _| bitmap[i][j] = grid && (i % grid == 1 || j % grid == 1) ? "," : "."}
   plan.chunk{|el| el[2..4]}.each do |rgb, els|
     puts [("#{els.count}x" if els.count > 1),rgb.inspect].compact.join " "
     els.each{|el| bitmap[el[0]][el[1]] = "o"}
-    puts *bitmap
+    bitmap.each{|row| puts row.gsub(/./, '\& ')}
     els.each{|el| bitmap[el[0]][el[1]] = "@"}
     gets
   end
