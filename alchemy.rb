@@ -1,4 +1,5 @@
 require 'io/console'
+require 'stringio'
 require 'json'
 require 'zlib'
 require 'set'

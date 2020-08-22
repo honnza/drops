@@ -3,6 +3,17 @@ require "json"
 require "zlib"
 require "set"
 
+def getkey
+   buf = ""
+	 IO.console.raw{|c| loop{buf += c.read_nonblock(1) rescue break}}
+	 buf
+end
+
+KEY_UP = "\e[A"
+KEY_DOWN = "\e[B"
+KEY_LEFT = "\e[C"
+KEY_RIGHT = "\e[D"
+
 class WordPredictor
   def initialize(goods = [], bads = [])
 	@samples_by_letters = Hash.new{|h, k| h[k] = {good: Set.new, bad: Set.new}}
@@ -42,5 +53,7 @@ class WordPredictor
 end
 
 class WordGrid
+	def self.input
 	
+	end
 end
