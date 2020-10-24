@@ -22,16 +22,18 @@ case ARGV.length
 when 0
   edgeses = [gets.chomp, gets.chomp].map{|line| line.chars.map{|c|alphabet.index c}}
   avoids.map!{|a| alphabet.index a}
-  targets = targets ? targets.map{|a| alphabet.index a} : 0
+  targets = targets ? targets.map{|a| alphabet.index a} : [0]
 when 1
   node_labels = Hash[ARGF.take_while{|line| line.chomp !~ /^\#$/}.map{|line| line.chomp.match(/(\S+) (.*)/)[1..2]}]
   node_ids = Hash[node_labels.keys.each_with_index.to_a]
   edgeses = [Array.new(node_ids.size), Array.new(node_ids.size)]
   ARGF.each_line do |line|
     line.chomp =~ /(\S+) (\S+) (.*)/
-    die "unknown edge label #{$3.inspect} from #{node_labels[$1]} to #{node_labels[$2]}" unless $3 == "0" || $3 == "1"
-    die "multiple #{$3} edges from #{node_labels[$1]}" if edgeses[$3.to_i][node_ids[$1]]
-    edgeses[$3.to_i][node_ids[$1]] = node_ids[$2]
+    $3.chars.each do |c|
+      die "unknown edge label #{c.inspect} from #{node_labels[$1]} to #{node_labels[$2]}" unless c == "0" || c == "1"
+      die "multiple #{c} edges from #{node_labels[$1]}" if edgeses[c.to_i][node_ids[$1]]
+      edgeses[c.to_i][node_ids[$1]] = node_ids[$2]
+    end
   end
   
   
@@ -44,7 +46,7 @@ when 1
   end
   
   avoids = node_labels.select{|k, v| avoids.include? v}.map{|k, v| node_ids[k]}
-  targets = targets ? node_labels.select{|k, v| targets.include? v}.map{|k, v| node_ids[k]} : 0
+  targets = targets ? node_labels.select{|k, v| targets.include? v}.map{|k, v| node_ids[k]} : [0]
 else
   die "don't know what to do with #{ARGV.length} arguments"
 end
@@ -78,7 +80,9 @@ final_state = catch :done do
 end
 
 if final_state
+  puts
   puts final_state.paths.sort
+  puts "#{final_state.paths.count} shortest words, length #{final_state.paths.first.length}"
 else
   puts "sync word not found"
 end

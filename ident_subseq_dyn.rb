@@ -230,6 +230,7 @@ class IdentSubseqCalc
   def result ix; result_with_index(ix).first; end
   def results_with_index; @result_cache = (0...strs.count).map{|i| result_with_index i}; end
   def results; results_with_index.map &:first; end
+  def verbose_out; nil; end
 end
 
 ################################################################################
@@ -239,7 +240,7 @@ class RecursiveSubseqCalc
     @opts = opts
     @slow_mode = opts[:slow_mode]
     @animation_mode = opts[:animation_mode]
-    @verbose = opts[:verbose]
+    @verbose_out = nil
     @top = calc
   end
   
@@ -248,6 +249,7 @@ class RecursiveSubseqCalc
   
   def results
     strs = @slow_mode == :normal ? @top.results : @top.strs
+    @verbose_out = []
     loop do
       calc = @top.dup_empty.push_all(strs)
       (puts "", strs; sleep 0.1) if @animation_mode
@@ -259,11 +261,11 @@ class RecursiveSubseqCalc
         chpos_min = changes.map{|_, (_, ix)| ix}.min
         changes.filter!{|_, (_, ix)| ix == chpos_min}
         changes = Hash[changes]
-        p [changes.size, chpos_min, chlen_max]  if @verbose
+        @verbose_out << [changes.size, chpos_min, chlen_max] unless changes.empty?
         strs.map{|str| changes.include?(str) ? changes[str][0] : str}
       when :slow
         ml = strs.map(&:length).max
-        p [changes.size, chlen_max]  if @verbose
+        @verbose_out << [changes.size, ml]
         strs.map.with_index{|str, ix| str.length == ml ? calc.result(ix) : str}
       else calc.results
       end
@@ -271,6 +273,8 @@ class RecursiveSubseqCalc
       strs = r
     end
   end
+
+  def verbose_out; @verbose_out.dup; end
 end
 
 ################################################################################
@@ -383,7 +387,10 @@ if $0 == __FILE__
       if show_stats
         puts "%.6fs (%.6fs)" % [time_delta_sum, time_delta]
         puts "%d (%d) results" % [res_delta_sum, results_changed.count]
+        puts "%d steps" % [calc.verbose_out.length] if calc.verbose_out
       end
+      
+      p calc.verbose_out if verbose_mode
       
       print "\a" if time_delta > 60
     end

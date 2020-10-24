@@ -6,6 +6,7 @@ USE_GEO = ARGV.include?("--use-geo") || ARGV.include?("-g")
 USE_LENGTHS = ARGV.include?("--use-length") || ARGV.include?("-l")
 CONTINUITY = ARGV.include?("--continuity") || ARGV.include?("-c")
 PRIM = ARGV.include?("--prim") || ARGV.include?("-p")
+MULTIMST = ARGV.include?("--multi-mst")
 ARGV.replace([])
 
 Dest = Struct.new :ix, :name, :size, :indegree, :outdegree, :lat, :lon do
@@ -36,6 +37,7 @@ class PairEnum
   
   include Enumerable
   def each(&block)
+    p caller
     return each_entry unless block_given?
     @elems.each{|x| @elems.each{|y| yield [x, y] unless x == y || @exclusions.include?([x, y])}}
   end
@@ -71,11 +73,9 @@ def geo_dist(from, to)
   ))
 end
 
-puts "To gather the desired data, please adjust the following line of Javascript, then run at the appropriate page:"
-puts %`copy(JSON.stringify($(".sortable tbody tr").get().map(row => [row.cells[<NAME_COL>], row.cells[<SIZE_COL>]].map(e => e.textContent))))`
 
-input = gets("\n\n").chomp.each_line.map(&:chomp)
-dests = JSON.parse(input, symbolize_names: true) rescue input
+input = gets("\n\n")
+dests = JSON.parse(input, symbolize_names: true) rescue input.chomp.lines.map(&:chomp)
 dests.map!.with_index do |row, ix|
    row = [row, 1] if row.is_a?(String)
    row = {name: row[0], size: row[1]} if row.is_a?(Array)
@@ -91,13 +91,13 @@ dests.map!.with_index do |row, ix|
    end
    
    if USE_GEO
-     row[:lat] = dms_to_radians row[:lat]
-     row[:lon] = dms_to_radians row[:lon]
+     row[:lat] = dms_to_radians row[:lat] if row[:lat].is_a? String
+     row[:lon] = dms_to_radians row[:lon] if row[:lon].is_a? String
    end
    Dest.new(ix, row[:name], row[:size], 0r, 0r, row[:lat], row[:lon])
  end
  
- puts JSON.pretty_generate(dests)
+ puts JSON.generate(dests.map(&:to_hash))
 
 last_dest = dests[0]
 
@@ -130,6 +130,11 @@ until pairs.empty?
       y.size * (y.outdegree + 1) / (y.indegree + 1) ** 2
     end
   end
+  if MULTIMST && pair_lengths[pair[0].ix][pair[1].ix] < 40000
+    pair_lengths = Array.new(dests.size){|i|Array.new(dests.size){|j| i == j ? 0 : 40000}}
+    puts "MST done"
+    redo
+  end
   pair[0].outdegree += 1
   pair[1].indegree += 1
   pairs.delete pair
@@ -145,7 +150,7 @@ until pairs.empty?
   puts "from: #{pair[0]} to: #{pair[1]}#{geo_dist_str}#{length_str}"
   
   if USE_LENGTHS || USE_GEO    
-    len_pair = USE_LENGTHS ? (print "path length? (km)"; gets.to_r) : geo_dist(*pair)
+    len_pair = USE_LENGTHS ? (print "path length? (km) "; gets.to_r) : geo_dist(*pair)
     
     (0...dests.size).each{|i|(0...dests.size).each{|j|
       len_ij = pair_lengths[i][pair[0].ix] + len_pair + pair_lengths[pair[1].ix][j]

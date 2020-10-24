@@ -104,7 +104,7 @@ default_cfg = [
 
 if $chaos_mode
   default_cfg.reject! do |land| 
-    %w{PAQU CARI BROW WHIR IVOR YEIA FREE DUNG LOSM HAUE CLEA CAME}.include? land[:code]
+    %w{PAQU CARI BROW WHIR IVOR YEIA FRFA DUNG LOSM HAUE CLEA CAME}.include? land[:code]
   end
 end
 
@@ -120,19 +120,19 @@ class Land
     @deaths = 0.0
     @state = "todo"
   end
-  attr_reader :code, :name, :type
+  attr_reader :code, :name, :type, :prereqs
   attr_accessor :survivals, :deaths, :state
 
   def land?; @type == "land"; end
   def passive?; @type == "pasv" || (@type == "kill" && $chaos_mode) || @state == "skip"; end
   def done?; @state == "done"; end
+  def colored_code; "\e[1;#{unlocked? ? 37 : 30}m#{code}\e[0m"; end
 
   def priority
-    is_first = self == $lands.first && !@chaos_mode
     if $heaven_mode
-      [is_first ? 0 : 1, Rational(@survivals + 1, @deaths + @survivals + 1)]
+      Rational(@survivals + 1, @deaths + @survivals + 1)
     else
-      [is_first ? 0 : 1, Rational(@deaths + 1, @deaths + @survivals + 1)]
+      Rational(@deaths + 1, @deaths + @survivals + 1)
     end
   end
 
@@ -162,14 +162,28 @@ class Land
   # if there is a multiple-choice prerequisite, its options' contributing lands are unified
   # The interaction between multiple-choice prerequisites and numeric prerequisites
   #   is yet to be specified
-  def suggest_prereqs
-    pres = @prereqs.flatten
-    spec_pres = pres.select{|pre| pre.is_a? String}
-                    .map{|pre| $lands.find{|land| land.code == pre}}
-                    .reject(&:done?)
+  def suggest_prereqs; suggest_with_score(prereqs).last; end
 
-    # sort specific prerequisites using the global land priority
-    $lands & spec_pres
+  private def suggest_with_score pres
+    score = 0
+    r = []
+    pres.each do |pre|
+      case pre
+      when Numeric
+        score = pre / 10 if score < pre / 10
+      when String 
+        ix = $lands.find_index{|land| land.code == pre}
+        unless $lands[ix].done?
+         score = ix if score < ix
+         r << $lands[ix]
+        end
+      when Array
+        opt_score, opt_r = pre.map{|opt| suggest_with_score opt}.min
+        score = opt_score if score < opt_score
+        r |= opt_r
+      end
+    end
+    [score, r]
   end
   
   def to_s; "#{name}(#{code})#{" \e[36m(undefeated)\e[0m" if survivals == 0}"; end
@@ -178,7 +192,7 @@ end
 def p_stats
   $lands.reject(&:passive?).each do |land|
     puts "%22s: %f deaths, %f survivals, %f %s" %
-      [land.name, land.deaths, land.survivals, land.priority.last, $heaven_mode ? "survival rate" : "death rate"]
+      [land.name, land.deaths, land.survivals, land.priority, $heaven_mode ? "survival rate" : "death rate"]
   end
 end
 
@@ -191,7 +205,7 @@ def plist(list, pre_sg="", pre_pl="", post_sg="", post_pl="")
   end
 end
 
-$lands = default_cfg.map{|land_data| Land.new land_data}
+$lands = default_cfg.map{|land_data| Land.new **land_data}
 
 begin
   open "hrtfh#{".chaos" if $chaos_mode}.log" do |file|
@@ -206,9 +220,6 @@ rescue Errno::ENOENT
   puts "hrfth#{".chaos" if $chaos_mode}.log not found; starting anew", ""
 end
 
-$lands = [$lands[0]] + $lands[1..-1].sort_by{|land|[land.priority, rand]}
-$lands_done = 0
-
 def restart
   $lands.each do |land|
      land.survivals += 1 if land.done?
@@ -216,10 +227,27 @@ def restart
      land.survivals *= 0.9
      land.deaths *= 0.9
   end
-  $lands.sort_by!{|land|[land.priority, rand]}
   $lands_done = 0
+  sort_lands
 end
 
+def sort_lands
+   $lands.sort_by!.with_index do |land, ix|
+     [(!$chaos_mode && ix == 0) ? 0 : 1, -land.priority, rand]
+   end
+  loop do
+    puts $lands.map(&:colored_code).join(" ")
+    new_lands = $lands.sort_by.with_index do |land, ix_land|
+      ix_l = $lands.find_index{|l| l == land || l.suggest_prereqs.include?(land)}
+      [ix_l, ix_l == ix_land ? 1 : 0, ix_land]
+    end
+    break if $lands == new_lands
+    $lands = new_lands
+  end
+end
+
+$lands_done = 0
+sort_lands
 p_stats
 puts "", "welcome to HyperRogue trainer from #{$heaven_mode ? "heaven" : "hell"}#{", chaos mode" if $chaos_mode}." + 
      " We'll try to kill you as #{$heaven_mode ? "late" : "soon"} as possible. Type 'help' for the list of commands.", ""
@@ -231,8 +259,8 @@ loop do
   elsif $lands.all? &:done?
     puts "You have completed the goals in every land except the crossroads. All that is left to do is to hoard the hyperstones."
   else
-    puts $lands.reject(&:done?).map(&:code).join(" ")
-    stack = [{for: nil, prereqs: $lands.reject(&:done?)}]
+    puts $lands.reject(&:done?).map(&:colored_code).join(" ")
+    stack = [{for: nil, prereqs: $lands.reject(&:done?).reverse}]
     loop do
       stack.pop while stack.last[:prereqs].empty?
       land = stack.last[:prereqs].pop
@@ -244,7 +272,7 @@ loop do
           break
         end
       else
-        prereqs = land.suggest_prereqs
+        prereqs = $lands & land.suggest_prereqs
         puts "#{stack.map{|h|h[:for]&.code}.join(" > ")} > #{land.code} > #{plist prereqs.map &:code}"
         stack << {for: land, prereqs: prereqs}
       end
