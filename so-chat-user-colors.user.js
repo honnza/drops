@@ -53,9 +53,9 @@ var main = function(showDebug){
       // The search result page also has a CHAT.RoomUsers objecct, but it's empty.
       var users = CHAT.RoomUsers.all && CHAT.RoomUsers.all();
       if(!users || (users.count && users.count() === 0)){
-        usrHash = {};
+        var usrHash = {};
         $(".username a").each(function(){
-          urlParts = this.pathname.split("/").slice(-2);
+          var urlParts = this.pathname.split("/").slice(-2);
           usrHash[urlParts[1]] = {id: +urlParts[0]}
         });
         users = Object.values(usrHash);
@@ -113,12 +113,12 @@ var main = function(showDebug){
       }
     setTimeout(refresh, 100);
   }
-  
+
   // color picker functionality
-  
+
   function uvw2rgb(u, v, w = 32){
     // (0, 1) should point in hat(2, -1, -1); (1, _) should point in hat(1, 1, 1)
-    var cu = w * Math.SQRT1_2 * Math.cos(v); 
+    var cu = w * Math.SQRT1_2 * Math.cos(v);
     var l = w * Math.sqrt(1/3) * Math.sin(v) + 224;
     return [
       l + cu * Math.cos(u),
@@ -126,17 +126,17 @@ var main = function(showDebug){
       l + cu * Math.cos(u + 2/3 * Math.PI),
     ];
   }
-  
+
   function rgb2uvw(r, g, b){
     var l = (r + g + b) / 3;
     var w = Math.hypot(r - 224, g - 224, b - 224);
     return [
-      Math.atan2(g - b, Math.sqrt(3) * (r - l)), 
+      Math.atan2(g - b, Math.sqrt(3) * (r - l)),
       Math.asin(Math.sqrt(3) * (l - 224) / w),
       w
     ];
   }
-  
+
   new MutationObserver(evts => {
     evts.forEach(evt => {
       evt.addedNodes.forEach(node => {
@@ -152,34 +152,34 @@ var main = function(showDebug){
       });
     })
   }).observe(document.getElementById("chat-body"), {childList: true});
-  
+
   function fillUserPopup(node){
-    userId = +$("a[href ^= '/users']", node).prop("href").match(/\d+/);
+    var userId = +$("a[href ^= '/users']", node).prop("href").match(/\d+/);
     CHAT.RoomUsers.get(userId).then(user => {
       $("<div><a href = '#'>set user color</a></div>").appendTo(node)
       .find("a").on("click", function(e){
         e.preventDefault();
-        popup = popUp(e.pageX, e.pageY).addClass("picker-popup").css({width: "auto"});
-        
+        var popup = popUp(e.pageX, e.pageY).addClass("picker-popup").css({width: "auto"});
+
         var canvas = pickerCanvas(360, 180);
         $(canvas).on("mousedown mousemove", e => {
           if(e.buttons == 1){
             $crosshair.css({left: e.offsetX, top: e.offsetY});
           }
         }).appendTo(popup).wrap($("<div>").css({position: "relative", marginTop: 20}));
-        
+
         // image taken from https://uxwing.com/target-focus-line-icon/
         var $crosshair = $("<img src = 'https://raw.githubusercontent.com/honnza/drops/master/target-focus-line.svg'>").css({
           position: "absolute", width: 17, height: 17, margin: -8, pointerEvents: "none"
         }).insertBefore(canvas);
-        [u, v] = rgb2uvw(...user.color);
+        var [u, v] = rgb2uvw(...user.color);
         console.log(user.color, [u, v]);
         if(u < 0) u += 2 * Math.PI;
         $crosshair.css({
           left: u * canvas.width / (2 * Math.PI),
           top: (v / Math.PI + 0.5) * canvas.height
         });
-        
+
         $("<div><a>set color</a></div>").appendTo(popup)
         .find("a").on("click", function(e){
           e.preventDefault();
@@ -190,7 +190,7 @@ var main = function(showDebug){
           );
           node.fadeOut(() => node.remove());
         });
-        
+
         $("<div><a>enable dynamic coloration</a></div>").appendTo(popup)
         .find("a").on("click", function(e){
           e.preventDefault();
@@ -200,7 +200,7 @@ var main = function(showDebug){
       });
     });
   }
-  
+
   function pickerCanvas(width, height){
     var canvas = document.createElement("canvas");
     canvas.width = width;
