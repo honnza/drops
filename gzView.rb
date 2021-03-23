@@ -17,6 +17,27 @@ end
 class String
   def display_length; gsub(/\e.*?m/,"").length; end
   def ljust_d(len); self + " " * [len - display_length, 0].max; end
+  def bytes_to_glyphs
+    r = ""
+    prev_high = false
+    self.each_byte do |b|
+      if b <= 127
+        r += "\e[27m" if prev_high
+        prev_high = false
+        c = b
+      else
+        r += "\e[7m" if !prev_high
+        prev_high = true
+        c = 255 - b
+      end
+      r += case c when 0x00 .. 0x1F then (0x2400 + c).chr(Encoding::UTF_8)
+                  when 0x20         then "\u2423"
+                  when 0x21 .. 0x7E then c.chr(Encoding::UTF_8)
+                  when 0x7F         then "\u2421"
+                  end
+    end
+    r + (prev_high ? "\e[27m" : "")
+  end
 end
 
 class BitReader
@@ -206,7 +227,7 @@ def name_block k
               R15-16 R17-18 R19-22 R23-26 R27-30 R31-34 R35-42 R43-50 R51-58 R59-66
               R67-82 R83-98 R99-114 R115-130 R131-162 R163-194 R195-226 R227-257 R258}
   case k
-  when 0 .. 255 then k.chr.inspect
+  when 0 .. 255 then k.chr.bytes_to_glyphs
   when 256 then "END"
   when 257..285 then rnames[k-257]
   end
@@ -214,8 +235,8 @@ end
 
 def name_offset k
   "O%s" % %w{1 2 3 4 5-6 7-8 9-12 13-16 17-24 25-32
-             33-48 49-64 65-96 97-128 129-192 193-256 257-384 385-512 513-768 769-1024
-             1025-1536 1537-2048 2049-3072 3073-4096 4097-6144 6145-8192 8193-12288 12289-16384 16385-24576 24577-32768}[k]
+              33-48 49-64 65-96 97-128 129-192 193-256 257-384 385-512 513-768 769-1024
+              1025-1536 1537-2048 2049-3072 3073-4096 4097-6144 6145-8192 8193-12288 12289-16384 16385-24576 24577-32768}[k]
 end
 
 def read_lencodes bit_reader, len_codes, demand
@@ -307,21 +328,21 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
     hlit = bit_reader.get_bits(5).bits_to_int + 257
     hdist = bit_reader.get_bits(5).bits_to_int + 1
     hclen = bit_reader.get_bits(4).bits_to_int + 4
-    
+
     unless quiet
       puts "#{hlit} literal/length codes"
       puts "#{hdist} distance codes"
       puts "#{hclen} code length codes"
     end
-    
+
     code_lengths = hclen.times.map{bit_reader.get_bits(3).bits_to_int}
     code_lengths << 0 until code_lengths.size == 19
     code_lengths.sort_by!.with_index{|_, i| code_lengths_for[i]}
     puts "code lengths: " + code_lengths.inspect unless quiet
-    
+
     len_codes = HuffmanCode.from_lengths(code_lengths)
     puts "length codes: " + len_codes.codes.inspect unless quiet
-    
+
     puts
     lit_lengths = read_lencodes bit_reader, len_codes, hlit
     litlen_codes = HuffmanCode.from_lengths lit_lengths
@@ -342,7 +363,7 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
       puts word_wrap digest_hash offset_codes.codes, value_transform: method(:name_offset)
     end
   end  
-  
+
   puts "#" * 80 unless quiet
   loop do
     at = out_buf.size
@@ -351,7 +372,7 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
     if code < 256
       out_buf << code.chr
       puts "@#{at} #{key} - #{code} - #{NEW_STR if stats[:block_counts][code] == 1}"\
-           "literal #{code.chr.inspect[1 .. -2]}".ljust_d(50) + code.chr.inspect[1 .. -2] unless quiet
+            "literal #{code.chr.bytes_to_glyphs}".ljust_d(50) + code.chr.bytes_to_glyphs unless quiet
       stats[:lit_blocks] += 1
     elsif code == 256
       puts "@#{at} #{key} - #{code} - end of block" unless quiet
@@ -366,7 +387,7 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
       okey, ocode = bit_reader.read_huffman offset_codes
       stats[:offset_counts][ocode] += 1
       oextra = bit_reader.get_bits oextra_bits[ocode]
-      
+
       length = extra_offset[code-257] + extra.bits_to_int
       offset = oextra_offset[ocode] + oextra.bits_to_int
 
@@ -382,11 +403,11 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
       buf_after = [buf_end + 5, out_buf.length].min
       unless quiet
         puts ("@#{at} #{key} #{extra.join} #{okey} #{oextra.join} - repeat" +
-             " #{NEW_STR if stats[:block_counts][code] == 1}#{length}" +
-             " #{NEW_STR if stats[:offset_counts][ocode] == 1}#{offset}").ljust_d(45) +
-             "\e[31m#{out_buf[buf_before ... buf_start].inspect[1 .. -2].gsub(" ", "•")}\e[0m" +
-             "#{out_buf[buf_start ... buf_end].inspect[1 .. -2].gsub(" ", "•")}" +
-             "\e[31m#{out_buf[buf_end ... buf_after].inspect[1 .. -2].gsub(" ", "•")}\e[0m"
+              " #{NEW_STR if stats[:block_counts][code] == 1}#{length}" +
+              " #{NEW_STR if stats[:offset_counts][ocode] == 1}#{offset}").ljust_d(45) +
+              "\e[31m#{out_buf[buf_before ... buf_start].bytes_to_glyphs}\e[0m" +
+              "#{out_buf[buf_start ... buf_end].bytes_to_glyphs}" +
+              "\e[31m#{out_buf[buf_end ... buf_after].bytes_to_glyphs}\e[0m"
       end
       stats[:rep_blocks] += 1
     end
@@ -411,6 +432,7 @@ def define_more(scan_to)
           break if line.include? NEW_STR
         end
       when "\n", "\r" then orig_puts[Fiber.yield]
+      when "\x03" then exit
       else orig_puts["key pressed: #{key.inspect}"]
       end
     end
@@ -477,7 +499,8 @@ if $0 == __FILE__
       scan_done ||= strs.any?{|str| check_scan(str, scan_to)}
       sleep 0.1 if scan_done
     end
-  elsif ARGV.include?("--more")
+  end
+  if ARGV.include?("--more")
     ARGV.delete("--more")
     define_more(scan_to)
   end
@@ -491,14 +514,14 @@ if $0 == __FILE__
   bit_reader = BitReader.new ARGF, base64: base64
   out_buf = String.new encoding:"ASCII-8BIT"
   stats_sum = {lit_blocks: 0, rep_blocks: 0, compressed_size: 0, uncompressed_size: 0, 
-               block_counts: Hash[(0..285).map{|k| [k,0]}], offset_counts: Hash[(0..29).map{|k| [k,0]}]}
+                block_counts: Hash[(0..285).map{|k| [k,0]}], offset_counts: Hash[(0..29).map{|k| [k,0]}]}
 
   show_parse_header bit_reader
   last_cs = 0
   last_ucs = 0
   loop do
     stats = {lit_blocks: 0, rep_blocks: 0, 
-             block_counts: Hash[(0..285).map{|k| [k,0]}], offset_counts: Hash[(0..29).map{|k| [k,0]}]}
+              block_counts: Hash[(0..285).map{|k| [k,0]}], offset_counts: Hash[(0..29).map{|k| [k,0]}]}
     last = show_parse_block bit_reader, out_buf, stats, quiet: quiet, extrapolate: extrapolate
     stats[:compressed_size] = ARGF.pos - last_cs; last_cs = ARGF.pos
     stats[:uncompressed_size] = out_buf.size - last_ucs; last_ucs = out_buf.size

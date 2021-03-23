@@ -70,7 +70,14 @@ class IdentSubseqCalc
         end
         case @tiebreak
         when :first
-          enum.each{|c|puts "#{highlight_diff(str, c.join, "")}\e[1A" if rand < 1e-4; y.yield c.join}
+          t_prev = nil
+          enum.each do |c|
+            if !t_prev || Time.now - t_prev > 0.1
+              puts "#{highlight_diff(str, c.join, "")}\e[1A"
+              t_prev = Time.now
+            end
+            y.yield c.join
+          end
         when :all
           y.yield enum.to_a.map(&:join)#.uniq.sort
         else
@@ -82,8 +89,8 @@ class IdentSubseqCalc
 
   attr_reader :strs
   def initialize(letter_only: false, tiebreak: :first, slow_mode: :normal, sort: nil,
-                 count_uniq: false, redundant_mode: false, min_chars: 0,
-                 recursive_mode: false, reverse_regex: false, verbose: false)
+                  count_uniq: false, redundant_mode: false, min_chars: 0,
+                  recursive_mode: false, reverse_regex: false, verbose: false)
     @strs = []
     @enums = []
     @tiebreak = tiebreak
@@ -242,18 +249,20 @@ class RecursiveSubseqCalc
     @animation_mode = opts[:animation_mode]
     @verbose_out = nil
     @top = calc
+    @res = nil
   end
   
   def strs; @top.strs; end
-  def push str; @top.push str; end
+  def push str; @top.push(str) && (@res = nil; true); end
   
   def results
+    return @res if @res
     strs = @slow_mode == :normal ? @top.results : @top.strs
     @verbose_out = []
     loop do
       calc = @top.dup_empty.push_all(strs)
       (puts "", strs; sleep 0.1) if @animation_mode
-      r = case @slow_mode
+      case @slow_mode
       when :super_slow
         changes = strs.zip(calc.results_with_index).filter{|x, (y, _)| x != y}
         chlen_max = changes.map{|x, _| x.length}.max
@@ -262,15 +271,20 @@ class RecursiveSubseqCalc
         changes.filter!{|_, (_, ix)| ix == chpos_min}
         changes = Hash[changes]
         @verbose_out << [changes.size, chpos_min, chlen_max] unless changes.empty?
-        strs.map{|str| changes.include?(str) ? changes[str][0] : str}
+        @res = strs.map{|str| changes.include?(str) ? changes[str][0] : str}
       when :slow
         ml = strs.map(&:length).max
-        @verbose_out << [changes.size, ml]
-        strs.map.with_index{|str, ix| str.length == ml ? calc.result(ix) : str}
-      else calc.results
+        @res = strs.map.with_index{|str, ix| str.length == ml ? calc.result(ix) : str}
+        @verbose_out << [@res.zip(strs).count{|x, y| x != y}, ml]
+      else
+        @res = calc.results
+        count_hsh = strs.map(&:length).group_by(&:itself)
+        @verbose_out <<  (@redundant_mode ? 2 : 1 .. count_hsh.keys.max).map do |k|
+          count_hsh.fetch(k, []).length
+        end
       end
-      return r if r == strs
-      strs = r
+      return @res if @res == strs
+      strs = @res
     end
   end
 
@@ -290,7 +304,7 @@ def highlight_diff in_str, new_str, old_str
   
   in_str.chars.map.with_index do |c, ix|
     color = case [new_ixes.include?(ix), old_ixes.include?(ix)]
-            when [false, false] then "30;1"   # light gray
+            when [false, false] then "30;1" # light gray
             when [false, true]  then "31;1" # bright red
             when [true, false]  then "32;1" # bright green
             when [true, true]   then "33;1" # bright yellow
@@ -331,8 +345,8 @@ if $0 == __FILE__
   end
 
   calc = IdentSubseqCalc.new(tiebreak: tiebreak, letter_only: letter_only, sort: sort, count_uniq: count_uniq,
-                             slow_mode: slow_mode, redundant_mode: redundant_mode, min_chars: min_chars, 
-                             recursive_mode: recursive_mode, reverse_regex: reverse_regex, verbose: verbose_mode)
+                              slow_mode: slow_mode, redundant_mode: redundant_mode, min_chars: min_chars, 
+                              recursive_mode: recursive_mode, reverse_regex: reverse_regex, verbose: verbose_mode)
   calc = RecursiveSubseqCalc.new(calc, animation_mode: animation_mode, slow_mode: slow_mode, verbose: verbose_mode) if recursive_mode
                 
   results = []
@@ -363,7 +377,7 @@ if $0 == __FILE__
       results = calc.results
       time_delta = Time.now - time_start
       time_delta_sum += time_delta
-            
+
       results_changed = calc.strs.zip(old_results, results).filter{|_, old_str, new_str| old_str != new_str}.sort
       res_delta_sum += results_changed.count
       results_changed.each do |in_str, old_str, new_str|
@@ -377,7 +391,7 @@ if $0 == __FILE__
           puts "%p => %p | %s" % [old_str || "", new_str, highlight_diff(in_str, new_str, old_str || "")]
         end
       end
- 
+
       count_hsh = results.map{|e| tiebreak == :all ? e[0].length : e.length}.group_by(&:itself)
       counts = (count_hsh.keys.min .. count_hsh.keys.max).map{|k|count_hsh.fetch(k, []).length}
       cwidth = counts.max.to_s.size
@@ -389,10 +403,18 @@ if $0 == __FILE__
         puts "%d (%d) results" % [res_delta_sum, results_changed.count]
         puts "%d steps" % [calc.verbose_out.length] if calc.verbose_out
       end
-      
-      p calc.verbose_out if verbose_mode
-      
-      print "\a" if time_delta > 60
+
+      if verbose_mode && calc.verbose_out
+        if slow_mode == :super_slow
+          puts(calc.verbose_out.chunk(&:last).map do |l, xs|
+            "#{l}|" + xs.map{|(n,i)| "#{n}\e[3#{[2,6,4,5,1,3][i%6]};1m" + 
+            "#{(i+1).to_s(26).tr('0-9a-z', '`a-z')}\e[0m"}.join
+          end.join(" "))
+        else
+          puts calc.verbose_out.inspect
+        end
+      end
+      print "\a" if time_delta > 60 && !recursive_mode
     end
   end
   results = calc.results
