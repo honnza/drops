@@ -1,59 +1,8 @@
 use std::cell::RefCell;
+use std::cmp::*;
 use std::collections::*;
 use std::convert::*;
-use std::fmt::Write;
 use std::iter::once;
-
-fn mod_inverse (a: u64, m: u64) -> Result<u64, u64> {
-    assert!(m != 0);
-    let mut prev_r = m;
-    let mut prev_ca = 0;
-    let mut last_r = a;
-    let mut last_ca = 1;
-    loop {
-        if last_r == 0 {return if prev_r == 1 {
-            Ok((prev_ca + m as i64) as u64 % m)
-        } else {Err(prev_r)}}
-        let q = prev_r / last_r;
-        let next_r = prev_r - q * last_r;
-        prev_r = last_r;
-        last_r = next_r;
-        let next_ca = prev_ca - q as i64 * last_ca;
-        prev_ca = last_ca;
-        last_ca = next_ca;
-    }
-}
-
-fn bfs_all(map: &Vec<impl AsRef<[u8]>>,
-       start: (usize, usize),
-       valid: impl Fn(u8) -> bool,
-) -> [Option<(Vec<u8>, (usize, usize))>; 256] {
-    let mut prev: HashSet<(usize, usize)> = HashSet::new();
-    let mut curr: HashMap<(usize, usize), Vec<u8>> = HashMap::new();
-    let mut next: HashMap<(usize, usize), Vec<u8>> = HashMap::new();
-    const NONE: Option<(Vec<u8>, (usize, usize))> = None;
-    let mut r = [NONE; 256];
-    curr.insert(start, vec![]);
-    loop {
-       prev.extend(curr.keys().copied());
-       for ((x, y), path) in curr.into_iter() {
-            for (nx, ny, dir) in &[
-                (x, y - 1, b'N'), (x + 1, y, b'E'), (x, y + 1, b'S'), (x - 1, y, b'W')
-            ] {
-                let mut npath = path.clone();
-                npath.push(*dir);
-                let c = map[*ny].as_ref()[*nx];
-                if valid(c) && !prev.contains(&(*nx, *ny)){
-                    if r[c as usize] == None {r[c as usize] = Some((npath.clone(), (*nx, *ny)));}
-                    next.insert((*nx, *ny), npath);
-                }
-            }
-        }
-        if next.is_empty() {return r;}
-        curr = next;
-        next = HashMap::new();
-    }
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -61,7 +10,6 @@ mod intcode {
     use self::RunState::*;
     use std::error::Error;
     use std::fmt;
-    use std::iter::FromIterator;
     use VecDeque;
     
     #[derive(Debug)]
@@ -90,12 +38,6 @@ mod intcode {
             input: VecDeque::new(), output: VecDeque::new()
         }}
         
-        pub fn with_input<'a>(mem: Vec<isize>, input: impl IntoIterator<Item = &'a isize>) 
-        -> Self {Self {
-            mem, ip: 0, rb: 0, state: Running,
-            input: VecDeque::from_iter(input.into_iter().copied()), output: VecDeque::new()
-        }}
-
         pub fn run(&mut self) -> Result<(), &dyn Error> {
             while matches!(self.state, Running) {
                 if let Err(e) = self.try_step() {self.state = Errored(e)}
@@ -110,14 +52,6 @@ mod intcode {
         
         pub fn send_ascii(&mut self, data: &str) {
             for c in data.chars() {self.send(c as isize);}
-        }
-        
-        pub fn recv(&mut self) -> Option<isize> {
-            self.output.pop_front()
-        }
-        
-        pub fn recv_all(&mut self) -> impl Iterator<Item = isize> + '_ {
-            self.output.drain(..)
         }
         
         pub fn recv_ascii(&mut self) -> String {
@@ -771,556 +705,639 @@ fn day14(part: char, s: &str) -> String {
 }
 
 fn day15(part: char, s: &str) -> String {
-    let mut map: Vec<Vec<u8>> = s.lines().map(|line| line.as_bytes().to_vec()).collect();
-    let mut units: Vec<RefCell<(usize, usize, u8, u8)>> = vec![];
-    let mut goblins_rem = 0;
-    let mut elves_rem = 0;
-    for (y, row) in map.iter().enumerate() {for (x, &c) in row.iter().enumerate() {
-        if c == b'E' || c == b'G' {units.push(RefCell::new((x, y, c, 200u8)));}
-        if c == b'E' {elves_rem += 1;}
-        if c == b'G' {goblins_rem += 1;}
-    }}
+    'outer: for elf_power in 3 .. {
+        let mut map: Vec<Vec<u8>> = s.lines().map(|line| line.as_bytes().to_vec()).collect();
+        let mut units: Vec<RefCell<(usize, usize, u8, u8)>> = vec![];
+        let mut goblins_rem = 0;
+        let mut elves_rem = 0;
+        for (y, row) in map.iter().enumerate() {for (x, &c) in row.iter().enumerate() {
+            if c == b'E' || c == b'G' {units.push(RefCell::new((x, y, c, 200u8)));}
+            if c == b'E' {elves_rem += 1;}
+            if c == b'G' {goblins_rem += 1;}
+        }}
+        let elves_start = elves_rem;
 
-    let mut prev_closest: HashSet<(usize, usize)> = HashSet::new();
-    for t in 0 .. {
-        units.sort_unstable_by_key(|cell| {let unit = cell.borrow(); (unit.1, unit.0)});
-        for i in 0 .. units.len() {
-            if units[i].borrow().3 == 0 {continue;}
+        let mut prev_closest: HashSet<(usize, usize)> = HashSet::new();
+        for t in 0 .. {
+            units.sort_unstable_by_key(|cell| {let unit = cell.borrow(); (unit.1, unit.0)});
+            for i in 0 .. units.len() {
+                if units[i].borrow().3 == 0 {continue;}
 
-            if goblins_rem == 0 || elves_rem == 0 {
-                let hp: i32 = units.iter().map(|cell| cell.borrow().3 as i32).sum();
-                println!("t = {}\nhp = {}", t, hp);
-                return (hp * t).to_string();
-            }    
-            // spec says to find all closest points adjacent to an enemy,    E....G-->E
-            // take the lexicographically first of them,                        .###
-            // then take the lexicograhpically first step to _that_ tile.       E E
-            let mut unit = units[i].borrow_mut();
-            prev_closest.clear();
-            let mut closest = BTreeMap::new();
-            closest.insert((unit.1, unit.0), (unit.1, unit.0));
-            let next_pos = 'l: loop {
-                let mut next_closest: BTreeMap<(usize, usize), (usize, usize)> = BTreeMap::new();
-                for (&(cy, cx), &v) in &closest {
-                    for &(nx, ny) in &[(cx, cy - 1), (cx - 1, cy), (cx + 1, cy), (cx, cy + 1)] {
-                        match map[ny][nx] {
-                            c @ b'G' | c @ b'E' if c != unit.2 => {break 'l v}
-                            b'.' if !prev_closest.contains(&(ny, nx)) => {
-                                next_closest.entry((ny, nx))
-                                    .and_modify(|ov| *ov = (*ov).min(v))
-                                    .or_insert_with(||
-                                        if v == (unit.1, unit.0) {(ny, nx)} else {v}
-                                    );
+                if goblins_rem == 0 || elves_rem == 0 {
+                    let hp: i32 = units.iter().map(|cell| cell.borrow().3 as i32).sum();
+                    if part == 'b' && elves_rem != elves_start {continue 'outer}
+                    return (hp * t).to_string();
+                }    
+                // spec says to find all closest points adjacent to an enemy,    E....G-->E
+                // take the lexicographically first of them,                        .###
+                // then take the lexicograhpically first step to _that_ tile.       E E
+                let mut unit = units[i].borrow_mut();
+                prev_closest.clear();
+                let mut closest = BTreeMap::new();
+                closest.insert((unit.1, unit.0), (unit.1, unit.0));
+                let next_pos = 'l: loop {
+                    let mut next_closest: BTreeMap<(usize, usize), (usize, usize)> = BTreeMap::new();
+                    for (&(cy, cx), &v) in &closest {
+                        for &(nx, ny) in &[(cx, cy - 1), (cx - 1, cy), (cx + 1, cy), (cx, cy + 1)] {
+                            match map[ny][nx] {
+                                c @ b'G' | c @ b'E' if c != unit.2 => {break 'l v}
+                                b'.' if !prev_closest.contains(&(ny, nx)) => {
+                                    next_closest.entry((ny, nx))
+                                        .and_modify(|ov| *ov = (*ov).min(v))
+                                        .or_insert_with(||
+                                            if v == (unit.1, unit.0) {(ny, nx)} else {v}
+                                        );
+                                }
+                                _ => {}
                             }
-                            _ => {}
                         }
                     }
-                }
-                if closest.is_empty() {break 'l (unit.1, unit.0);}
-                prev_closest.extend(closest.keys());
-                closest = next_closest;
-            };
-            map[unit.1][unit.0] = b'.';
-            unit.0 = next_pos.1;
-            unit.1 = next_pos.0;
-            map[unit.1][unit.0] = unit.2;
-            // next up, the attack phase
-            if let Some(cell) = units.iter().find(|cell| {
-                cell.try_borrow().map_or(false, |enemy|
-                    (enemy.0 as isize - unit.0 as isize).abs() +
-                    (enemy.1 as isize - unit.1 as isize).abs() == 1 &&
-                    enemy.2 != unit.2 && enemy.3 > 0
-                )
-            }){
-                let mut enemy = cell.borrow_mut();
-                if enemy.3 > 3 {
-                    enemy.3 -= 3;
-                } else {
-                    enemy.3 = 0;
-                    map[enemy.1][enemy.0] = b'.';
-                    if enemy.2 == b'G' {goblins_rem -= 1;} else {elves_rem -= 1;}
+                    if closest.is_empty() {break 'l (unit.1, unit.0);}
+                    prev_closest.extend(closest.keys());
+                    closest = next_closest;
+                };
+                map[unit.1][unit.0] = b'.';
+                unit.0 = next_pos.1;
+                unit.1 = next_pos.0;
+                map[unit.1][unit.0] = unit.2;
+                // next up, the attack phase
+                // moving doesn't care about unit HP, but attacking does
+                if let Some(cell) = units.iter().filter(|cell| {
+                    cell.try_borrow().map_or(false, |enemy|
+                        (enemy.0 as isize - unit.0 as isize).abs() +
+                        (enemy.1 as isize - unit.1 as isize).abs() == 1 &&
+                        enemy.2 != unit.2 && enemy.3 > 0
+                    )
+                }).min_by_key(|cell| cell.borrow().3){
+                    let mut enemy = cell.borrow_mut();
+                    let attack = if enemy.2 == b'G' {elf_power} else {3};
+                    if enemy.3 > attack {
+                        enemy.3 -= attack;
+                    } else {
+                        enemy.3 = 0;
+                        map[enemy.1][enemy.0] = b'.';
+                        if enemy.2 == b'G' {goblins_rem -= 1;} else {elves_rem -= 1;}
+                    }
                 }
             }
+            
+            units.retain(|cell| cell.borrow().3 > 0);
         }
-        
-        units.retain(|cell| cell.borrow().3 > 0);
-        //if t > 0 {print!("\x1b[{}A", map.len());}
-        for cell in &units {print!("{:?}, ", cell.borrow());}
-        println!();
-        for y in 0 .. map.len() {
-            for x in 0 .. map[y].len() {
-                print!("{} ", map[y][x] as char);
-            }
-            println!();
-        }
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        unreachable!();
     }
     unreachable!();
 }
 
 fn day16(part: char, s: &str) -> String {
-    let mut num: Vec<i32> = s.trim().chars().map(|c| c.to_digit(10).unwrap() as i32).collect();
-    let skip: usize;
-    if part == 'a' {
-        skip = 0;
-    } else {
-        skip = s[0..7].parse().unwrap();
-        num = num.repeat(10000);
+    let ops: [(&str, &dyn Fn(usize, usize, usize, [usize; 4]) -> Option<[usize; 4]>); 16] = [
+        ("addr", &|a, b, c, mut mem| {let r = *mem.get(a)? + *mem.get(b)?; *mem.get_mut(c)? = r; Some(mem)}),
+        ("addi", &|a, b, c, mut mem| {let r = *mem.get(a)? + b; *mem.get_mut(c)? = r; Some(mem)}),
+        ("mulr", &|a, b, c, mut mem| {let r = *mem.get(a)? * *mem.get(b)?; *mem.get_mut(c)? = r; Some(mem)}),
+        ("muli", &|a, b, c, mut mem| {let r = *mem.get(a)? * b; *mem.get_mut(c)? = r; Some(mem)}),
+        ("banr", &|a, b, c, mut mem| {let r = *mem.get(a)? & *mem.get(b)?; *mem.get_mut(c)? = r; Some(mem)}),
+        ("bani", &|a, b, c, mut mem| {let r = *mem.get(a)? & b; *mem.get_mut(c)? = r; Some(mem)}),
+        ("borr", &|a, b, c, mut mem| {let r = *mem.get(a)? | *mem.get(b)?; *mem.get_mut(c)? = r; Some(mem)}),
+        ("bori", &|a, b, c, mut mem| {let r = *mem.get(a)? | b; *mem.get_mut(c)? = r; Some(mem)}),
+        ("setr", &|a, _, c, mut mem| {let r = *mem.get(a)? ; *mem.get_mut(c)? = r; Some(mem)}),
+        ("seti", &|a, _, c, mut mem| {let r = a; *mem.get_mut(c)? = r; Some(mem)}),
+        ("gtir", &|a, b, c, mut mem| {let r = a > *mem.get(b)?; *mem.get_mut(c)? = r as usize; Some(mem)}),
+        ("gtri", &|a, b, c, mut mem| {let r = *mem.get(a)? > b; *mem.get_mut(c)? = r as usize; Some(mem)}),
+        ("gtrr", &|a, b, c, mut mem| {let r = *mem.get(a)? > *mem.get(b)?; *mem.get_mut(c)? = r as usize; Some(mem)}),
+        ("eqir", &|a, b, c, mut mem| {let r = a == *mem.get(b)?; *mem.get_mut(c)? = r as usize; Some(mem)}),
+        ("eqri", &|a, b, c, mut mem| {let r = *mem.get(a)? == b; *mem.get_mut(c)? = r as usize; Some(mem)}),
+        ("eqrr", &|a, b, c, mut mem| {let r = *mem.get(a)? == *mem.get(b)?; *mem.get_mut(c)? = r as usize; Some(mem)})
+    ];
+    
+    let mut lines = s.lines();
+    let mut n_ge_3 = 0;
+    let mut opcode_map = [0xffffu16; 16];
+    while let Some(before_str) = lines.next().unwrap().strip_prefix("Before: [").and_then(|s| s.strip_suffix("]")) {
+        let before_mem: [usize; 4] = before_str.split(", ").map(|s| s.parse().unwrap()).collect::<Vec<_>>().try_into().unwrap();
+        let [opcode, a, b, c]: [usize; 4] = lines.next().unwrap().split(" ").map(|s| s.parse().unwrap()).collect::<Vec<_>>().try_into().unwrap();
+        let after_mem: [usize; 4] = lines.next().unwrap().strip_prefix("After:  [").unwrap().strip_suffix("]").unwrap().split(", ")
+                                        .map(|s| s.parse().unwrap()).collect::<Vec<_>>().try_into().unwrap();
+        assert_eq!(lines.next(), Some(""));
+        
+        let sats = ops.iter().enumerate().filter_map(|(i, (_, f))| (f(a, b, c, before_mem) == Some(after_mem)).then(|| i))
+                                        .fold(0u16, |a, i| a | 1 << i);
+        if sats.count_ones() >= 3 {n_ge_3 += 1;}
+        opcode_map[opcode] &= sats;
     }
-    for t in 0 .. 100 {
-        println!("{}/100\x1b[A", t);
-        let sums: Vec<i32> = std::iter::once(0).chain(
-            num.iter().scan(0, |sum, d| {*sum += d; Some(*sum)})
-        ).collect();
-        num = (0 .. num.len()).map(|i| {
-            let mut r = 0;
-            let mut ni = i;
-            loop {
-                r -= sums[ni]; //run of +1 starts
-                ni = (ni + i + 1).min(num.len());
-                r += sums[ni]; //run of +1 ends
-                ni = (ni + i + 1).min(num.len());
-                if ni == num.len() {break r}
-                r += sums[ni]; //run of -1 starts
-                ni = (ni + i + 1).min(num.len());
-                r -= sums[ni]; //run of -1 ends
-                ni = (ni + i + 1).min(num.len());
-                if ni == num.len() {break r}
-            }.abs() % 10
-        }).collect()
+    assert_eq!(lines.next(), Some(""));
+    if part == 'a' {return n_ge_3.to_string();}
+
+    loop {
+        let mut done = true;
+        for j in 0..16 {
+            if opcode_map[j].is_power_of_two() {
+                for i in 0..16 {if i != j {opcode_map[i] &= !opcode_map[j];}}
+            } else {
+                done = false;
+            }
+        }
+        if done {break};
     }
-    num[skip..][..8].iter().map(|d| d.to_string()).collect::<Vec<_>>().join("")
+    let opcode_map: [usize; 16] = opcode_map.iter().map(|&s| s.trailing_zeros() as usize).collect::<Vec<_>>().try_into().unwrap();
+
+    let mut mem = [0usize; 4];
+    for line in lines {
+        let [opcode, a, b, c]: [usize; 4] = line.split(" ").map(|s| s.parse().unwrap()).collect::<Vec<_>>().try_into().unwrap();
+        mem = ops[opcode_map[opcode]].1(a, b, c, mem).unwrap();
+    }
+    mem[0].to_string()
 }
 
 fn day17(part: char, s: &str) -> String {
-    use intcode::*;
-    let mut cpu = Cpu::new(parse_intcode(s));
-    
-    cpu.run().unwrap();
-    let map_str = cpu.recv_ascii();
-    let map = map_str.lines().map(|line| line.as_bytes()).collect::<Vec<_>>();
-    
-    if part == 'a' {
-        let mut r = 0;
-        for y in 1 .. map.len() - 1 {
-            for x in 1 .. map[y].len() - 1 {
-                if map[y - 1][x] == b'#' && map[y][x - 1] == b'#' && map[y][x] == b'#' &&
-                   map[y][x + 1] == b'#' && map[y + 1][x] == b'#'
-                {
-                    r += x * y;
-                }
-            }
-        }
-        r.to_string()
-    } else {
-        let (mut bot_pos, mut bot_dir) =
-            map.iter().enumerate().find_map(|(y, line)|
-                line.iter().enumerate().find_map(|(x, c)| match c {
-                    b'^' => Some(((x as isize, y as isize), (0, -1))),
-                    b'v' => Some(((x as isize, y as isize), (0, 1))),
-                    b'<' => Some(((x as isize, y as isize), (-1, 0))),
-                    b'>' => Some(((x as isize, y as isize), (1, 0))),
-                    _ => None
-                })
-            ).unwrap();
-        let mut path = String::new();
-        loop {
-            if map.get((bot_pos.1 - bot_dir.0) as usize).and_then(|mapy|
-                mapy.get((bot_pos.0 + bot_dir.1) as usize)
-            ) == Some(&b'#') {
-                bot_dir = (bot_dir.1, -bot_dir.0);
-                path.push_str(",L,");
-            } else if map.get((bot_pos.1 + bot_dir.0) as usize).and_then(|mapy|
-                mapy.get((bot_pos.0 - bot_dir.1) as usize)
-            ) == Some(&b'#') {
-                bot_dir = (-bot_dir.1, bot_dir.0);
-                path.push_str(",R,");
-            } else {
-                break;
-            }
-            let mut steps = 0;
-            while map.get((bot_pos.1 + bot_dir.1) as usize).and_then(|mapy|
-                mapy.get((bot_pos.0 + bot_dir.0) as usize)
-            ) == Some(&b'#') {
-                steps += 1;
-                bot_pos.0 += bot_dir.0;
-                bot_pos.1 += bot_dir.1;
-            }
-            write!(path, "{}", steps).unwrap();
-        }
-                
-        let mut cpu_cmd = None;
-        'fora: for a_len in (1 ..= 21).rev() {
-            'forb: for b_len in (1 ..= 21).rev() {
-                'forc: for c_len in (1 ..= 21).rev() {
-                    let mut a_str = None;
-                    let mut b_str = None;
-                    let mut c_str = None;
-                    let mut main_str = String::new();
-                    let mut path_rem = &path[..];
-                    while !path_rem.is_empty(){
-                        if a_str == None {
-                            a_str = path_rem.get(.. a_len);
-                            if a_str == None {continue 'fora;} //
-                            path_rem = &path_rem[a_len ..];
-                            if !matches!(path_rem.get(.. 2), None | Some(",L") | Some(",R"))
-                                {continue 'fora;}
-                            main_str.push_str(",A");
-                        } else if path_rem.get(.. a_len) == a_str {
-                            path_rem = &path_rem[a_len ..];
-                            main_str.push_str(",A");
-                        } else if b_str == None {
-                            b_str = path_rem.get(.. b_len);
-                            if b_str == None {continue 'forb;}
-                            path_rem = &path_rem[b_len ..];
-                            if !matches!(path_rem.get(.. 2), None | Some(",L") | Some(",R"))
-                                {continue 'forb;}
-                            main_str.push_str(",B");
-                        } else if path_rem.get(.. b_len) == b_str {
-                            path_rem = &path_rem[b_len ..];
-                            main_str.push_str(",B");
-                        } else if c_str == None {
-                            c_str = path_rem.get(.. c_len);
-                            if c_str == None {continue 'forc;}
-                            path_rem = &path_rem[c_len ..];
-                            if !matches!(path_rem.get(.. 2), None | Some(",L") | Some(",R"))
-                                {continue 'forc;}
-                            main_str.push_str(",C");
-                        } else if path_rem.get(.. c_len) == c_str {
-                            path_rem = &path_rem[c_len ..];
-                            main_str.push_str(",C");
-                        } else {continue 'forc;}
-                    }
-                    cpu_cmd = Some(format!("{}\n{}\n{}\n{}\nn\n",
-                        main_str.trim_matches(','),
-                        a_str.unwrap().trim_matches(','),
-                        b_str.unwrap().trim_matches(','),
-                        c_str.unwrap().trim_matches(',')
-                    ));
-                    break 'fora;
-                }
-            }
-        }
-        
-        cpu = Cpu::new(parse_intcode(s));
-        cpu.mem[0] = 2;
-        cpu.send_ascii(&cpu_cmd.unwrap());
-        cpu.run().unwrap();
-        cpu.recv_ascii();
-        format!("{:?}", cpu.recv_all().collect::<Vec<_>>())
+    let mut minx = 500;
+    let mut map = vec![vec![b'.'; 501]];
+    map[0][500] = b'+';
+    for line in s.lines() {
+        let mut chars = line.chars();
+        let fst_axis = chars.next().unwrap();
+        assert_eq!(chars.next(), Some('='));
+        let fst_coord: usize = chars.by_ref().take_while(|c| c.is_ascii_digit()).collect::<String>().parse().unwrap();
+        //assert_eq!(chars.next(), Some(','));
+        assert_eq!(chars.next(), Some(' '));
+        let snd_axis = chars.next().unwrap();
+        assert_eq!(chars.next(), Some('='));
+        let snd_from: usize = chars.by_ref().take_while(|c| c.is_ascii_digit()).collect::<String>().parse().unwrap();
+        //assert_eq!(chars.next(), Some('.'));
+        assert_eq!(chars.next(), Some('.'));
+        let snd_to: usize = chars.by_ref().take_while(|c| c.is_ascii_digit()).collect::<String>().parse().unwrap();
+        assert_eq!(chars.next(), None);
+
+        let (x_from, x_to, y_from, y_to) = match (fst_axis, snd_axis) {
+            ('x', 'y') => (fst_coord, fst_coord, snd_from, snd_to),
+            ('y', 'x') => (snd_from, snd_to, fst_coord, fst_coord),
+            _ => panic!("{:?}", (fst_axis, snd_axis))
+        };
+        if map.len() <= y_to {let len = map[0].len(); map.resize_with(y_to + 1, ||vec![b'.'; len]);}
+        if map[0].len() <= x_to + 1 {for row in &mut map {row.resize(x_to + 2, b'.');}}
+        if minx > x_from {minx = x_from;}
+        for y in y_from ..= y_to {for x in x_from ..= x_to {map[y][x] = b'#';}}
     }
+    let miny = map.iter().position(|row| row.contains(&b'#')).unwrap();
+
+    let mut flows = vec![(500, 1)];
+    while let Some((flow_x, flow_y)) = flows.pop() {
+        map[flow_y][flow_x] = b'|';
+        if flow_y == map.len() - 1 {continue;}
+        // horizontal flows go over clay and still water, but through sand and into other flows
+        let mut flow_left = flow_x;
+        while matches!(map[flow_y + 1][flow_left], b'#' | b'~') && map[flow_y][flow_left - 1] != b'#' {flow_left -= 1;}
+        let mut flow_right = flow_x;
+        while matches!(map[flow_y + 1][flow_right], b'#' | b'~') && map[flow_y][flow_right + 1] != b'#' {flow_right += 1;}
+
+        if map[flow_y + 1][flow_left] == b'.' {flows.push((flow_left, flow_y + 1));}
+        if map[flow_y + 1][flow_right] == b'.' && flow_left != flow_right {flows.push((flow_right, flow_y + 1));}
+        if matches!(map[flow_y + 1][flow_left], b'.' | b'|') || matches!(map[flow_y + 1][flow_right], b'.' | b'|') {
+            for x in flow_left ..= flow_right {
+                map[flow_y][x] = b'|';
+            }
+        } else {
+            for x in flow_left ..= flow_right {
+                map[flow_y][x] = b'~';
+                if map[flow_y - 1][x] == b'|' {flows.push((x, flow_y - 1))}
+            }
+        }
+    }
+
+    map[miny..].iter().flatten().filter(|&&c| c == b'~' || c == b'|' && part == 'a').count().to_string()
 }
 
 fn day18(part: char, s: &str) -> String {
-    let mut map = s.lines().map(|line| line.as_bytes()).collect::<Vec<_>>();
-    let start_pos = map.iter().enumerate().find_map(|(y, mapy)|
-        mapy.iter().enumerate().find_map(|(x, c)| if *c == b'@' {Some((x, y))} else {None})
-    ).unwrap();
-    let mut keys_all = 0u32;
-    let mut keys_got_ever = 0;
-    for c in s.bytes() {if matches!(c, b'a' ..= b'z') {keys_all |= 1 << c - b'a';}}
-    
-    if part == 'a' {
-        let mut opens: BinaryHeap<(i32, (usize, usize), u32)> = BinaryHeap::new();
-        opens.push((0, start_pos, 0));
-        let mut closeds: HashSet<((usize, usize), u32)> = HashSet::new();
-
-        while let Some((neg_len, pos, keys_got)) = opens.pop(){
-            if keys_got == keys_all {
-                return (-neg_len).to_string();
-            }
-            if !closeds.insert((pos, keys_got)) {continue;}
-            keys_got_ever |= keys_got;
-            if closeds.len() % 100 == 0 {
-                println!("{} {} {} {:026b}", opens.len(), closeds.len(),
-                         neg_len, keys_got_ever);
-            }
-            let paths = bfs_all(&map, pos, |c| match c {
-                b'#' => false, b'.' | b'@' | b'a' ..= b'z' => true,
-                b'A' ..= b'Z'  => keys_got & 1 << c - b'A' != 0,
-                _ => panic!()
-            });
-            for key in b'a' ..= b'z' {
-                if let Some((ref npath, npos)) = paths[key as usize] {
-                    if keys_got & 1 << key - b'a' == 0 {
-                        opens.push((neg_len - npath.len() as i32, npos, 
-                                    keys_got | 1 << key - b'a'));
+    let mut map: Vec<Vec<u8>> = s.lines().map(|line| line.as_bytes().to_vec()).collect();
+    let mut new_map = map.clone();
+    let mut history = vec![];
+    let end = if part == 'a' {10} else {1000_000_000};
+    for t in 0 .. end {
+        for y in 0 .. map.len() {
+            for x in 0 .. map[y].len() {
+                let mut trees = 0;
+                let mut yards = 0;
+                for &(dx, dy) in &[(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)] {
+                    match map.get((y as isize + dy) as usize).and_then(|row| row.get((x as isize + dx) as usize)) {
+                        Some(b'|') => trees += 1,
+                        Some(b'#') => yards += 1,
+                        _ => {}
                     }
+                }
+                new_map[y][x] = match map[y][x] {
+                    b'.' => if trees >= 3 {b'|'} else {b'.'},
+                    b'|' => if yards >= 3 {b'#'} else {b'|'},
+                    b'#' => if yards == 0 || trees == 0 {b'.'} else {b'#'},
+                    _ => panic!()
                 }
             }
         }
-    } else {
-        let (start_x, start_y) = start_pos;
-        let mut nline: Vec<u8> = map[start_y - 1].into();
-        nline[start_x] = b'#';
-        map[start_y - 1] = &nline;
-        let mut nline: Vec<u8> = map[start_y].into();
-        nline[start_x - 1] = b'#';
-        nline[start_x + 1] = b'#';
-        map[start_y] = &nline;
-        let mut nline: Vec<u8> = map[start_y + 1].into();
-        nline[start_x] = b'#';
-        map[start_y + 1] = &nline;
-        
-        let mut opens: BinaryHeap<(i32, [(usize, usize); 4], u32)> = BinaryHeap::new();
-        opens.push((0, [
-            (start_x - 1, start_y - 1), (start_x - 1, start_y + 1),
-            (start_x + 1, start_y - 1), (start_x + 1, start_y + 1)
-        ], 0));
-        let mut closeds: HashSet<([(usize, usize); 4], u32)> = HashSet::new();
-        
-        while let Some((neg_len, poses, keys_got)) = opens.pop(){
-            if keys_got == keys_all {
-                return (-neg_len).to_string()
-            }
-            if !closeds.insert((poses, keys_got)) {continue;}
-            keys_got_ever |= keys_got;
-            if closeds.len() % 100 == 0 {
-                println!("{} {} {} {:026b}", opens.len(), closeds.len(),
-                         neg_len, keys_got_ever);
-            }
-            let pathses: [_; 4] = poses.iter().map(|pos| bfs_all(&map, *pos, |c| match c {
-                b'#' => false, b'.' | b'@' | b'a' ..= b'z' => true,
-                b'A' ..= b'Z'  => keys_got & 1 << c - b'A' != 0,
-                _ => panic!()
-            })).collect::<Vec<_>>().try_into().unwrap();
-            
-            for (vault, paths) in pathses.iter().enumerate() {
-                for key in b'a' ..= b'z' {
-                    if let Some((ref npath, npos)) = paths[key as usize] {
-                        if keys_got & 1 << key - b'a' == 0 {
-                            let mut nposes = poses;
-                            nposes[vault] = npos;
-                            opens.push((neg_len - npath.len() as i32, nposes, 
-                                        keys_got | 1 << key - b'a'));
-                        }
-                    }
-                }
-            }
-       } 
-    }
-    panic!();
+        let old_map = map;
+        map = new_map;
+        new_map = old_map;
+        history.push(map.clone());
+        println!("{} {}", t, std::str::from_utf8(&map[0]).unwrap());
+        if t > 0 && t % 2 == 0 && history[t] == history[t/2] {
+            // we pull a history item such that it's an integer number of periods before the end and after the period starts
+            map = history.into_iter().nth(t/2 + (end-1) % (t/2)).unwrap();
+            break;
+        }
+}
+    println!();
+    for row in &map {println!("{}", std::str::from_utf8(row).unwrap());}
+    (map.iter().flatten().filter(|&&c| c == b'|').count() * map.iter().flatten().filter(|&&c| c == b'#').count()).to_string()
 }
 
 fn day19(part: char, s: &str) -> String {
-    use intcode::*;
-    let code = parse_intcode(s);
-    let test = |x: usize, y: usize| -> bool {
-        let mut cpu = Cpu::with_input(code.clone(), &[x as isize, y as isize]);
-        cpu.run().unwrap();
-        cpu.recv().unwrap() != 0
+    let ops = |op: &str, a: usize, b: usize, c: usize, mut mem: [usize; 6]| match op {
+    "addr" => {let r = *mem.get(a)? + *mem.get(b)?; *mem.get_mut(c)? = r; Some(mem)},
+    "addi" => {let r = *mem.get(a)? + b; *mem.get_mut(c)? = r; Some(mem)},
+    "mulr" => {let r = *mem.get(a)? * *mem.get(b)?; *mem.get_mut(c)? = r; Some(mem)},
+    "muli" => {let r = *mem.get(a)? * b; *mem.get_mut(c)? = r; Some(mem)},
+    "banr" => {let r = *mem.get(a)? & *mem.get(b)?; *mem.get_mut(c)? = r; Some(mem)},
+    "bani" => {let r = *mem.get(a)? & b; *mem.get_mut(c)? = r; Some(mem)},
+    "borr" => {let r = *mem.get(a)? | *mem.get(b)?; *mem.get_mut(c)? = r; Some(mem)},
+    "bori" => {let r = *mem.get(a)? | b; *mem.get_mut(c)? = r; Some(mem)},
+    "setr" => {let r = *mem.get(a)? ; *mem.get_mut(c)? = r; Some(mem)},
+    "seti" => {let r = a; *mem.get_mut(c)? = r; Some(mem)},
+    "gtir" => {let r = a > *mem.get(b)?; *mem.get_mut(c)? = r as usize; Some(mem)},
+    "gtri" => {let r = *mem.get(a)? > b; *mem.get_mut(c)? = r as usize; Some(mem)},
+    "gtrr" => {let r = *mem.get(a)? > *mem.get(b)?; *mem.get_mut(c)? = r as usize; Some(mem)},
+    "eqir" => {let r = a == *mem.get(b)?; *mem.get_mut(c)? = r as usize; Some(mem)},
+    "eqri" => {let r = *mem.get(a)? == b; *mem.get_mut(c)? = r as usize; Some(mem)},
+    "eqrr" => {let r = *mem.get(a)? == *mem.get(b)?; *mem.get_mut(c)? = r as usize; Some(mem)},
+
+    "sofa" => {
+        let mut unfactorized = *mem.get(a)?;
+        let mut r = 1;
+        for factor in 2.. {
+            let mut fac_pow = 1;
+            let mut r_fac = 1;
+            while unfactorized % factor == 0 {
+                fac_pow *= factor;
+                r_fac += fac_pow;
+                unfactorized /= factor;
+            }
+            r *= r_fac;
+            if factor * factor > unfactorized {break;}
+        }
+        if unfactorized > 1 {r *= 1 + unfactorized;}
+        *mem.get_mut(c)? = r;
+        Some(mem)
+    }
+    _ => panic!()
     };
 
-    if part == 'a' {
-        (0 .. 50).map(|x|
-            (0 .. 50).map(|y| {test(x, y) as u32}).sum::<u32>()
-        ).sum::<u32>().to_string()
-    } else {
-        let mut x = 0;
-        let mut y = 0;
-        loop {
-            while !test(x, y + 99) {x += 1;}
-            if !test(x + 99, y) {y += 1;} else {break;}
+    let mut lines = s.lines();
+    let ip_reg: usize = lines.next().unwrap().strip_prefix("#ip ").unwrap().parse().unwrap();
+    let mut code: Vec<(&str, usize, usize, usize)> = lines.map(|line| {
+        let [op, a_str, b_str, c_str]: [&str; 4] = line.split(" ").collect::<Vec<_>>().try_into().unwrap();
+        (op, a_str.parse().unwrap(), b_str.parse().unwrap(), c_str.parse().unwrap())
+    }).collect();
+    let mut heatmap = vec![0usize; code.len()];
+
+    // in part b it's required to opimize the algorithm presented. It's probably not intended to write a full-blown
+    // optimizing compiler ready to handle any code, just the range of actual possible inputs. Unfortunately, we don't
+    // know the range of actual possible inputs, just one member of it. If we ever get more samples, _then_ we'll be
+    // able to generalize. 
+    // The interesting bits of the input have been manually determined to compute the sum of factors. The uninteresting
+    // bits run once exactly.
+    // Hypotheses on possible fuzzing: register relabeling (including IP); oprr commutation; unused opargs (handled);
+    // code movement (need to adjust absolute jumps within); exotic jump instructions???
+    if ip_reg != 2 || !matches!(code[1..=16], [
+        ("seti", 1, _, 4), ("seti", 1, _, 1), ("mulr", 4, 1, 5), ("eqrr", 5, 3, 5),
+        ("addr", 5, 2, 2), ("addi", 2, 1, 2), ("addr", 4, 0, 0), ("addi", 1, 1, 1),
+        ("gtrr", 1, 3, 5), ("addr", 2, 5, 2), ("seti", 2, _, 2), ("addi", 4, 1, 4),
+        ("gtrr", 4, 3, 5), ("addr", 5, 2, 2), ("seti", 1, _, 2), ("mulr", 2, 2, 2)
+    ]) {todo!();}
+    code[1] = ("sofa", 3, 0, 0);
+    code[2] = ("seti", code.len(), 0, ip_reg);
+
+    let mut mem = [0; 6];
+    let mut t = 0;
+    println!("\n");
+    if part == 'b' {mem[0] = 1};
+    while let Some(&(op, a, b, c)) = code.get(mem[ip_reg]) {
+        t += 1;
+        heatmap[mem[ip_reg]] += 1;
+        if t % 0x1000000 == 0{
+            println!("\x1b[2A{:?}\x1b[K | {} {} {} {}\n{:?}", mem, op, a, b, c, heatmap);
         }
-        (x * 10000 + y).to_string()
+        mem = ops(op, a, b, c, mem).unwrap();
+        mem[ip_reg] += 1;
     }
+    println!("\x1b[2A{:?}\x1b[K\n{:?}", mem, heatmap);
+    mem[0].to_string()
 }
 
 fn day20(part: char, s: &str) -> String {
-    let map = s.lines().map(|line| line.as_bytes().into()).collect::<Vec<Vec<u8>>>();
-    let mut portals: HashMap<(u8, u8), Vec<(usize, usize)>> = HashMap::new();
-
-    for y in 0 .. map.len() {
-        for x in 0 .. map[y].len() {
-            if matches!(map[y][x], b'A' ..= b'Z') {
-                if matches!(map[y].get(x + 1), Some(b'A' ..= b'Z')){
-                    if x != 0 && map[y].get(x - 1) == Some(&b'.') {
-                        portals.entry((map[y][x], map[y][x + 1]))
-                               .or_insert_with(|| vec![])
-                               .push((x - 1, y));
+    // we build the map one character at a time, holding the following information:
+    // for each tile, the set of doors traversed;
+    // the set of tiles that directions target (heads) or that become heads after a pop;
+    // the set of tiles that become heads of any new branches (tails).
+    const E: u8 = 1; const S: u8 = 2; const W: u8 = 4; const N: u8 = 8; const NEAR: u8 = 16;
+    let mut minx = 0; let mut miny = 0;
+    let mut map = vec![vec![NEAR]];
+    let mut heads = vec![vec![(0isize,0isize)]];
+    let mut tails = vec![vec![(0isize,0isize)]];
+    for c in s.trim_end().strip_prefix("^").unwrap().strip_suffix("$").unwrap().chars(){
+        match c {
+            'E' => {
+                for h in heads.last_mut().unwrap() {
+                    if h.0 - minx == map[0].len() as isize - 1 {
+                        for row in map.iter_mut() {row.push(0)}
                     }
-                    if map[y].get(x + 2) == Some(&b'.') {
-                        portals.entry((map[y][x], map[y][x + 1]))
-                               .or_insert_with(|| vec![])
-                               .push((x + 2, y));
-                    }
+                    map[(h.1 - miny) as usize][(h.0 - minx) as usize] |= E;
+                    h.0 += 1;
+                    map[(h.1 - miny) as usize][(h.0 - minx) as usize] |= W;
                 }
-                if matches!(map.get(y + 1).and_then(|mapy| mapy.get(x)), Some(b'A' ..= b'Z')){
-                    if y != 0 && map.get(y - 1).and_then(|mapy| mapy.get(x)) == Some(&b'.') {
-                        portals.entry((map[y][x], map[y + 1][x]))
-                               .or_insert_with(|| vec![])
-                               .push((x, y - 1));
+            },
+            'N' => {
+                for h in heads.last_mut().unwrap() {
+                    if h.1 == miny {
+                        miny -= 1;
+                        map.insert(0, vec![0; map[0].len()]);
                     }
-                    if map.get(y + 2).and_then(|mapy| mapy.get(x)) == Some(&b'.') {
-                        portals.entry((map[y][x], map[y + 1][x]))
-                               .or_insert_with(|| vec![])
-                               .push((x, y + 2));
-                    }
+                    map[(h.1 - miny) as usize][(h.0 - minx) as usize] |= N;
+                    h.1 -= 1;
+                    map[(h.1 - miny) as usize][(h.0 - minx) as usize] |= S;
                 }
-            }
+            },
+            'S' => {
+                for h in heads.last_mut().unwrap() {
+                    if h.1 - miny == map.len() as isize - 1 {
+                        map.push(vec![0; map[0].len()]);
+                    }
+                    map[(h.1 - miny) as usize][(h.0 - minx) as usize] |= S;
+                    h.1 += 1;
+                    map[(h.1 - miny) as usize][(h.0 - minx) as usize] |= N;
+                }
+            },
+            'W' => {
+                for h in heads.last_mut().unwrap() {
+                    if h.0 == minx {
+                        minx -= 1;
+                        for row in map.iter_mut() {row.insert(0, 0)}
+                    }
+                    map[(h.1 - miny) as usize][(h.0 - minx) as usize] |= W;
+                    h.0 -= 1;
+                    map[(h.1 - miny) as usize][(h.0 - minx) as usize] |= E;
+                }
+            },
+            '(' => {
+                heads.insert(heads.len() - 1, vec![]);
+                tails.push(heads.last().unwrap().clone());
+            },
+            '|' => {
+                let old_heads = heads.pop().unwrap();
+                heads.last_mut().unwrap().extend_from_slice(&old_heads);
+                heads.push(tails.last().unwrap().clone());
+            },
+            ')' => {
+                tails.pop();
+                let mut old_heads = heads.pop().unwrap();
+                let new_heads = heads.last_mut().unwrap();
+                new_heads.extend(old_heads.drain(..));
+                new_heads.sort();
+                new_heads.dedup();
+            },
+            _ => panic!()
         }
     }
-
-    let mut links = HashMap::new();
-    for p in portals.values() {match p[..] {
-        [_] => {}, [p1, p2] => {links.insert(p1, p2); links.insert(p2, p1);}, _ => panic!()
-    }}
-
-    let mut prev: HashSet<(usize, usize, usize)> = HashSet::new();
-    let mut curr: HashSet<(usize, usize, usize)> = HashSet::new();
-    match portals[&(b'A', b'A')][..] {[(x, y)] => {curr.insert((x, y, 0));}, _ => panic!()}
-    let mut next: HashSet<(usize, usize, usize)> = HashSet::new();
-    let end;
-    match portals[&(b'Z', b'Z')][..] {[(x, y)] => end = (x, y, 0), _ => panic!()}
-
-    for t in 1 .. {
-        assert!(!curr.is_empty());
-        for (x, y, d) in curr.drain() {
-            if y > 0 && map.get(y).and_then(|mapy| mapy.get(x)) == Some(&b'.') {
-                if (x, y - 1, d) == end {return t.to_string();}
-                if prev.insert((x, y - 1, d)) {next.insert((x, y - 1, d));}
-            }
-            if x > 0 && map[y].get(x - 1) == Some(&b'.') {
-                if (x - 1, y, d) == end {return t.to_string();}
-                if prev.insert((x - 1, y, d)) {next.insert((x - 1, y, d));}
-            }
-            if map[y].get(x + 1) == Some(&b'.') {
-                if (x + 1, y, d) == end {return t.to_string();}
-                if prev.insert((x + 1, y, d)) {next.insert((x + 1, y, d));}
-            }
-            if map.get(y + 1).and_then(|mapy| mapy.get(x)) == Some(&b'.') {
-                if (x, y + 1, d) == end {return t.to_string();}
-                if prev.insert((x, y + 1, d)) {next.insert((x, y + 1, d));}
-            }
-            if let Some(&(nx, ny)) = links.get(&(x, y)) {
-                let is_outward = x == 2 || y == 2 || map[y].len() - x == 3 || map.len() - y == 3;
-                if d > 0 || part == 'a' || !is_outward {
-                    let nd = if part == 'a' {0} else if is_outward {d - 1} else {d + 1};
-                    if prev.insert((nx, ny, nd)) {next.insert((nx, ny, nd));}
+    assert_eq!(heads.len(), 1);
+    let mut ge1k = 0;
+    for t in 0 .. {
+        let mut done = true;
+        for y in 0 .. map.len() {
+            for x in 0 .. map[0].len() {
+                if (miny as usize ^ minx as usize ^ t ^ y ^ x) % 2 == 0  && map[y][x] & NEAR != 0 {
+                    if map[y][x] & E != 0 && map[y][x + 1] & NEAR == 0 {map[y][x + 1] |= NEAR; done = false; if t >= 999 {ge1k += 1}}
+                    if map[y][x] & N != 0 && map[y - 1][x] & NEAR == 0 {map[y - 1][x] |= NEAR; done = false; if t >= 999 {ge1k += 1}}
+                    if map[y][x] & S != 0 && map[y + 1][x] & NEAR == 0 {map[y + 1][x] |= NEAR; done = false; if t >= 999 {ge1k += 1}}
+                    if map[y][x] & W != 0 && map[y][x - 1] & NEAR == 0 {map[y][x - 1] |= NEAR; done = false; if t >= 999 {ge1k += 1}}
                 }
             }
         }
-        std::mem::swap(&mut curr, &mut next);
+        if done {return if part == 'a' {t.to_string()} else {ge1k.to_string()}}
     }
     unreachable!();
 }
 
 fn day21(part: char, s: &str) -> String {
-    use intcode::*;
-    let mut cpu = Cpu::new(parse_intcode(s));
-    cpu.send_ascii(if part  == 'a' { /* (!a || !b || !c) && d */ "\
-NOT A J
-NOT B T
-OR  T J
-NOT C T
-OR  T J
-AND D J
-WALK
-    "} else { /* (!a || !b || !c) && d  && (e || h) */ "\
-NOT A J
-NOT B T
-OR  T J
-NOT C T
-OR  T J
-AND D J
-NOT E T
-NOT T T
-OR  H T
-AND T J
-RUN
-    "});
-    cpu.run().unwrap();
-    println!("{}", cpu.recv_ascii());
-    format!("{:?}", cpu.recv_all().collect::<Vec<_>>())
-}
+    let ops = |op: &str, a: usize, b: usize, c: usize, mut mem: [Option<usize>; 6]| match op {
+        "addr" => {let r = (*mem.get(a)?)? + (*mem.get(b)?)?; *mem.get_mut(c)? = Some(r); Some(mem)},
+        "addi" => {let r = (*mem.get(a)?)? + b; *mem.get_mut(c)? = Some(r); Some(mem)},
+        "mulr" => {let r = (*mem.get(a)?)? * (*mem.get(b)?)?; *mem.get_mut(c)? = Some(r); Some(mem)},
+        "muli" => {let r = (*mem.get(a)?)? * b; *mem.get_mut(c)? = Some(r); Some(mem)},
+        "banr" => {let r = (*mem.get(a)?)? & (*mem.get(b)?)?; *mem.get_mut(c)? = Some(r); Some(mem)},
+        "bani" => {let r = (*mem.get(a)?)? & b; *mem.get_mut(c)? = Some(r); Some(mem)},
+        "borr" => {let r = (*mem.get(a)?)? | (*mem.get(b)?)?; *mem.get_mut(c)? = Some(r); Some(mem)},
+        "bori" => {let r = (*mem.get(a)?)? | b; *mem.get_mut(c)? = Some(r); Some(mem)},
+        "setr" => {let r = (*mem.get(a)?)? ; *mem.get_mut(c)? = Some(r); Some(mem)},
+        "seti" => {let r = a; *mem.get_mut(c)? = Some(r); Some(mem)},
+        "gtir" => {let r = a > (*mem.get(b)?)?; *mem.get_mut(c)? = Some(r as usize); Some(mem)},
+        "gtri" => {let r = (*mem.get(a)?)? > b; *mem.get_mut(c)? = Some(r as usize); Some(mem)},
+        "gtrr" => {let r = (*mem.get(a)?)? > (*mem.get(b)?)?; *mem.get_mut(c)? = Some(r as usize); Some(mem)},
+        "eqir" => {let r = a == (*mem.get(b)?)?; *mem.get_mut(c)? = Some(r as usize); Some(mem)},
+        "eqri" => {let r = (*mem.get(a)?)? == b; *mem.get_mut(c)? = Some(r as usize); Some(mem)},
+        "eqrr" => {let r = (*mem.get(a)?)? == (*mem.get(b)?)?; *mem.get_mut(c)? = Some(r as usize); Some(mem)},
+        _ => panic!()
+        };
+    
+        let mut lines = s.lines();
+        let ip_reg: usize = lines.next().unwrap().strip_prefix("#ip ").unwrap().parse().unwrap();
+        let code: Vec<(&str, usize, usize, usize)> = lines.map(|line| {
+            let [op, a_str, b_str, c_str]: [&str; 4] = line.split(" ").collect::<Vec<_>>().try_into().unwrap();
+            (op, a_str.parse().unwrap(), b_str.parse().unwrap(), c_str.parse().unwrap())
+        }).collect();
+
+        assert!(matches!(code[code.len() - 3 ..], 
+            [("eqrr", 5, 0, 1), ("addr", 1, i1, i2), ("seti", _, _, i3)] if i1 == ip_reg && i2 == ip_reg && i3 == ip_reg
+        ));
+
+        let mut mem = [None, Some(0), Some(0), Some(0), Some(0), Some(0)];
+        let mut rs: Vec<usize> = vec![];
+        let mut mems: Vec<[usize; 5]> = vec![];
+        println!("\n");
+        while let Some(&(op, a, b, c)) = code.get(mem[ip_reg].unwrap()) {
+            let ip = mem[ip_reg].unwrap();
+            mem = match ops(op, a, b, c, mem) {
+                Some(mem) => mem,
+                None => {
+                    assert_eq!(ip, code.len() - 3);
+                    if part == 'a' {return mem[5].unwrap().to_string();}
+                    if !rs.contains(&mem[5].unwrap()) {rs.push(mem[5].unwrap());}
+                    let new_mem = [mem[1].unwrap(), mem[2].unwrap(), mem[3].unwrap(), mem[4].unwrap(), mem[5].unwrap()];
+                    if mems.contains(&new_mem) {return rs.last().unwrap().to_string();}
+                    mems.push(new_mem);
+                    print!("{} {:06x} ", rs.len( ), mem[5].unwrap());
+                    mem[1] = Some(0);
+                    mem
+                }
+            };
+            *mem[ip_reg].as_mut().unwrap() += 1;
+        }
+        unreachable!();
+    }
 
 fn day22(part: char, s: &str) -> String {
-    let n_cards: u64 = if part == 'a' {10007} else {119315717514047};
-    let mod_mul = |a: u64, b: u64| -> u64 {(a as u128 * b as u128 % n_cards as u128) as u64};
-    let mut increment = 1u64;
-    let mut zero_at = 0u64;
-    for line in s.lines() {
-        let op: Vec<u8> = line.bytes().take_while(|c| !matches!(c, b'0' ..= b'9' | b'-')).collect();
-        match &op[..] {
-            b"deal into new stack" => {
-                increment = n_cards - increment;
-                zero_at = n_cards - 1 - zero_at;
-            }
-            b"cut " => {
-                let arg: i64 = line[op.len() ..].parse().unwrap();
-                let arg_p: u64 = (n_cards as i64 - arg) as u64;
-                zero_at = (zero_at + arg_p) % n_cards;
-            }
-            b"deal with increment " => {
-                let arg: u64 = line[op.len() ..].parse().unwrap();
-                increment = mod_mul(increment, arg);
-                zero_at = mod_mul(zero_at, arg);
-            }
-            _ => panic!()
+    let mut lines = s.trim().lines();
+    let depth: u32 = lines.next().unwrap().strip_prefix("depth: ").unwrap().parse().unwrap();
+    let target: [usize; 2] = lines.next().unwrap().strip_prefix("target: ").unwrap()
+                                .split(",").map(|s| s.parse().unwrap()).collect::<Vec<_>>().try_into().unwrap();
+    assert_eq!(lines.next(), None);
+    let mut level = Vec::with_capacity(target[1]);
+    level.push(Vec::with_capacity(target[0]));
+    level[0].push(depth % 20183);
+    for x in 1 .. target[0] + 1 {level[0].push((x as u32 * 16807 + depth) % 20183);}
+    for y in 1 .. target[1] + 1{
+        level.push(Vec::with_capacity(target[0]));
+        level[y].push((y as u32 * 48271 + depth) % 20183);
+        for x in 1 .. target[0] + 1 {
+            let r = if [x, y] == target {0} else {(level[y][x-1] * level[y-1][x] + depth) % 20183};
+            level[y].push(r);
         }
     }
-    
-    if part == 'a' {
-        return ((zero_at as u128 + 2019 * increment as u128) % n_cards as u128).to_string()
-    }
 
-    let mut total_increment = 1u64;
-    let mut total_zero_at = 0u64;
+    if part == 'a' {return level.iter().flatten().map(|ix| ix % 3).sum::<u32>().to_string();}
 
-    //magic number is the number of shuffles given by the challenge
-    for bit in format!("{:b}", 101741582076661u64).bytes() {
-        total_zero_at = (mod_mul(total_zero_at, total_increment) + total_zero_at) % n_cards;
-        total_increment = mod_mul(total_increment, total_increment);
-        
-        if bit == b'1' {
-            total_zero_at = (mod_mul(total_zero_at, increment) + zero_at) % n_cards;
-            total_increment = mod_mul(total_increment, increment);
+    #[derive(Debug)]
+    struct Node {key: usize, y: usize, x: usize, tool: u8, cost: usize}
+    impl Ord for Node {fn cmp(&self, other: &Self) -> Ordering {
+        (other.key, other.y, other.x).cmp(&(self.key, self.y, self.x))
+    }}
+    impl PartialOrd for Node {fn partial_cmp(&self, other: &Self) -> Option<Ordering> {Some(self.cmp(other))}}
+    impl PartialEq for Node {fn eq(&self, other: &Self) -> bool {self.cmp(other) == Ordering::Equal}}
+    impl Eq for Node {}
+    let new_node = |y, x, tool, cost| -> Node { Node { y, x, tool, cost,
+        key: cost
+                + (x as isize - target[0] as isize).abs() as usize 
+                + (y as isize - target[1] as isize).abs() as usize 
+                + (tool != 1) as usize * 7
+    }};
+
+    let mut opens: BinaryHeap<Node> = BinaryHeap::new();
+    let mut closeds: HashSet<(usize, usize, u8)> = HashSet::new();
+
+    // we identify each tool with the terrain - level%3 - it can't be used in:
+    // 0 = rocky = can't use neither; 1 = wet = can't use torch; 2 = narrow = can't use climbing gear
+    opens.push(new_node(0, 0, 1, 0));
+    while let Some(node) = opens.pop() {
+        if node.x == level[0].len() - 1 {
+            let x = node.x + 1;
+            level[0].push((x as u32 * 16807 + depth) % 20183);
+            for y in 1 .. level.len() {
+                let r = (level[y][x-1] * level[y-1][x] + depth) % 20183; 
+                level[y].push(r);
+            }
         }
+        if node.y == level.len() - 1 {
+            let y = node.y - 1;
+            level.push(Vec::with_capacity(target[0]));
+            level[y].push((y as u32 * 48271 + depth) % 20183);
+            for x in 1 .. target[0] + 1 {
+                let r =(level[y][x-1] * level[y-1][x] + depth) % 20183;
+                level[y].push(r);
+            }
+        }
+
+        if !closeds.insert((node.y, node.x, node.tool)) {continue;}
+        if [node.x, node.y] == target && node.tool == 1 {return node.cost.to_string();}
+        if node.y > 0 && (level[node.y - 1][node.x] % 3) as u8 != node.tool {
+            opens.push(new_node(node.y - 1, node.x, node.tool, node.cost + 1));
+        }
+        if node.x > 0 && (level[node.y][node.x - 1] % 3) as u8 != node.tool {
+            opens.push(new_node(node.y, node.x - 1, node.tool, node.cost + 1));
+        }
+        if (level[node.y][node.x + 1] % 3) as u8 != node.tool {
+            opens.push(new_node(node.y, node.x + 1, node.tool, node.cost + 1));
+        }
+        if (level[node.y + 1][node.x] % 3) as u8 != node.tool {
+            opens.push(new_node(node.y + 1, node.x, node.tool, node.cost + 1));
+        }
+        opens.push(new_node(node.y, node.x, 3 - (level[node.y][node.x] % 3) as u8 - node.tool, node.cost + 7));
     }
-    //  pos = zero_at  + increment * id
-    //  pos - zero_at  = increment * id
-    // (pos - zero_at) / increment = id
-    let ii = mod_inverse(total_increment, n_cards).unwrap();
-    assert_eq!(mod_mul(ii, total_increment), 1);
-    mod_mul(ii, 2020 + n_cards - total_zero_at).to_string()
+    unreachable!();
 }
 
 fn day23(part: char, s: &str) -> String {
-    use intcode::*;
-    let code = parse_intcode(s);
-    let mut cpus: Vec<Cpu> = (0 .. 50).map(|ip| Cpu::with_input(code.clone(), &[ip])).collect();
-    let mut nat = None;
-    let mut last_nat_sent = None;
+    let mut bots = s.lines().map(|line| {
+        let mut chars = line.strip_prefix("pos=<").unwrap().chars();
+        let x: i32 = chars.by_ref().take_while(|c| matches!(c, '-' | '0'..='9')).collect::<String>().parse().unwrap();
+        // ,
+        let y: i32 = chars.by_ref().take_while(|c| matches!(c, '-' | '0'..='9')).collect::<String>().parse().unwrap();
+        // ,
+        let z: i32 = chars.by_ref().take_while(|c| matches!(c, '-' | '0'..='9')).collect::<String>().parse().unwrap();
+        // >
+        let r: i32 = chars.as_str().strip_prefix(", r=").unwrap().parse().unwrap();
+        (x, y, z, r)
+    }).collect::<Vec<_>>();
     
-    loop {
-        let mut network_idle = true;
-        for ip in 0 .. 50 {
-            cpus[ip].send(-1);
-            cpus[ip].run().unwrap();
-            loop{
-                match (cpus[ip].recv(), cpus[ip].recv(), cpus[ip].recv()) {
-                    (Some(rip @ 0 ..= 49), Some(x), Some(y)) => {
-                        cpus[rip as usize].send(x);
-                        cpus[rip as usize].send(y);
-                        network_idle = false;
-                    }
-                    (Some(255), Some(x), Some(y)) => {
-                        if part == 'a' {return y.to_string()}
-                        nat = Some((x, y));
-                    }
-                    (None, _, _) => break,
-                    e => panic!("unknown response {:?} from CPU {}", e, ip)
-                }
-            }
+    if part == 'a' {
+        let strongest = bots.iter().max_by_key(|bot| bot.3).unwrap();
+        return bots.iter().filter(|bot|
+            (strongest.0 - bot.0).abs() + (strongest.1 - bot.1).abs() + (strongest.2 - bot.2).abs() <= strongest.3
+        ).count().to_string();
+    }
+
+    /// Region of space bounded by up to eight planes parallel to the faces of a regular octahedron.
+    #[derive(PartialEq, Hash, Eq, Debug, Clone, Copy)]
+    struct Shape {cs: [i32; 8]}
+    impl Shape {
+        /// Shape as a set of points within a maximum distance from a center. Technically an octahedron.
+        //  r - x - y - z <= cs[0] <=> 0 <= cs[0]-r + x + y + z
+        fn sphere(x: i32, y: i32, z: i32, r: i32) -> Shape { Shape { cs: [
+            r - x - y - z, r - x - y + z, r - x + y - z, r - x + y + z,
+            r + x - y - z, r + x - y + z, r + x + y - z, r + x + y + z
+        ]}}
+        fn is_empty(&self) -> bool {
+            self.cs[0] + self.cs[7] < 0 || self.cs[1] + self.cs[6] < 0 ||
+            self.cs[2] + self.cs[5] < 0 || self.cs[3] + self.cs[4] < 0
         }
-        if network_idle {
-            let (x, y) = nat.unwrap();
-            if last_nat_sent == Some(y) {return y.to_string()};
-            last_nat_sent = Some(y);
-            cpus[0].send(x);
-            cpus[0].send(y);
+        // a - x - y + z > 0 && b - x + y - z > 0 && c + x - y - z > 0 => a + b + c - x - y - z > 0
+        fn compact (self) -> Self { Shape { cs: [
+            self.cs[0].min(self.cs[1] + self.cs[2] + self.cs[4]), self.cs[1].min(self.cs[0] + self.cs[3] + self.cs[5]),
+            self.cs[2].min(self.cs[3] + self.cs[0] + self.cs[6]), self.cs[3].min(self.cs[2] + self.cs[1] + self.cs[7]),
+            self.cs[4].min(self.cs[5] + self.cs[6] + self.cs[0]), self.cs[5].min(self.cs[4] + self.cs[7] + self.cs[1]),
+            self.cs[6].min(self.cs[7] + self.cs[4] + self.cs[2]), self.cs[7].min(self.cs[6] + self.cs[5] + self.cs[3])
+        ]}}
+    }
+    impl std::ops::BitAnd for Shape {
+        type Output = Shape;
+        fn bitand(self, rhs: Self) -> Self { Shape { cs: [
+            self.cs[0].min(rhs.cs[0]), self.cs[1].min(rhs.cs[1]), self.cs[2].min(rhs.cs[2]), self.cs[3].min(rhs.cs[3]),
+            self.cs[4].min(rhs.cs[4]), self.cs[5].min(rhs.cs[5]), self.cs[6].min(rhs.cs[6]), self.cs[7].min(rhs.cs[7])
+        ]}.compact()}
+    }
+    impl PartialOrd for Shape {
+        fn partial_cmp(&self, rhs: &Self) -> Option<Ordering> {
+            self.cs.iter().zip(rhs.cs.iter()).fold(Some(Ordering::Equal), |a, (lc, rc)| match (a, lc.cmp(rc)) {
+                (None, _) => None,
+                (Some(Ordering::Equal), ro) => Some(ro),
+                (Some(lo), Ordering::Equal) => Some(lo),
+                (Some(lo), ro) if lo == ro => Some(lo),
+                _ => None
+            })
         }
     }
+
+    let mut shapes: Vec<(Shape, u32)> = vec![];
+    bots.sort_unstable_by_key(|bot| bot.3);
+    for (bot_ix, bot) in bots.iter().enumerate() {
+        let bot_shape = Shape::sphere(bot.0, bot.1, bot.2, bot.3);
+        println!("bot {:?} => shape {:?}", bot, bot_shape);
+        for i in 0 .. shapes.len() {
+            if shapes[i].0 <= bot_shape {shapes[i].1 += 1;}
+            else {
+                let new_shape = shapes[i].0 & bot_shape;
+                if !new_shape.is_empty() {shapes.push((new_shape, shapes[i].1));}
+
+            }
+        }
+        shapes.push((bot_shape, 1));
+        println!("bot {} / {}: {} shapes tracked", bot_ix, bots.len(), shapes.len());
+        shapes = shapes.into_iter().collect::<HashSet<_>>().into_iter().collect();
+        println!("{} after deduplication", shapes.len());
+    }
+    todo!();
 }
 
 fn day24(part: char, s: &str) -> String {

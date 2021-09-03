@@ -18,25 +18,20 @@ class String
   def display_length; gsub(/\e.*?m/,"").length; end
   def ljust_d(len); self + " " * [len - display_length, 0].max; end
   def bytes_to_glyphs
-    r = ""
-    prev_high = false
-    self.each_byte do |b|
-      if b <= 127
-        r += "\e[27m" if prev_high
-        prev_high = false
-        c = b
-      else
-        r += "\e[7m" if !prev_high
-        prev_high = true
-        c = 255 - b
-      end
-      r += case c when 0x00 .. 0x1F then (0x2400 + c).chr(Encoding::UTF_8)
-                  when 0x20         then "\u2423"
-                  when 0x21 .. 0x7E then c.chr(Encoding::UTF_8)
-                  when 0x7F         then "\u2421"
-                  end
-    end
-    r + (prev_high ? "\e[27m" : "")
+    self.force_encoding(Encoding::UTF_8)
+        .chars.map do |c|
+          case 
+          when c == "\0" then "\e[7m \e[27m"
+          when c.valid_encoding? && c.ord > 0x20 then c
+          else 
+            bits = c.bytes[0]
+            dots =  bits[7] << 0 | bits[3] << 3 |
+                    bits[6] << 1 | bits[2] << 4 |
+                    bits[5] << 2 | bits[1] << 5 |
+                    bits[4] << 6 | bits[0] << 7
+            (0x2800 + dots).chr(Encoding::UTF_8)
+          end
+    end.join
   end
 end
 
@@ -365,17 +360,22 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
   end  
 
   puts "#" * 80 unless quiet
+  fbits = lambda do |str| 
+    str.gsub(/\d ?/).with_index do |d, i|
+      "#{"\e[0m" if i % 8 == 0}#{"\e[30;1m" if i % 8 == 4}#{d}"
+    end + "\e[0m"
+  end
   loop do
     at = out_buf.size
     key, code = bit_reader.read_huffman litlen_codes
     stats[:block_counts][code] += 1
     if code < 256
       out_buf << code.chr
-      puts "@#{at} #{key} - #{code} - #{NEW_STR if stats[:block_counts][code] == 1}"\
+      puts "@#{at} #{fbits[key]} - #{code} - #{NEW_STR if stats[:block_counts][code] == 1}"\
             "literal #{code.chr.bytes_to_glyphs}".ljust_d(50) + code.chr.bytes_to_glyphs unless quiet
       stats[:lit_blocks] += 1
     elsif code == 256
-      puts "@#{at} #{key} - #{code} - end of block" unless quiet
+      puts "@#{at} #{fbits[key]} - #{code} - end of block" unless quiet
       puts "#" * 80
       if bfinal && extrapolate
         bit_reader.start_random!
@@ -402,7 +402,7 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
       buf_end = out_buf.length - offset
       buf_after = [buf_end + 5, out_buf.length].min
       unless quiet
-        puts ("@#{at} #{key} #{extra.join} #{okey} #{oextra.join} - repeat" +
+        puts ("@#{at} #{fbits["#{key} #{extra.join} #{okey} #{oextra.join}"]} - repeat" +
               " #{NEW_STR if stats[:block_counts][code] == 1}#{length}" +
               " #{NEW_STR if stats[:offset_counts][ocode] == 1}#{offset}").ljust_d(45) +
               "\e[31m#{out_buf[buf_before ... buf_start].bytes_to_glyphs}\e[0m" +

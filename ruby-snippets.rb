@@ -199,10 +199,9 @@ def upscale(str, n=2)
 end
 
 require "io/console"
-def progress_bar progress, width = IO.console.winsize[1] - 1
+def progress_bar progress, text = "", width = IO.console.winsize[1] - 1
   on_cells = ((width - 2) * progress.clamp(0 .. 1)).round
-  off_cells = width - 2 - on_cells
-  "[" + "█" * on_cells + " " * off_cells + "]"
+  (text.ljust(width - 2) + "]").insert(on_cells, "\e[27m").insert(0, "[\e[7m")
 end
 
 def relax_rescale(grid, f: 0.1, n: :n4, s: [])
@@ -213,6 +212,17 @@ def relax_rescale(grid, f: 0.1, n: :n4, s: [])
   precision = IO.console.winsize[1] / grid.map(&:length).max - 3
   precision = 16 if precision > 16
   (puts "warning: precision = #{precision}"; precision = 1) if precision < 1
+
+  fmt_secs = lambda do |s|
+    return "" unless s.finite?
+    return "%.2fs" % [s] if s < 60
+    m, s = s.divmod 60
+    return "%dm %0.2fs" % [m, s] if m < 60
+    h, m = m.divmod 60
+    return "%dh %dm %0.2fs" % [h, m, s] if h < 24
+    d, h = h.divmod 24
+    return "%dd %dh %dm %0.2fs" % [d, h, m, s]
+  end
 
   fmt = lambda do |i, j, val|
     logval = Math.log10(val.abs) / -10 if val
@@ -252,6 +262,9 @@ def relax_rescale(grid, f: 0.1, n: :n4, s: [])
 
   prev_grid = nil
   prev_frame_t = nil
+  prev_max_delta = nil
+  time_start = Time.now
+  smooth_time_est = Float::NAN
   loop.with_index do |_, t|
     energy = 0
     grid = (0 ... grid.size).map do |i|
@@ -286,6 +299,21 @@ def relax_rescale(grid, f: 0.1, n: :n4, s: [])
     last_frame = t > 1 && scale < 1e-10 || (max_delta &.<= 2 * Float::EPSILON)
     
     if(t == 0 || Time.now - prev_frame_t > 0.1 || last_frame)
+      time_est = if prev_max_delta && (max_delta < prev_max_delta || max_delta > 1e-15)
+        delta_goal = max_delta < prev_max_delta ? Float::EPSILON : 1
+          (Time.now - prev_frame_t) * 
+          (Math.log(max_delta) - Math.log(delta_goal)) / 
+          (Math.log(prev_max_delta) - Math.log(max_delta))
+      else Float::NAN
+      end
+
+      smooth_time_est = case
+      when !smooth_time_est.finite? then time_est
+      when !time_est.finite? then smooth_time_est
+      else 0.9 * smooth_time_est + 0.1 * time_est
+      end
+
+
       cout = [""]
       grid.each.with_index{|row, i| cout << row.map.with_index{|val, j| fmt[i, j, val]}.join(" ").rstrip}
       cout << ""
@@ -294,7 +322,10 @@ def relax_rescale(grid, f: 0.1, n: :n4, s: [])
       cout << "delta_1 = %.16f" % [(1 - scale) / strength]
       # cout << "suppression factors = %p" % [suppression_factors.map{|f| "%.1e" % f}]
       # \e[A moves cursor up; \e[?25l hides it; \e[?25h shows it again
-      cout << progress_bar(Math.log(max_delta || 1) / Math.log(Float::EPSILON))
+      cout << progress_bar(
+                Math.log(max_delta || 1) / Math.log(Float::EPSILON), 
+                "elapsed: #{fmt_secs[Time.now - time_start]} | remaining: #{fmt_secs[smooth_time_est]}"
+              )
       cout << "\e[#{cout.size}A\e[?25l" unless last_frame
       print cout.join("\n")
       return nil if last_frame && scale < 1e-10
@@ -303,6 +334,7 @@ def relax_rescale(grid, f: 0.1, n: :n4, s: [])
         delta_1: (1 - scale) / strength
       } if last_frame
       prev_frame_t = Time.now
+      prev_max_delta = max_delta
     end
     prev_grid = grid.dup
   end
@@ -343,7 +375,7 @@ def foo(x, limit = nil, n: :n4, f: 0.1, grid: nil, lowcolor: false, hicolor: fal
   g, r, b = (limit.nil? ? accepted_modes : accepted_modes.max(3)).map(&:last)
   plan = (0 ... xs.size).map do |i|
     (0 ... xs[i].size).map do |j|
-      if xs[i][j] != ' '
+      if g[i][j]
         [i, j] + [r, g, b].map do |c|
           case
           when c.nil? then 128

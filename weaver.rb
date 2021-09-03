@@ -1,6 +1,29 @@
 require 'json'
 require 'zlib'
 
+class LRUCache 
+  def initialize capacity = 100_000
+    @data = {}
+    @capacity = capacity
+  end
+
+  def [] key
+    @data[key] = @data.delete key if @data.include? key
+  end
+
+  def []= key, value
+    @data.delete key
+    @data[key] = value
+    if @data.size > @capacity 
+      @data.delete @data.first.first
+    elsif @data.size % 1000 == 0
+      p "#{@data.size} cache entries"
+    end
+  end
+
+  def reject! &block; @data.reject! &block; end
+end
+
 class CombinationGenerator
   Literal = Struct.new :ix, :is_neg, :for_gen do
     def to_s; (is_neg ? "-" : "+") + for_gen.names[ix]; end
@@ -52,7 +75,7 @@ class CombinationGenerator
     @names = names
     @filters = []
     make_enum
-    @fail_cache = {}
+    @fail_cache = LRUCache.new
     @yield_clock = 0
     Filter.id = 0
   end
@@ -94,6 +117,7 @@ class CombinationGenerator
           Literal.new l, false, gen
         end
       }, gen
+      gen.next true
     end
     if o[:c]
       o[:c].each{|k| gen.fail_cache[k] = true}
@@ -126,7 +150,7 @@ class CombinationGenerator
     @filters.pop
   end
 
-  def next; @enum.next; end
+  def next x; @enum.feed x unless @first_next; r = @enum.next; @first_next = false; r; end
 
   def make_enum
     @enum = Enumerator.new do |y|
@@ -135,25 +159,36 @@ class CombinationGenerator
         do_enum(y, "", ones)
       end
     end
+    @first_next = true
   end
 
   def do_enum y, path, ones
-    $buffer.puts path if path.length < 160
-    sleep $speed if $speed > 0
     unsat_filters = @filters.reject{|f| f.satisfied_by? path};
     yield_clock = @yield_clock
-    return if unsat_filters.any? {|f| f.last_ix < path.length}
+    if unsat_filters.any? {|f| f.last_ix < path.length}
+      $buffer.puts "x #{path}" if path.length < 160
+      return
+    end
+
     if path.length == @names.length
-      y.yield path.chars.map.with_index {|c, ix| c == '1' ? @names[ix] + " " : ""}.join ""
+      sol = path.chars.map.with_index {|c, ix| c == '1' ? @names[ix] + " " : ""}.join ""
+      while y.yield sol
+        @yield_clock += 1
+        unsat_filters = @filters.reject{|f| f.satisfied_by? path};
+        return if unsat_filters.any? {|f| f.last_ix < path.length}
+      end
+
       @yield_clock += 1
     end
 
     some_unsat_filters = unsat_filters.map(&:id);
     some_unsat_filters.pop until some_unsat_filters.empty? || @fail_cache[[some_unsat_filters, path.length, ones]]
 
-    unless @fail_cache[[some_unsat_filters, path.length, ones]]
-      do_enum(y, path + "0", ones) if ones + path.length < @names.length
+    if @fail_cache[[some_unsat_filters, path.length, ones]]
+      $buffer.puts "o #{path}" if path.length < 160
+    else
       do_enum(y, path + "1", (ones - 1)) if ones > 0
+      do_enum(y, path + "0", ones) if ones + path.length < @names.length
       if yield_clock == @yield_clock
         @fail_cache[[unsat_filters.map(&:id), path.length, ones]] = true
       end
@@ -179,12 +214,19 @@ end
 
 $buffer = Class.new{
   def initialize; @buffer = []; end
+  def p str
+    puts str.inspect
+    str
+  end
   def puts str
+    print str + "\n"
+  end
+  def print str
     @buffer << str
     flush if @buffer.length >= 50
   end
   def flush
-    Kernel.puts @buffer.join ?\n
+    Kernel.puts @buffer.join
     @buffer = []
   end
 }.new
@@ -326,14 +368,15 @@ def do_command line
       $undo_log.push [$enum.serialize, line]
       $solution_tracker.drop_speculation
       puts "ok; #{make_filter $&.chop}"
+      puts $renderer[$&.gsub(/[^\w ]/, ""), $enum] if $renderer
     when /^pop$/
-      $solution_tracker.add_speculation
       time_start = Time.now
-      sol = $enum.next
+      sol = $enum.next $solution_tracker.speculation.nil?
       $buffer.flush
       puts $renderer[sol, $enum] if $renderer
       puts rolling_prefix "pop", sol
       puts ?\a if Time.now - time_start > 10 #?\a is the "alert" character
+      $solution_tracker.add_speculation
       $solution_tracker.speculation = sol
     when /^undo$/
       if $undo_log.empty?
@@ -369,10 +412,10 @@ def do_command line
       if $solution_tracker.speculation
         level = $solution_tracker.speculation.split.length
         while $solution_tracker.speculation.split.length == level
-          $solution_tracker.add_speculation
-          sol = $enum.next
+          sol = $enum.next $solution_tracker.speculation.nil?
           puts $renderer[sol, $enum] if $renderer
           puts rolling_prefix "pop", sol
+          $solution_tracker.add_speculation
           $solution_tracker.speculation = sol
         end
       else

@@ -73,7 +73,7 @@ class IdentSubseqCalc
           t_prev = nil
           enum.each do |c|
             if !t_prev || Time.now - t_prev > 0.1
-              puts "#{highlight_diff(str, c.join, "")}\e[1A"
+              puts "#{highlight_diff(str, c.join, "", @letter_only)}\e[1A"
               t_prev = Time.now
             end
             y.yield c.join
@@ -87,10 +87,12 @@ class IdentSubseqCalc
     end
   end
 
-  attr_reader :strs
+  attr_reader :strs, :orig_strs
+
   def initialize(letter_only: false, tiebreak: :first, slow_mode: :normal, sort: nil,
                   count_uniq: false, redundant_mode: false, min_chars: 0,
                   recursive_mode: false, reverse_regex: false, verbose: false)
+    @orig_strs = []
     @strs = []
     @enums = []
     @tiebreak = tiebreak
@@ -114,15 +116,13 @@ class IdentSubseqCalc
       min_chars: @min_chars, recursive_mode: @recursive_mode)
   end
 
-  def push str
-    str = str.downcase if @letter_only
+  def push orig_str
+    str = orig_str
+    str = str.downcase.gsub(/[^a-z]/, "") if @letter_only
     return false if @strs.include? str
+    @orig_strs << orig_str
     @strs << str
-    if @letter_only
-      @enums << subseq_enum(str.gsub(/[^a-z]/, "")).with_index
-    else
-      @enums << subseq_enum(str).with_index
-    end
+    @enums << subseq_enum(str).with_index
     true
   end
   
@@ -253,18 +253,23 @@ class RecursiveSubseqCalc
   end
   
   def strs; @top.strs; end
+  def orig_strs; @top.orig_strs; end
   def push str; @top.push(str) && (@res = nil; true); end
   
   def results
     return @res if @res
     strs = @slow_mode == :normal ? @top.results : @top.strs
+    chlen_goal = strs.map(&:length).max
     @verbose_out = []
     loop do
       calc = @top.dup_empty.push_all(strs)
       (puts "", strs; sleep 0.1) if @animation_mode
       case @slow_mode
       when :super_slow
-        changes = strs.zip(calc.results_with_index).filter{|x, (y, _)| x != y}
+        changes = strs.each.with_index
+                      .filter{|x, _| x.length >= chlen_goal}
+                      .map{|x, ix| [x, calc.result_with_index(ix)]}
+                      .filter{|x, (y, _)| x != y}
         chlen_max = changes.map{|x, _| x.length}.max
         changes.filter!{|x, _| x.length == chlen_max}
         chpos_min = changes.map{|_, (_, ix)| ix}.min
@@ -283,8 +288,13 @@ class RecursiveSubseqCalc
           count_hsh.fetch(k, []).length
         end
       end
-      return @res if @res == strs
-      strs = @res
+      if @res != strs
+        strs = @res
+      elsif @slow_mode == :super_slow && chlen_goal > 1
+        chlen_goal -= 1
+      else
+        return @res
+      end
     end
   end
 
@@ -293,14 +303,24 @@ end
 
 ################################################################################
 
-def find_subseq haystack, needle
-  last_ix = -1
-  needle.chars.map{|c| last_ix = haystack.index(c, last_ix + 1)}
+def find_subseq haystack, needle, fold_case
+  if fold_case
+    last_ix = -1
+    needle.chars.map do |c|
+      last_ix = [
+        haystack.index(c.downcase, last_ix + 1), 
+        haystack.index(c.upcase, last_ix + 1)
+      ].compact.min
+    end
+  else
+    last_ix = -1
+    needle.chars.map{|c| last_ix = haystack.index(c, last_ix + 1)}
+  end
 end
 
-def highlight_diff in_str, new_str, old_str
-  new_ixes = find_subseq in_str, new_str if new_str.is_a? String
-  old_ixes = find_subseq in_str, old_str if old_str.is_a? String
+def highlight_diff in_str, new_str, old_str, fold_case
+  new_ixes = find_subseq in_str, new_str, fold_case if new_str.is_a? String
+  old_ixes = find_subseq in_str, old_str, fold_case if old_str.is_a? String
   
   in_str.chars.map.with_index do |c, ix|
     color = case [new_ixes.include?(ix), old_ixes.include?(ix)]
@@ -378,17 +398,17 @@ if $0 == __FILE__
       time_delta = Time.now - time_start
       time_delta_sum += time_delta
 
-      results_changed = calc.strs.zip(old_results, results).filter{|_, old_str, new_str| old_str != new_str}.sort
+      results_changed = calc.orig_strs.zip(calc.strs, old_results, results).filter{|_, _, old_str, new_str| old_str != new_str}.sort
       res_delta_sum += results_changed.count
-      results_changed.each do |in_str, old_str, new_str|
+      results_changed.each do |orig_str, in_str, old_str, new_str|
         if old_str == new_str
           nil
         elsif tiebreak == :all && old_str && new_str[0].length == old_str[0].length
-          puts "- %p = %p | %s" % [old_str - new_str, new_str, in_str]
+          puts "- %p = %p | %s" % [old_str - new_str, new_str, orig_str]
         elsif tiebreak == :all
-          puts "%p => %p | %s" % [old_str, new_str, in_str]
+          puts "%p => %p | %s" % [old_str, new_str, orig_str]
         else
-          puts "%p => %p | %s" % [old_str || "", new_str, highlight_diff(in_str, new_str, old_str || "")]
+          puts "%p => %p | %s" % [old_str || "", new_str, highlight_diff(orig_str, new_str, old_str || "", letter_only)]
         end
       end
 
