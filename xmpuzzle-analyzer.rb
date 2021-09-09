@@ -113,23 +113,41 @@ def sort_pieces(pieces)
     pieces.each do |_, piece|
         piece[:essential] = piece[:voxels].any? {|k, _| voxel_choices[k] == 1}
     end
-    candidates = pieces.to_a
+    candidates = pieces.values
     until candidates.empty?
-        candidates.each do |(pid, _), piece|
-            piece[:score] = piece[:voxels].keys.map(&voxel_score[pid]).sort
-        end
-        ((pid, _), piece), cid = candidates.each.with_index.min_by do |(k, v), _|
-            [
-                rank[v[:score].first], 
-                k.first, 
-                v[:score].first,
-                v[:essential] ? 0 : 1, 
-                -v[:count] * v[:score].count{|n| v[:score].first == n},
-                v[:score]
+        plan_candidates = candidates.dup
+        plan_score = voxel_score.dup.transform_values! &:dup
+        plan_last = nil
+        piece = loop do
+            plan_candidates.each do |piece|
+                piece[:score] = piece[:voxels].keys
+                                    .map(&plan_score[piece[:key].first])
+                                    .sort
+                piece[:batch] = [
+                    rank[piece[:score].first], 
+                    piece[:key].first,
+                    piece[:score].first
+                ]
+            end
+            piece = plan_candidates.min_by do |v|
+                [
+                    v[:batch], 
+                    v[:count] ,# * v[:score].count{rank[v[:score].first] == rank[_1]}, 
+                    v[:score]
+                ]
+            end
+            break plan_last if !piece || plan_last && plan_last[:batch] != piece[:batch]
+            plan_last = piece
+            piece[:voxels].keys.each{|k| plan_score[piece[:key].first][k] += piece[:count]}
+            plan_candidates.delete_if{_1[:key] == piece[:key] || _1[:batch] != piece[:batch]}
+            p [
+                plan_candidates.count, piece[:key], piece[:score], piece[:count]
             ]
         end
-        piece[:voxels].keys.each{|k| voxel_score[pid][k] += piece[:count]}
-        yield candidates.delete_at cid
+        piece[:score] = piece[:voxels].keys.map(&voxel_score[piece[:key].first]).sort
+        piece[:voxels].keys.each{|k| voxel_score[piece[:key].first][k] += piece[:count]}
+        candidates.delete_if{_1[:key] == piece[:key]}
+        yield piece
     end
 end
 
@@ -283,6 +301,7 @@ nodes[0].css("> problem").each.with_index(1) do |n_problem, i_problem|
         
         assembly_bits.zip(problem_shape_data).each do |placement, (pid, gid, name)|
             histogram[[pid, placement]] ||= {
+                key: [pid, placement],
                 name: "assembly ##{assembly_id} shape #{name}",
                 voxels: (grid_type[:place_piece][voxels[gid], placement] if grid_type),
                 count: 0
@@ -293,10 +312,10 @@ nodes[0].css("> problem").each.with_index(1) do |n_problem, i_problem|
 
     if show_choices
         if grid_type
-            sort_pieces(histogram) do |k, v|
-                puts "#{v[:name]} (#{k}) x#{v[:count]}"
-                puts "#{"E " if v[:essential]}#{v[:score]}"
-                puts grid_type[:render][v[:voxels], voxels[goal_id], k.last] rescue puts "#{$!}"
+            sort_pieces(histogram) do |piece|
+                puts "#{piece[:name]} (#{piece[:key]}) x#{piece[:count]}"
+                puts piece[:score].inspect
+                puts grid_type[:render][piece[:voxels], voxels[goal_id], piece[:key].last]
                 STDIN.gets if more_mode
             end
         else
@@ -317,7 +336,7 @@ nodes[0].css("> problem").each.with_index(1) do |n_problem, i_problem|
         sums.keys.map{_1[0]}.max.downto sums.keys.map{_1[0]}.min do |z|
             sums.keys.map{_1[1]}.max.downto sums.keys.map{_1[1]}.min do |y|
                 sums.keys.map{_1[2]}.min.upto sums.keys.map{_1[2]}.max do |x|
-                    print "%*d " % [w, sums[[z, y, x]]] rescue print " " * (w+1)
+                    print "\e[44m%*d \e[0m" % [w, sums[[z, y, x]]] rescue print " " * (w+1)
                 end
                 puts
             end
