@@ -8,17 +8,23 @@ def block_place_piece(piece_voxels, placement)
     piece_voxels.each.with_index do |slice, z|
         slice.each.with_index do |row, y|
             row.each.with_index do |voxel, x|
-                tx, ty, tz =    case rot
-                                when  0 then [ x,  y,  z]
-                                when  2 then [ x, -y, -z]
-                                when  8 then [-x,  y, -z]
-                                when 10 then [-x, -y,  z]
-                                when 16 then [-y,  x,  z]
-                                when 18 then [ y,  x, -z]
-                                when 20 then [ y, -x,  z]
-                                when 22 then [-y, -x, -z]
-                                else raise "unknown rotation"
-                                end
+                tx, ty, tz = [
+                    [x,  y,  z], [x, -z,  y], [x, -y, -z], [x,  z, -y]
+                ][rot % 4]
+                tx, ty, tz = [
+                    [ tx,  ty,  tz], [-tz,  ty,  tx], 
+                    [-tx,  ty, -tz], [ tz,  ty, -tx], 
+                    [-ty,  tx,  tz], [ ty, -tx,  tz]
+                ][rot / 4]
+
+                # tx, ty, tz = [
+                #     [ x,  y,  z], [ x, -z,  y], [ x, -y, -z], [ x,  z, -y],
+                #     [-z,  y,  x], [-y, -z,  x], [ z, -y,  x], [ y,  z,  x],
+                #     [-x,  y, -z], [-x, -z, -y], [-x, -y,  z], [-x,  z,  y],
+                #     [ z,  y, -x], [ y, -z, -x], [-z, -y, -x], [-y,  z, -x],
+                #     [-y,  x,  z], [ z,  x,  y], [ y,  x, -z], [-z,  x, -y],
+                #     [ y, -x,  z], [-z, -x,  y], [-y, -x, -z], [ z, -x, -y]
+                # ][rot]
                 r[[tz + dz, ty + dy, tx + dx]] = voxel if voxel != "_"
             end
         end
@@ -110,9 +116,6 @@ def sort_pieces(pieces)
 
     voxel_score = Hash.new{|h, k| h[k] = Hash.new{0}}
     voxel_choices = pieces.flat_map{|_, piece| piece[:voxels].keys}.tally
-    pieces.each do |_, piece|
-        piece[:essential] = piece[:voxels].any? {|k, _| voxel_choices[k] == 1}
-    end
     candidates = pieces.values
     until candidates.empty?
         plan_candidates = candidates.dup
@@ -141,7 +144,7 @@ def sort_pieces(pieces)
             piece[:voxels].keys.each{|k| plan_score[piece[:key].first][k] += piece[:count]}
             plan_candidates.delete_if{_1[:key] == piece[:key] || _1[:batch] != piece[:batch]}
             p [
-                plan_candidates.count, piece[:key], piece[:score], piece[:count]
+                plan_candidates.count, piece[:name], piece[:score], piece[:count]
             ]
         end
         piece[:score] = piece[:voxels].keys.map(&voxel_score[piece[:key].first]).sort
@@ -279,9 +282,10 @@ nodes[0].css("> problem").each.with_index(1) do |n_problem, i_problem|
     if solution_nodes.count == n_problem[:assemblies].to_i
         puts "#{solution_nodes.count} solutions"
     else
-        puts "some solutions have not been stored " +
-            "(#{n_problem[:assemblies]} expected, #{solution_nodes.count} found)"
+        puts "\e[31msome solutions have not been stored " +
+            "(#{n_problem[:assemblies]} expected, #{solution_nodes.count} found)\e[0m"
         partial = true
+        sleep 0.5
     end
     histogram = {}
     solution_nodes.each.with_index(1) do |n, assembly_id|
@@ -302,7 +306,7 @@ nodes[0].css("> problem").each.with_index(1) do |n_problem, i_problem|
         assembly_bits.zip(problem_shape_data).each do |placement, (pid, gid, name)|
             histogram[[pid, placement]] ||= {
                 key: [pid, placement],
-                name: "assembly ##{assembly_id} shape #{name}",
+                name: "##{assembly_id}/#{name}",
                 voxels: (grid_type[:place_piece][voxels[gid], placement] if grid_type),
                 count: 0
             }
