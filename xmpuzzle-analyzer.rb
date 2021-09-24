@@ -353,6 +353,11 @@ nodes[0].css("> problem").each.with_index(1) do |n_problem, i_problem|
 
         w = sums.values.max.to_s.length
         sums.keys.map{_1[0]}.max.downto sums.keys.map{_1[0]}.min do |z|
+            unless sums.keys.any?{_1[0] == z}
+                puts "(blank slice)"
+                next
+            end
+
             sums.keys.map{_1[1]}.max.downto sums.keys.map{_1[1]}.min do |y|
                 sums.keys.map{_1[2]}.min.upto sums.keys.map{_1[2]}.max do |x|
                     print "\e[44m%*d \e[0m" % [w, sums[[z, y, x]]] rescue print " " * (w+1)
