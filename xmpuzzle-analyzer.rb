@@ -115,28 +115,34 @@ def sort_pieces(pieces)
     p rank_list
 
     voxel_score = Hash.new{|h, k| h[k] = Hash.new{0}}
-    voxel_choices = pieces.flat_map{|_, piece| piece[:voxels].keys}.tally
     candidates = pieces.values
+    voxel_choices = candidates.flat_map{|piece| piece[:voxels].keys}.tally
+    candidates.each {|piece| piece[:n_ties] = 0}
     until candidates.empty?
         plan_candidates = candidates.dup
         plan_score = voxel_score.dup.transform_values! &:dup
         plan_last = nil
+        candidates.each do |piece| 
+            piece[:score] = piece[:voxels].keys
+                                .map(&voxel_score[piece[:key].first]).sort
+        end
+
         piece = loop do
             plan_candidates.each do |piece|
-                piece[:score] = piece[:voxels].keys
-                                    .map(&plan_score[piece[:key].first])
-                                    .sort
+                piece[:plan_score] = piece[:voxels].keys
+                                        .map(&plan_score[piece[:key].first]).sort
                 piece[:batch] = [
-                    rank[piece[:score].first], 
+                    rank[piece[:plan_score].first], 
                     piece[:key].first,
-                    piece[:score].first
+                    piece[:plan_score].first,
+                    -piece[:n_ties]
                 ]
             end
             piece = plan_candidates.min_by do |v|
                 [
                     v[:batch], 
                     v[:count] ,# * v[:score].count{rank[v[:score].first] == rank[_1]}, 
-                    v[:score]
+                    v[:plan_score]
                 ]
             end
             break plan_last if !piece || plan_last && plan_last[:batch] != piece[:batch]
@@ -144,12 +150,21 @@ def sort_pieces(pieces)
             piece[:voxels].keys.each{|k| plan_score[piece[:key].first][k] += piece[:count]}
             plan_candidates.delete_if{_1[:key] == piece[:key] || _1[:batch] != piece[:batch]}
             p [
-                plan_candidates.count, piece[:name], piece[:score], piece[:count]
+                piece[:n_ties], piece[:name], piece[:plan_score], piece[:count]
             ]
         end
-        piece[:score] = piece[:voxels].keys.map(&voxel_score[piece[:key].first]).sort
-        piece[:voxels].keys.each{|k| voxel_score[piece[:key].first][k] += piece[:count]}
+        
         candidates.delete_if{_1[:key] == piece[:key]}
+        candidates.each do
+            if  _1[:key].first == piece[:key].first && 
+                _1[:score] == piece[:score] && 
+                _1[:count] == piece[:count]
+            then
+                _1[:n_ties] += 1
+                p _1[:name]
+            end
+        end
+        piece[:voxels].keys.each{|k| voxel_score[piece[:key].first][k] += piece[:count]}
         yield piece
     end
 end
