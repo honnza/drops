@@ -12,6 +12,9 @@ class Array
   def bits_to_int
     reverse.reduce(0){|a,b| 2*a+b}
   end
+  def rtake(n)
+    self[-n ...] || self
+  end
 end
 
 class String
@@ -31,7 +34,14 @@ class String
                     bits[4] << 6 | bits[0] << 7
             (0x2800 + dots).chr(Encoding::UTF_8)
           end
-    end.join
+    end
+  end
+
+  def take(n)
+    self[... n] || self
+  end
+  def rtake(n)
+    self[-n ...] || self
   end
 end
 
@@ -222,7 +232,7 @@ def name_block k
               R15-16 R17-18 R19-22 R23-26 R27-30 R31-34 R35-42 R43-50 R51-58 R59-66
               R67-82 R83-98 R99-114 R115-130 R131-162 R163-194 R195-226 R227-257 R258}
   case k
-  when 0 .. 255 then k.chr.bytes_to_glyphs
+  when 0 .. 255 then k.chr.bytes_to_glyphs.join
   when 256 then "END"
   when 257..285 then rnames[k-257]
   end
@@ -372,7 +382,7 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
     if code < 256
       out_buf << code.chr
       puts "@#{at} #{fbits[key]} - #{code} - #{NEW_STR if stats[:block_counts][code] == 1}"\
-            "literal #{code.chr.bytes_to_glyphs}".ljust_d(50) + code.chr.bytes_to_glyphs unless quiet
+            "literal #{code.chr.bytes_to_glyphs.join}".ljust_d(50) + code.chr.bytes_to_glyphs.join unless quiet
       stats[:lit_blocks] += 1
     elsif code == 256
       puts "@#{at} #{fbits[key]} - #{code} - end of block" unless quiet
@@ -393,21 +403,19 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
 
       last_buf = String.new # 8-bit ASCII
       buf_start = out_buf.length - offset
-      buf_before = [buf_start - 5, 0].max
       if out_buf.size < offset
         puts "offset = #{offset} but only #{out_buf.size} bytes in output buffer" unless quiet
         exit
       end
       length.times{last_buf << out_buf[-offset]; out_buf << out_buf[-offset]}
       buf_end = out_buf.length - offset
-      buf_after = [buf_end + 5, out_buf.length].min
       unless quiet
         puts ("@#{at} #{fbits["#{key} #{extra.join} #{okey} #{oextra.join}"]} - repeat" +
               " #{NEW_STR if stats[:block_counts][code] == 1}#{length}" +
-              " #{NEW_STR if stats[:offset_counts][ocode] == 1}#{offset}").ljust_d(45) +
-              "\e[31m#{out_buf[buf_before ... buf_start].bytes_to_glyphs}\e[0m" +
-              "#{out_buf[buf_start ... buf_end].bytes_to_glyphs}" +
-              "\e[31m#{out_buf[buf_end ... buf_after].bytes_to_glyphs}\e[0m"
+              " #{NEW_STR if stats[:offset_counts][ocode] == 1}#{offset} ").ljust_d(45) +
+              "\e[31m#{out_buf[... buf_start].rtake(15).bytes_to_glyphs.rtake(5)&.join}\e[0m" +
+              "#{out_buf[buf_start ... buf_end].bytes_to_glyphs.join}" +
+              "\e[31m#{out_buf[buf_end ...].take(15).bytes_to_glyphs.take(5)&.join}\e[0m"
       end
       stats[:rep_blocks] += 1
     end
