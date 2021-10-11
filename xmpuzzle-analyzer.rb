@@ -184,10 +184,13 @@ ARGV.delete("--choices")
 ARGV.delete("--placements")
 show_cells = ARGV.include?("--cells")
 ARGV.delete("--cells")
+show_solutions = ARGV.include?("--solutions")
+ARGV.delete("--solutions")
+
 
 if ARGV.length != 1
     abort <<~END
-        usage: filename [--more] [--placements|--choices] [--cells]
+        usage: filename [--more] [--placements|--choices] [--cells] [--solutions]
     END
 end
 
@@ -302,8 +305,8 @@ nodes[0].css("> problem").each.with_index(1) do |n_problem, i_problem|
         partial = true
         sleep 0.5
     end
-    histogram = {}
-    solution_nodes.each.with_index(1) do |n, assembly_id|
+    pieces = {}
+    solutions = solution_nodes.map.with_index(1) do |n, assembly_id|
         nodes = n.css("> assembly")
         if nodes.count != 1
             abort "1 assembly node expected, #{nodes.count} found"
@@ -318,27 +321,32 @@ nodes[0].css("> problem").each.with_index(1) do |n_problem, i_problem|
             abort "unexpected assembly length for assembly #{nodes[0].text.strip}"
         end
         
-        assembly_bits.zip(problem_shape_data).each do |placement, (pid, gid, name)|
-            histogram[[pid, placement]] ||= {
-                key: [pid, placement],
-                name: "##{assembly_id}/#{name}",
-                voxels: (grid_type[:place_piece][voxels[gid], placement] if grid_type),
-                count: 0
-            }
-            histogram[[pid, placement]][:count] += 1
-        end
+        {
+            id: assembly_id,
+            pieces: assembly_bits.zip(problem_shape_data).map do |placement, (pid, gid, name)|
+                pieces[[pid, placement]] ||= {
+                    key: [pid, placement],
+                    name: "##{assembly_id}/#{name}",
+                    voxels: (grid_type[:place_piece][voxels[gid], placement] if grid_type),
+                    count: 0
+                }
+                pieces[[pid, placement]][:count] += 1
+
+                pieces[[pid, placement]]
+            end
+        }
     end
 
     if show_choices
         if grid_type
-            sort_pieces(histogram) do |piece|
+            sort_pieces(pieces) do |piece|
                 puts "#{piece[:name]} (#{piece[:key]}) x#{piece[:count]}"
                 puts piece[:score].inspect
                 puts grid_type[:render][piece[:voxels], voxels[goal_id], piece[:key].last]
                 STDIN.gets if more_mode
             end
         else
-            histogram.to_a.sort_by{|k, v| [k.first, v[:count]]}.each do |k, v|
+            pieces.to_a.sort_by{|k, v| [k.first, v[:count]]}.each do |k, v|
                 puts "#{v[:name]} (#{k}) x#{v[:count]}"
                 STDIN.gets if more_mode
             end
@@ -346,7 +354,7 @@ nodes[0].css("> problem").each.with_index(1) do |n_problem, i_problem|
     end
 
     if show_cells
-        sums = histogram.values
+        sums = pieces.values
                         .flat_map{|v| v[:voxels].keys.map{|k| [k, v[:count]]}}
                         .group_by(&:first)
                         .transform_values{|kvs| kvs.map(&:last).sum}
@@ -365,6 +373,25 @@ nodes[0].css("> problem").each.with_index(1) do |n_problem, i_problem|
                 puts
             end
             puts
+            STDIN.gets if more_mode
+        end
+    end
+
+    if show_solutions
+        sums = pieces.values
+                        .flat_map{|v| v[:voxels].keys.map{|k|
+                            [[k, v[:key].first], v[:count]]
+                        }}.group_by(&:first)
+                        .transform_values{|kvs| kvs.map(&:last).sum}
+
+        solutions.each do |solution|
+            solution[:score] = solution[:pieces].flat_map do |v|
+                v[:voxels].keys.map{|k| sums[[k, v[:key].first]]}
+            end.sort
+        end
+
+        solutions.sort_by{_1[:score]}.each do |solution|
+            puts "#{solution[:id]}: #{solution[:score]}"
             STDIN.gets if more_mode
         end
     end
