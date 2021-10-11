@@ -186,11 +186,13 @@ show_cells = ARGV.include?("--cells")
 ARGV.delete("--cells")
 show_solutions = ARGV.include?("--solutions")
 ARGV.delete("--solutions")
+print_width = nil
+ARGV.reject!{p print_width = $1.to_i if _1 =~ /^-w(\d+)$/}
 
 
 if ARGV.length != 1
     abort <<~END
-        usage: filename [--more] [--placements|--choices] [--cells] [--solutions]
+        usage: filename [--more] [--placements|--choices] [--cells] [--solutions] [-w\\d+]
     END
 end
 
@@ -359,7 +361,7 @@ nodes[0].css("> problem").each.with_index(1) do |n_problem, i_problem|
                         .group_by(&:first)
                         .transform_values{|kvs| kvs.map(&:last).sum}
 
-        w = sums.values.max.to_s.length
+        print_width ||= sums.values.max.to_s.length
         sums.keys.map{_1[0]}.max.downto sums.keys.map{_1[0]}.min do |z|
             unless sums.keys.any?{_1[0] == z}
                 puts "(blank slice)"
@@ -368,7 +370,7 @@ nodes[0].css("> problem").each.with_index(1) do |n_problem, i_problem|
 
             sums.keys.map{_1[1]}.max.downto sums.keys.map{_1[1]}.min do |y|
                 sums.keys.map{_1[2]}.min.upto sums.keys.map{_1[2]}.max do |x|
-                    print "\e[44m%*d \e[0m" % [w, sums[[z, y, x]]] rescue print " " * (w+1)
+                    print "\e[44m%*d \e[0m" % [print_width, sums[[z, y, x]]] rescue print " " * (print_width+1)
                 end
                 puts
             end
