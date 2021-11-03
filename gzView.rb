@@ -51,6 +51,7 @@ class BitReader
     @bits_read = 0
     @buffer = []
     @base64 = base64
+    @bytes_read_strs = []
   end
   
   def start_random!
@@ -64,9 +65,13 @@ class BitReader
     end
   end
   
-  def p_byte b; print "\e[30;1m%02X\e[0m " % b; b; end
-  def p_str s; print "\e[30;1m%02s\e[0m " % s; s; end
-  
+  def p_byte b; @bytes_read_strs << "\e[30;1m%02X\e[0m" % b; b; end
+  def pop_bytes_read_str
+    r = @bytes_read_strs.join " "
+    @bytes_read_strs = []
+    r
+  end
+
   def peek_bits(n)
     while @buffer.size < n
       chars = if @base64
@@ -167,7 +172,7 @@ end
 def show_parse_header bit_reader
   catch :not_gzip do
     header = bit_reader.peek_bytes(10)
-    puts
+    puts bit_reader.pop_bytes_read_str
 
     if header[0] != 0x1f || header[1] != 0x8b
       puts "invalid file type ID #{header[0..1].inspect}"
@@ -188,6 +193,7 @@ def show_parse_header bit_reader
     end
     
     bit_reader.get_bytes(10)
+    puts bit_reader.pop_bytes_read_str
 
     ftext = flags[0]
     fhcrc = flags[1]
@@ -211,12 +217,27 @@ def show_parse_header bit_reader
 
     if fextra == 1
       length = bit_reader.get_bytes(2).bytes_to_int
-      puts "extra field: ", bit_reader.get_bytes(length)
+      bytes = bit_reader.get_bytes length
+      puts bit_reader.pop_bytes_read_str
+      puts "extra field: #{bytes}"
     end
-    puts "filename: ", bit_reader.read_asciiz if fname == 1
-    puts "comment: ", bit_reader.read_asciiz if fcomment == 1
+
+    if fname == 1
+      str = bit_reader.read_asciiz
+      puts bit_reader.pop_bytes_read_str
+      puts "filename: #{str}"
+    end
+
+    if fcomment == 1
+      str = bit_reader.read_asciiz
+      puts bit_reader.pop_bytes_read_str
+      puts "comment: #{str}"
+    end
+
     if fhcrc == 1
-      puts "crc: " + bit_reader.get_bytes(2).bytes_to_int.to_s(16).rjust(6, "0x0000")
+      str =  bit_reader.get_bytes(2).bytes_to_int.to_s(16).rjust(6, "0x0000")
+      puts bit_reader.pop_bytes_read_str
+      puts "crc: #{str}"
     end
     puts
     return
@@ -247,7 +268,7 @@ end
 def read_lencodes bit_reader, len_codes, demand
   r = []
   until r.size >= demand
-    key, code = bit_reader.read_huffman len_codes
+    _, code = bit_reader.read_huffman len_codes
     count = nil
     case code
     when 16 
@@ -292,6 +313,7 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
   bfinal = bit_reader.get_bits(1) == [1]
   btype = bit_reader.get_bits(2)
   
+  puts bit_reader.pop_bytes_read_str
   puts "final: #{bfinal}"
   puts "btype: #{btype}"
   
@@ -304,12 +326,14 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
     len0, len1, nlen0, nlen1 = bit_reader.get_bytes(4)
     len = [len0, len1].bytes_to_int
     nlen = ~[nlen0, nlen1].bytes_to_int ^ (-1 << 16)
+    puts bit_reader.pop_bytes_read_str
     if len != nlen
       puts "len(#{len}) doesn't match nlen(#{nlen})" unless quiet
       exit
     end
-    puts "#{to_bytes_str [len0, len1, nlen0, nlen1]} - #{len} bytes of literal data: " unless quiet
     data = bit_reader.get_bytes(len)
+    bit_reader.pop_bytes_read_str
+    puts "#{to_bytes_str [len0, len1, nlen0, nlen1]} - #{len} bytes of literal data: " unless quiet
     out_buf.concat *data
     unless quiet
       if len > 25
@@ -331,18 +355,19 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
     puts "block compressed with dynamic Huffman codes: " unless quiet
 
     hlit = bit_reader.get_bits(5).bits_to_int + 257
+    puts bit_reader.pop_bytes_read_str
+    puts "#{hlit} literal/length codes" unless quiet
     hdist = bit_reader.get_bits(5).bits_to_int + 1
+    puts bit_reader.pop_bytes_read_str
+    puts "#{hdist} distance codes" unless quiet
     hclen = bit_reader.get_bits(4).bits_to_int + 4
-
-    unless quiet
-      puts "#{hlit} literal/length codes"
-      puts "#{hdist} distance codes"
-      puts "#{hclen} code length codes"
-    end
+    puts bit_reader.pop_bytes_read_str
+    puts "#{hclen} code length codes" unless quiet
 
     code_lengths = hclen.times.map{bit_reader.get_bits(3).bits_to_int}
     code_lengths << 0 until code_lengths.size == 19
     code_lengths.sort_by!.with_index{|_, i| code_lengths_for[i]}
+    puts bit_reader.pop_bytes_read_str
     puts "code lengths: " + code_lengths.inspect unless quiet
 
     len_codes = HuffmanCode.from_lengths(code_lengths)
@@ -351,8 +376,9 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
     puts
     lit_lengths = read_lencodes bit_reader, len_codes, hlit
     litlen_codes = HuffmanCode.from_lengths lit_lengths
+    puts bit_reader.pop_bytes_read_str
     unless quiet
-      puts "Literal + length codes: " unless quiet
+      puts "Literal + length codes: "
       puts word_wrap digest_hash litlen_codes.codes, value_transform: method(:name_block)
       (1..15).map do |l|
         b = litlen_codes.codes.select{|k, v| k.length == l}.values
@@ -363,6 +389,7 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
     
     dist_lengths = read_lencodes bit_reader, len_codes, hdist
     offset_codes = HuffmanCode.from_lengths dist_lengths
+    puts bit_reader.pop_bytes_read_str
     unless quiet
       puts "Offset codes: "
       puts word_wrap digest_hash offset_codes.codes, value_transform: method(:name_offset)
@@ -375,20 +402,35 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
       "#{"\e[0m" if i % 8 == 0}#{"\e[30;1m" if i % 8 == 4}#{d}"
     end + "\e[0m"
   end
+
+  extrapolating = false
+  table = Table.new [{nowrap: true}, {nowrap: true}, {nowrap: true}, {nowrap: true}, {}]
   loop do
     at = out_buf.size
     key, code = bit_reader.read_huffman litlen_codes
     stats[:block_counts][code] += 1
     if code < 256
       out_buf << code.chr
-      puts "@#{at} #{fbits[key]} - #{code} - #{NEW_STR if stats[:block_counts][code] == 1}"\
-            "literal #{code.chr.bytes_to_glyphs.join}".ljust_d(50) + code.chr.bytes_to_glyphs.join unless quiet
+      table.push_row [
+        bit_reader.pop_bytes_read_str , 
+        "@#{at}", 
+        "#{fbits[key]} - #{code}",
+        "#{NEW_STR if stats[:block_counts][code] == 1}literal #{code.chr.bytes_to_glyphs.join}",
+        code.chr.bytes_to_glyphs.join
+      ]
       stats[:lit_blocks] += 1
     elsif code == 256
-      puts "@#{at} #{fbits[key]} - #{code} - end of block" unless quiet
-      puts "#" * 80
+      table.push_row [
+        bit_reader.pop_bytes_read_str,
+        "@#{at}",
+        "#{fbits[key]} - #{code}",
+        "end of block", 
+        ""
+      ]
+      puts table, "#" * 80 unless quiet
       if bfinal && extrapolate
         bit_reader.start_random!
+        extrapolating = true
       else
         return bfinal
       end
@@ -403,27 +445,34 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
 
       last_buf = String.new # 8-bit ASCII
       buf_start = out_buf.length - offset
+
       if out_buf.size < offset
-        puts "offset = #{offset} but only #{out_buf.size} bytes in output buffer" unless quiet
+        brs = bit_reader.pop_bytes_read_str
+        puts table unless quiet
+        puts "#{brs} offset = #{offset} but only #{out_buf.size} bytes in output buffer" unless quiet
         exit
       end
       length.times{last_buf << out_buf[-offset]; out_buf << out_buf[-offset]}
       buf_end = out_buf.length - offset
-      unless quiet
-        puts ("@#{at} #{fbits["#{key} #{extra.join} #{okey} #{oextra.join}"]} - repeat" +
-              " #{NEW_STR if stats[:block_counts][code] == 1}#{length}" +
-              " #{NEW_STR if stats[:offset_counts][ocode] == 1}#{offset} ").ljust_d(45) +
-              "\e[31m#{out_buf[... buf_start].rtake(15).bytes_to_glyphs.rtake(5)&.join}\e[0m" +
-              "#{out_buf[buf_start ... buf_end].bytes_to_glyphs.join}" +
-              "\e[31m#{out_buf[buf_end ...].take(15).bytes_to_glyphs.take(5)&.join}\e[0m"
-      end
+      table.push_row [
+        bit_reader.pop_bytes_read_str,
+        "@#{at}",
+        fbits["#{key} #{extra.join} #{okey} #{oextra.join}"],
+        "repeat" +
+        " #{NEW_STR if stats[:block_counts][code] == 1}#{length}" +
+        " #{NEW_STR if stats[:offset_counts][ocode] == 1}#{offset}",
+        "\e[31m#{out_buf[... buf_start].rtake(15).bytes_to_glyphs.rtake(5)&.join}\e[0m" +
+        "#{out_buf[buf_start ... buf_end].bytes_to_glyphs.join}" +
+        "\e[31m#{out_buf[buf_end ...].take(15).bytes_to_glyphs.take(5)&.join}\e[0m"
+      ]
       stats[:rep_blocks] += 1
     end
+    puts table.render_last if extrapolating
   end
 end
 
 def check_scan(str, scan_to) # hack :-(
-  scan_to.nil? || str =~ /^@(\d+)/ && $1.to_i > scan_to.to_i
+  scan_to.nil? || str =~ /^[\h ]*@(\d+)/ && $1.to_i > scan_to.to_i
 end
 
 def define_more(scan_to)
@@ -440,19 +489,26 @@ def define_more(scan_to)
           break if line.include? NEW_STR
         end
       when "\n", "\r" then orig_puts[Fiber.yield]
-      when "\x03" then exit
+      when "\x03", "\x1a" then exit
       else orig_puts["key pressed: #{key.inspect}"]
       end
     end
   end
-  define_method(:puts){|*args| args.each{|arg| [*arg].each{|str| fiber.resume str}}}
+  define_method :puts do |*args|
+    (args.empty? ? [""] : args).each{|arg| [*arg].each{|str| str.to_s.each_line{|line| fiber.resume line}}}
+  end
+  puts  # the first time a fiber is resumed, the arguments go to the block arguments,
+        # the rest go to yield returs
 end
 
 ################################################################################
 
 def word_wrap words, width = IO.console.winsize[1] - 1
-  words[1 .. -1].reduce [words[0]] do |acc, word|
-    if acc.last.length + word.length >= width
+  words = words.split(" ") if words.is_a? String
+  words.reduce [] do |acc, word|
+    if word.display_length > width
+      acc.concat word.scan /.{1,#{width}}/
+    elsif !acc.last || acc.last.display_length + word.display_length > width
       acc << word
     else
       acc.last.concat " " + word
@@ -463,6 +519,69 @@ end
 
 def list_wrap ary
   word_wrap ary[0 .. -2].map{|e| e + ","} + ary[-1 .. -1]
+end
+
+class Table
+  def initialize(col_styles, width = IO.console.winsize[1] - 1)
+    @col_styles = col_styles
+    @col_styles.each{_1[:opt_width] = 1; _1[:fixed] = true if _1[:width]}
+    @width = width
+    @data = []
+    recalc_widths
+  end
+
+  def recalc_widths
+    #todo: minimize total height instead of dividing widths equally
+    #todo: redistribute rounding errors in the meantime?
+    fixed_total = @col_styles.filter{_1[:fixed]}.map{_1[:width]}.sum
+    auto_opt_total = @col_styles.filter{!_1[:fixed]}.map{_1[:opt_width]}.sum
+    auto_total = @width - fixed_total - @col_styles.count
+
+    if auto_total < auto_opt_total
+      @col_styles.filter{!_1[:fixed] && _1[:nowrap]}.each do
+        _1[:width] = _1[:opt_width]
+        fixed_total += _1[:width]
+        auto_total -= _1[:width]
+        auto_opt_total -= _1[:width]
+      end
+    end
+
+    @col_styles.reject do 
+      _1[:fixed] || (auto_total < auto_opt_total && _1[:nowrap])
+    end.each do
+      _1[:width] = (_1[:opt_width] * auto_total / auto_opt_total).clamp(1..)
+    end
+  end
+
+  def to_s; render_all; end
+  def render_all; recalc_widths; @data.map{render_row _1}.join("\n"); end
+  def render_last; render_row @data.last; end
+
+  def render_row(row)
+    cell_rows = row.zip(@col_styles).map{|cell, style| word_wrap cell, style[:width]}
+    (0 ... cell_rows.map{_1.count}.max).map do |ix|
+      cell_rows.map{_1[ix] || ""}.zip(@col_styles).map do |cell_row, style|
+        case style[:just] 
+        when :c      then cell_row.center_d style[:width]
+        when :l, nil then cell_row.ljust_d style[:width]
+        when :r      then cell_row.rjust_d style[:width]
+        else raise ArgumentError, "invalid justification"
+        end
+      end.join(" ")
+    end.join("\n")
+  end
+
+  def push_row(row)
+    if @col_styles.count != row.count
+      raise ArgumentError, "expected #{@col_styles.count} columns, found #{row.count} in #{row}"
+    end
+
+    row = row.map &:to_s
+    @data << row
+    row.zip(@col_styles).each do |cell, style|
+      style[:opt_width] = [style[:opt_width], cell.display_length].max
+    end
+  end
 end
 
 def digest_hash hash, key_transform: :inspect.to_proc, value_transform: :inspect.to_proc
