@@ -4,7 +4,10 @@ require 'json'
 
 $heaven_mode = ARGV.include? "-h"
 $chaos_mode = ARGV.include? "-c"
-
+$filename = if ARGV.include?("-f") 
+            then ARGV[ARGV.find_index("-f") + 1] 
+            else "hrtfh#{".chaos" if $chaos_mode}.log"
+            end
 #todo: move to a separate file
 default_cfg = [
   #tier 0 lands
@@ -59,6 +62,7 @@ default_cfg = [
   {type: "land", code: "VOLC", prereqs: [60, "ALHM"],     name: "Volcanic Wasteland"},
   {type: "land", code: "DRAG", prereqs: ["20DK"],         name: "Dragon Chasms"},
   {type: "land", code: "GALA", prereqs: ["20DK"],         name: "Galapagos"},
+  {type: "land", code: "DICE", prereqs: [90],             name: "Dice Reserve"},
   {type: "land", code: "OVER", prereqs: [60, "JUNL"],     name: "Overgrown Woods"},
   {type: "land", code: "CLEA", prereqs: ["OVER"],         name: "Clearing"}, #only needs 5 treasure
   {type: "land", code: "LAST", prereqs: [60],             name: "Land of Storms"},
@@ -69,6 +73,9 @@ default_cfg = [
   {type: "land", code: "EMER", prereqs: [[["DRYF", "LICA"], ["VIZI"]]],   name: "Emerald Mine"},
   {type: "land", code: "IRRD", prereqs: ["RUIN", "EMER", "GRAV"],         name: "Irradiated Field"},
   {type: "land", code: "ECLC", prereqs: ["ICYL", "LAST", "PACE", "DEAD"], name: "Eclectic City"},
+  # Cursed Canyon can be unlocked by any four of ALHM (0), CARI, BROW (30), RUIN (30 + PACE), LAPW (90)
+  # Ideally the algorithm would prioritize preqs that can be achieved the soonest. For now, we'll help it.
+  {type: "land", code: "CURE", prereqs: ["ALHM", "CARI", "RUIN", "BROW"], name: "Cursed Canyon"},
 
   #Tier 3 lands
   {type: "land", code: "PRAI", prereqs: [90], name: "Prairie"},
@@ -109,6 +116,8 @@ if $chaos_mode
 end
 
 default_cfg.last[:prereqs] = default_cfg.select{|land| land[:type] == "land"}.map{|land| land[:code]}
+
+# class Array; include Comparable; end
 
 class Land
   def initialize(type:, code:, prereqs:, name:)
@@ -165,25 +174,25 @@ class Land
   def suggest_prereqs; suggest_with_score(prereqs).last; end
 
   private def suggest_with_score pres
-    score = 0
+    score = []
     r = []
     pres.each do |pre|
       case pre
       when Numeric
-        score = pre / 10 if score < pre / 10
+        score << pre / 10
       when String 
         ix = $lands.find_index{|land| land.code == pre}
         unless $lands[ix].done?
-         score = ix if score < ix
-         r << $lands[ix]
+          score << ix
+          r << $lands[ix]
         end
       when Array
         opt_score, opt_r = pre.map{|opt| suggest_with_score opt}.min
-        score = opt_score if score < opt_score
+        score << opt_score
         r |= opt_r
       end
     end
-    [score, r]
+    [score.sort, r]
   end
   
   def to_s; "#{name}(#{code})#{" \e[36m(undefeated)\e[0m" if survivals == 0}"; end
@@ -208,7 +217,7 @@ end
 $lands = default_cfg.map{|land_data| Land.new **land_data}
 
 begin
-  open "hrtfh#{".chaos" if $chaos_mode}.log" do |file|
+  open $filename do |file|
     JSON.parse(file.read).map do |rec|
       land = $lands.find{|land| land.code == rec["code"]}
       next unless land
@@ -217,24 +226,24 @@ begin
     end
   end
 rescue Errno::ENOENT
-  puts "hrfth#{".chaos" if $chaos_mode}.log not found; starting anew", ""
+  puts "#{$filename} not found; starting anew", ""
 end
 
 def restart
   $lands.each do |land|
-     land.survivals += 1 if land.done?
-     land.state = "todo"
-     land.survivals *= 0.9
-     land.deaths *= 0.9
+    land.survivals += 1 if land.done?
+    land.state = "todo"
+    land.survivals *= 0.9
+    land.deaths *= 0.9
   end
   $lands_done = 0
   sort_lands
 end
 
 def sort_lands
-   $lands.sort_by!.with_index do |land, ix|
-     [(!$chaos_mode && ix == 0) ? 0 : 1, -land.priority, rand]
-   end
+  $lands.sort_by!.with_index do |land, ix|
+    [(!$chaos_mode && ix == 0) ? 0 : 1, -land.priority, rand]
+  end
   loop do
     puts $lands.map(&:colored_code).join(" ")
     new_lands = $lands.sort_by.with_index do |land, ix_land|
@@ -249,8 +258,8 @@ end
 $lands_done = 0
 sort_lands
 p_stats
-puts "", "welcome to HyperRogue trainer from #{$heaven_mode ? "heaven" : "hell"}#{", chaos mode" if $chaos_mode}." + 
-     " We'll try to kill you as #{$heaven_mode ? "late" : "soon"} as possible. Type 'help' for the list of commands.", ""
+puts  "", "welcome to HyperRogue trainer from #{$heaven_mode ? "heaven" : "hell"}#{", chaos mode" if $chaos_mode}." + 
+      " We'll try to kill you as #{$heaven_mode ? "late" : "soon"} as possible. Type 'help' for the list of commands.", ""
 loop do
   $lands_done = $lands.count{|land| land.land? && land.done?}
 
@@ -314,6 +323,6 @@ loop do
   sleep 0.5
 end
 
-open "hrtfh#{".chaos" if $chaos_mode}.log", "w" do |file|
+open $filename, "w" do |file|
   file.puts JSON.generate $lands.map(&:save_data)
 end

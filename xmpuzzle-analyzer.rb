@@ -117,7 +117,6 @@ def sort_pieces(pieces)
     voxel_score = Hash.new{|h, k| h[k] = Hash.new{0}}
     candidates = pieces.values
     voxel_choices = candidates.flat_map{|piece| piece[:voxels].keys}.tally
-    candidates.each {|piece| piece[:n_ties] = 0}
     until candidates.empty?
         plan_candidates = candidates.dup
         plan_score = voxel_score.dup.transform_values! &:dup
@@ -127,45 +126,38 @@ def sort_pieces(pieces)
                                 .map(&voxel_score[piece[:key].first]).sort
         end
 
-        piece = loop do
+        pieces = loop do
             plan_candidates.each do |piece|
                 piece[:plan_score] = piece[:voxels].keys
                                         .map(&plan_score[piece[:key].first]).sort
                 piece[:batch] = [
                     rank[piece[:plan_score].first], 
                     piece[:key].first,
-                    piece[:plan_score].first,
-                    -piece[:n_ties]
+                    piece[:plan_score].first
                 ]
             end
-            piece = plan_candidates.min_by do |v|
-                [
-                    v[:batch], 
-                    v[:count] ,# * v[:score].count{rank[v[:score].first] == rank[_1]}, 
-                    v[:plan_score]
-                ]
+            min, pieces = plan_candidates.group_by do |v|
+                [v[:batch], v[:count], v[:plan_score]]
+            end.min
+
+            break plan_last if !pieces || plan_last && plan_last[0][:batch] != min[0]
+            plan_last = pieces
+            pieces.each do |piece|
+                piece[:voxels].keys.each{|k| plan_score[piece[:key].first][k] += piece[:count]}
             end
-            break plan_last if !piece || plan_last && plan_last[:batch] != piece[:batch]
-            plan_last = piece
-            piece[:voxels].keys.each{|k| plan_score[piece[:key].first][k] += piece[:count]}
-            plan_candidates.delete_if{_1[:key] == piece[:key] || _1[:batch] != piece[:batch]}
+            plan_candidates.delete_if{_1[:batch] != pieces[0][:batch] || pieces.include?(_1)}
             p [
-                piece[:n_ties], piece[:name], piece[:plan_score], piece[:count]
+                pieces.map{_1[:name]}, pieces[0][:plan_score], pieces[0][:count]
             ]
         end
         
-        candidates.delete_if{_1[:key] == piece[:key]}
-        candidates.each do
-            if  _1[:key].first == piece[:key].first && 
-                _1[:score] == piece[:score] && 
-                _1[:count] == piece[:count]
-            then
-                _1[:n_ties] += 1
-                p _1[:name]
+        candidates.delete_if{pieces.include? _1}
+        pieces.each do |piece|
+            piece[:voxels].keys.each do |k|
+                voxel_score[piece[:key].first][k] += piece[:count]
             end
         end
-        piece[:voxels].keys.each{|k| voxel_score[piece[:key].first][k] += piece[:count]}
-        yield piece
+        pieces.each{yield _1}
     end
 end
 
@@ -187,8 +179,11 @@ ARGV.delete("--cells")
 show_solutions = ARGV.include?("--solutions")
 ARGV.delete("--solutions")
 print_width = nil
-ARGV.reject!{p print_width = $1.to_i if _1 =~ /^-w(\d+)$/}
-
+ARGV.reject!{print_width = $1.to_i if _1 =~ /^-w(\d+)$/}
+show_solpairs = ARGV.include?("--solpairs")
+ARGV.delete("--solpairs")
+show_pstats = ARGV.include?("--pstats")
+ARGV.delete("--pstats")
 
 if ARGV.length != 1
     abort <<~END
@@ -355,13 +350,27 @@ nodes[0].css("> problem").each.with_index(1) do |n_problem, i_problem|
         end
     end
 
+    if show_pstats
+        pieces.to_a.group_by{|k, _| k.first}.each do |pid, spieces|
+            puts problem_shape_data[pid].last
+            tally = spieces.map{|_, v| v[:count]}.tally.to_a.sort
+            puts "weighted mean count: " + 
+                tally.map{|x, n| n * x * x}.sum.fdiv(tally.map{|x, n| n * x}.sum).to_s
+            tally.each{|x, n| puts " #{n}x #{x}"}
+            STDIN.gets if more_mode
+        end
+    end
+
     if show_cells
         sums = pieces.values
                         .flat_map{|v| v[:voxels].keys.map{|k| [k, v[:count]]}}
                         .group_by(&:first)
                         .transform_values{|kvs| kvs.map(&:last).sum}
 
-        print_width ||= sums.values.max.to_s.length
+        vmax = sums.values.max
+        print_width ||= vmax.to_s.length
+        lmax = Math.log(vmax + 1)
+        
         sums.keys.map{_1[0]}.max.downto sums.keys.map{_1[0]}.min do |z|
             unless sums.keys.any?{_1[0] == z}
                 puts "(blank slice)"
@@ -370,7 +379,15 @@ nodes[0].css("> problem").each.with_index(1) do |n_problem, i_problem|
 
             sums.keys.map{_1[1]}.max.downto sums.keys.map{_1[1]}.min do |y|
                 sums.keys.map{_1[2]}.min.upto sums.keys.map{_1[2]}.max do |x|
-                    print "\e[44m%*d \e[0m" % [print_width, sums[[z, y, x]]] rescue print " " * (print_width+1)
+                    if sums[[z, y, x]]
+                        b = (Math.log(sums[[z, y, x]] + 1) / lmax) ** 0.5 * 186
+                        r = (sums[[z, y, x]].fdiv vmax) ** 0.5 * 186
+                        print "\e[48;2;%d;%d;%dm%*d \e[0m" % [
+                                    r, 0, b, print_width, sums[[z, y, x]]
+                                ]
+                    else 
+                        print " " * (print_width+1) 
+                    end
                 end
                 puts
             end
@@ -395,6 +412,18 @@ nodes[0].css("> problem").each.with_index(1) do |n_problem, i_problem|
         solutions.sort_by{_1[:score]}.each do |solution|
             puts "#{solution[:id]}: #{solution[:score]}"
             STDIN.gets if more_mode
+        end
+    end
+
+    if show_solpairs
+        d = -> s1, s2 {(s1[:pieces] - s2[:pieces]) + (s2[:pieces] - s1[:pieces])}
+        solutions.combination(2) do |s1, s2|
+            d12 = d[s1, s2].count
+            unless solutions.any? {|s3| d[s1, s3].count < d12 && d[s2, s3].count < d12}
+                puts "#{d12} | ##{s1[:id]} <=> ##{s2[:id]} " + 
+                    " #{d[s1, s2].map{_1[:name]}}"
+                STDIN.gets if more_mode
+            end
         end
     end
 end
