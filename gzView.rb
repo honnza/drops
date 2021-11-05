@@ -478,6 +478,7 @@ end
 def define_more(scan_to)
   orig_puts = method(:puts)
   fiber = Fiber.new do
+    orig_puts[Fiber.yield]
     (str = Fiber.yield; orig_puts[str]) until check_scan(str, scan_to)
     loop do
       case key = $stdin.getch
