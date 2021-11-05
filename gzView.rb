@@ -536,7 +536,8 @@ class Table
     #todo: minimize total height instead of dividing widths equally
     #todo: redistribute rounding errors in the meantime?
     fixed_total = @col_styles.filter{_1[:fixed]}.map{_1[:width]}.sum
-    auto_opt_total = @col_styles.filter{!_1[:fixed]}.map{_1[:opt_width]}.sum
+    auto_cols = @col_styles.filter{!_1[:fixed]}
+    auto_opt_total = auto_cols.map{_1[:opt_width]}.sum
     auto_total = @width - fixed_total - @col_styles.count
 
     if auto_total < auto_opt_total
@@ -546,11 +547,10 @@ class Table
         auto_total -= _1[:width]
         auto_opt_total -= _1[:width]
       end
+      auto_cols.reject!{_1[:nowrap]}
     end
 
-    @col_styles.reject do 
-      _1[:fixed] || (auto_total < auto_opt_total && _1[:nowrap])
-    end.each do
+    auto_cols.each do
       _1[:width] = (_1[:opt_width] * auto_total / auto_opt_total).clamp(1..)
     end
   end
