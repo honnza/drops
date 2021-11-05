@@ -497,8 +497,9 @@ def define_more(scan_to)
   define_method :puts do |*args|
     (args.empty? ? [""] : args).each{|arg| [*arg].each{|str| str.to_s.each_line{|line| fiber.resume line}}}
   end
-  puts  # the first time a fiber is resumed, the arguments go to the block arguments,
-        # the rest go to yield returs
+  fiber.resume
+    # the first time a fiber is resumed, the arguments go to the block arguments,
+    # the rest go to yield returs
 end
 
 ################################################################################
