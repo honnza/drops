@@ -241,18 +241,44 @@ def restart
 end
 
 def sort_lands
+  #   problem statement: given an arbitrary dependency network - mostly a sparse
+  # graph - order tasks such that the highest priority task gets completed as
+  # soon as possible, the next highest priority task constrained to that, then
+  # the next highest priority task, and so on.
+  #   algorithm: in descending priority, calculate each task's earliest time of
+  # completion, leaving everything else unconstrained. We track the constraints
+  # set by all pinned tasks:
+  #   A number of lands constraint forces the set of prior tasks to be as fast
+  # as possible. **For now, we assume all land tasks take equal amount of time**
+  # and non-land tasks take no time. I.e. this constraint does not constraint
+  # other tasks' ordering yet, but it will in the future.
+  #   A direct dependency constraint forces prerequisites to happen before the
+  # pinned land. For each T, T land tasks to complete before T also forces other
+  # land tasks to complete not before T.
+  #   For a multiple option dependency constraint we remove impossible options,
+  # then factor out dependencies common to all options, then reevaluate the rest
+  # after each pin.
+  #   A black-box dependency (type: "pasv") cannot be predicted, and expecting
+  # the worst won't work. Instead we expect the best and if something else
+  # happens, we resort. (so really no difference vs regular non-lands other than
+  # presentation)
+  #
+  #   To calculate the time slot for a task we: - collect direct constraints
+  # using breath-first search, keeping multiple choice dependencies for later.
+  # If only multiple choice dependencies remain (either for this land or one of
+  # the previous ones) - we recursively try every possibility. - greedily place
+  # unpinned prerequisites of previously pinned tasks as late as possible; 
+  # greedily place prerequisites of task being pinned as soon as possible; place
+  # the task itself as soon as possible and return that position.
+  #
+  #   TODO: model task completion times. Reptiles and Trollheim are
+  # significantly slower than say Jungle, but each contributes the same to
+  # unlocking advanced lands.
+
   $lands.sort_by!.with_index do |land, ix|
     [(!$chaos_mode && ix == 0) ? 0 : 1, -land.priority, rand]
   end
-  loop do
-    puts $lands.map(&:colored_code).join(" ")
-    new_lands = $lands.sort_by.with_index do |land, ix_land|
-      ix_l = $lands.find_index{|l| l == land || l.suggest_prereqs.include?(land)}
-      [ix_l, ix_l == ix_land ? 1 : 0, ix_land]
-    end
-    break if $lands == new_lands
-    $lands = new_lands
-  end
+  
 end
 
 $lands_done = 0
