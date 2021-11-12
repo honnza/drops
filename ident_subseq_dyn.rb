@@ -439,9 +439,9 @@ if $0 == __FILE__
   end
   results = calc.results
   if tiebreak == :all
-    calc.strs.zip(results).sort.each{|full| puts full.map(&:inspect).join(" => ")}
+    calc.orig_strs.zip(results).sort.each{|full| puts full.map(&:inspect).join(" => ")}
   else
     offset = results.map(&:length).max
-    calc.strs.zip(results).sort.each{|in_str, out_str| puts "%#{offset}s %s" % [out_str, in_str]}
+    calc.orig_strs.zip(results).sort.each{|in_str, out_str| puts "%#{offset}s %s" % [out_str, in_str]}
   end
 end

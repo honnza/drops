@@ -529,30 +529,27 @@ class Table
     @col_styles.each{_1[:opt_width] = 1; _1[:fixed] = true if _1[:width]}
     @width = width
     @data = []
-    recalc_widths
   end
 
   def recalc_widths
     #todo: minimize total height instead of dividing widths equally
     #todo: redistribute rounding errors in the meantime?
-    fixed_total = @col_styles.filter{_1[:fixed]}.map{_1[:width]}.sum
-    auto_cols = @col_styles.filter{!_1[:fixed]}
+    @col_styles.filter{_1[:nowrap]}.each{_1[:width] = _1[:opt_width]}
+    fixed_total = @col_styles.filter{_1[:fixed] || _1[:nowrap]}.map{_1[:width]}.sum
+    auto_cols = @col_styles.reject{_1[:fixed] || _1[:nowrap]}
     auto_opt_total = auto_cols.map{_1[:opt_width]}.sum
     auto_total = @width - fixed_total - @col_styles.count
 
-    if auto_total < auto_opt_total
-      @col_styles.filter{!_1[:fixed] && _1[:nowrap]}.each do
-        _1[:width] = _1[:opt_width]
-        fixed_total += _1[:width]
-        auto_total -= _1[:width]
-        auto_opt_total -= _1[:width]
-      end
-      auto_cols.reject!{_1[:nowrap]}
+    if auto_total >= auto_opt_total
+      auto_cols.each {_1[:width] = _1[:opt_width]}
+      return
     end
 
-    auto_cols.each do
-      _1[:width] = (_1[:opt_width] * auto_total / auto_opt_total).clamp(1..)
-    end
+    auto_cols[0][:width] = auto_total if auto_cols.count == 1
+    return if auto_cols.count <= 1
+
+    p auto_cols
+    raise "TODO"
   end
 
   def to_s; render_all; end
