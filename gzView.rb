@@ -509,7 +509,7 @@ def word_wrap words, width = IO.console.winsize[1] - 1
   words = words.split(" ") if words.is_a? String
   words.reduce [] do |acc, word|
     if word.display_length > width
-      acc.concat word.scan /.{1,#{width}}/
+      acc.concat word.scan /(?:(?:\e.*?m)?.(?:\e.*?m)?){1,#{width}}/
     elsif !acc.last || acc.last.display_length + word.display_length > width
       acc << word
     else
