@@ -143,7 +143,7 @@ end
 puts "#{dests.size} destinations loaded, resulting in #{pairs.count} pairs."
 
 plan = []
-if USE_GEO && PRIM # todo: figrue out what the user wants when prim and not use_geo
+if USE_GEO && PRIM # todo: figure out what the user wants when prim and not use_geo
   pairs.sort_by!{|x, y| geo_dist(x, y)}
   tree_parents = []
   subtree_costs = dests.map{0}
@@ -156,18 +156,20 @@ if USE_GEO && PRIM # todo: figrue out what the user wants when prim and not use_
       y = tree_parents[y.ix]
     end
   end
-  plan_subtree = lambda do |indent, ix|
-    subtrees = (0 ... dests.count).filter{|cix| cix != 0 && tree_parents[cix].ix == ix}
-      .sort_by{|cix| subtree_costs[cix]}
+  plan_subtree = lambda do |path_str, pid|
+    subtrees = (0 ... dests.count).filter{|cid| cid != 0 && tree_parents[cid].ix == pid}
+      .sort_by{|cid| subtree_costs[cid]}
     
-    subtrees.each{|cix|
-        prefix = "┃" * indent + (cix == subtrees.last ? "" : "┣");
-        plan << [prefix, [dests[ix], dests[cix]]]
-        plan_subtree[cix == subtrees.last ? indent : indent + 1, cix]
-        plan << [prefix, [dests[cix], dests[ix]]]
-      }
+    subtrees.each.with_index(1) do |cid, ix|
+      grandchildren = (0 ... dests.count).count{|gid| gid != 0 && tree_parents[gid].ix == cid}
+      subpath_str = "#{path_str} - (#{ix}/#{subtrees.count})"
+      subpath_str = subpath_str[/ -.{,#{IO.console.winsize[1] - grandchildren.to_s.length - 6}}/]
+      plan << ["#{subpath_str} > (#{grandchildren})\n", [dests[pid], dests[cid]]]
+      plan_subtree[subpath_str, cid]
+      plan << ["#{subpath_str} < (#{grandchildren})\n", [dests[cid], dests[pid]]]
+    end
   end
-  plan_subtree[0, 0]
+  plan_subtree["", 0]
 end
 
 until pairs.empty?
@@ -225,7 +227,7 @@ until pairs.empty?
         path_next[i][j] = i == pair[0].ix ? pair[1].ix : path_next[i][pair[0].ix]
       end
     }}
-    if shortenings.count < IO.console.winsize[0] - 5
+    if shortenings.count < IO.console.winsize[0] - 6
       shortenings.each do |iname, jname, old_len, new_len| 
         puts "path from #{iname} to #{jname} shortened from #{old_len} to #{new_len}"
       end
