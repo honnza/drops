@@ -254,7 +254,7 @@ def sort_lands
   # other tasks' ordering yet, but it will in the future.
   #   A direct dependency constraint forces prerequisites to happen before the
   # pinned land. For each T, T land tasks to complete before T also forces other
-  # land tasks to complete not before T.
+  # land tasks to complete not before T. The latter isn't explicitly tracked.
   #   For a multiple option dependency constraint we remove impossible options,
   # then factor out dependencies common to all options, then reevaluate the rest
   # after each pin.
@@ -278,7 +278,16 @@ def sort_lands
   $lands.sort_by!.with_index do |land, ix|
     [(!$chaos_mode && ix == 0) ? 0 : 1, -land.priority, rand]
   end
-  
+  tasks_by_time = $lands.filter{|land| land.land? && !land.done?}.map{[]}
+  prereqs_pending = []
+
+  def place_task |goal, tasks_by_time, to_check, to_place, oher_choices|
+    tasks_by_time = tasks_by_time.dup
+    to_check = to_check.dup
+    to_place = to_place.dup
+    oher_choices = oher_choices.dup
+
+  end
 end
 
 $lands_done = 0
