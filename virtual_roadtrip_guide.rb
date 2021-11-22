@@ -82,17 +82,21 @@ def azimuth_str(from, to)
   cdl = Math.cos(to.lon - from.lon)
   tan_a_from =  sdl / (Math.cos(from.lat) * Math.tan(  to.lat) - Math.sin(from.lat) * cdl)
   tan_a_to   = -sdl / (Math.cos(  to.lat) * Math.tan(from.lat) - Math.sin(  to.lat) * cdl)
+  eastish = sdl > 0
+  raise "TODO" if tan_a_from == 0 || tan_a_to == 0
+  northish_from = eastish ^ (tan_a_from < 0)
+  northish_to = eastish ^ (tan_a_to < 0)
   from_str = case
-  when tan_a_from.abs() > 2.0 then sdl > 0 ? "E" : "W"
-  when tan_a_from.abs() < 0.5 then to.lat > from.lat ? "N" : "S"
-  when tan_a_from > 0 then sdl > 0 ? "NE" : "SW"
-  else sdl > 0 ? "SE" : "NW"
+  when tan_a_from.abs() > 2.0 then eastish ? "E" : "W"
+  when tan_a_from.abs() < 0.5 then northish_from ? "N" : "S"
+  when tan_a_from > 0 then eastish ? "NE" : "SW"
+  else eastish ? "SE" : "NW"
   end
   to_str = case
-  when tan_a_to.abs() > 2.0 then sdl > 0 ? "E" : "W"
-  when tan_a_to.abs() < 0.5 then to.lat > from.lat ? "N" : "S"
-  when tan_a_to > 0 then sdl > 0 ? "NE" : "SW"
-  else sdl > 0 ? "SE" : "NW"
+  when tan_a_to.abs() > 2.0 then eastish ? "E" : "W"
+  when tan_a_to.abs() < 0.5 then northish_to ? "N" : "S"
+  when tan_a_to > 0 then eastish ? "NE" : "SW"
+  else eastish ? "SE" : "NW"
   end
   puts "#{tan_a_from} #{tan_a_to}"
   from_str == to_str ? from_str : "#{from_str}..#{to_str}"
@@ -221,16 +225,15 @@ until pairs.empty?
         path_next[i][j] = i == pair[0].ix ? pair[1].ix : path_next[i][pair[0].ix]
       end
     }}
-    if shortenings.count < IO.console.winsize[0]
+    if shortenings.count < IO.console.winsize[0] - 5
       shortenings.each do |iname, jname, old_len, new_len| 
         puts "path from #{iname} to #{jname} shortened from #{old_len} to #{new_len}"
       end
-    else
+    end
       inames = shortenings.map{_1[0]}.uniq
       jnames = shortenings.map{_1[1]}.uniq
       puts "#{shortenings.count} paths from \e[1m#{inames.count}\e[0m places (#{inames.join(", ")}) " +
             "to \e[1m#{jnames.count}\e[0m places (#{jnames.join(", ")}) shortened"
-    end
   end
 
   if !USE_LENGTHS
