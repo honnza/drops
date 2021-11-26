@@ -106,6 +106,9 @@ end
 
 input = gets("\n\n")
 dests = JSON.parse(input, symbolize_names: true) rescue input.chomp.lines.map(&:chomp)
+
+at_exit{puts JSON.generate(dests.map{_1.is_a?(Dest) ? _1.to_hash : _1})}
+
 dests.map!.with_index do |row, ix|
   row = [row, 1] if row.is_a?(String)
   row = {name: row[0], size: row[1]} if row.is_a?(Array)
@@ -142,6 +145,22 @@ end
 
 puts "#{dests.size} destinations loaded, resulting in #{pairs.count} pairs."
 
+def squeeze_path_str(str, len)
+  return str if str.length <= len
+  
+  while str.sub!(/(( - \([^)]*\))\2+)/){" - #{$1.length / $2.length}x #{$2[3..]}"}
+    return str if str.length <= len
+  end
+
+  while (str.sub!(/(?:(\d+)x )?\((\w+)\/\2\) - (?:(\d+)x )?\((\w+)\/\4\)/) do 
+    "#{($1&.to_i||1) + ($3&.to_i||1)}x (n/n)"
+  end)
+    return str if str.length <= len
+  end
+
+  raise "TODO: how to squeeze #{str.inspect}"
+end
+
 plan = []
 if USE_GEO && PRIM # todo: figure out what the user wants when prim and not use_geo
   pairs.sort_by!{|x, y| geo_dist(x, y)}
@@ -163,10 +182,10 @@ if USE_GEO && PRIM # todo: figure out what the user wants when prim and not use_
     subtrees.each.with_index(1) do |cid, ix|
       grandchildren = (0 ... dests.count).count{|gid| gid != 0 && tree_parents[gid].ix == cid}
       subpath_str = "#{path_str} - (#{ix}/#{subtrees.count})"
-      subpath_str = subpath_str[/ -.{,#{IO.console.winsize[1] - grandchildren.to_s.length - 6}}/]
-      plan << ["#{subpath_str} > (#{grandchildren})\n", [dests[pid], dests[cid]]]
+      ww = IO.console.winsize[1]
+      plan << [squeeze_path_str("#{subpath_str} > (#{grandchildren})\n", ww), [dests[pid], dests[cid]]]
       plan_subtree[subpath_str, cid]
-      plan << ["#{subpath_str} < (#{grandchildren})\n", [dests[cid], dests[pid]]]
+      plan << [squeeze_path_str("#{subpath_str} < (#{grandchildren})\n", ww), [dests[cid], dests[pid]]]
     end
   end
   plan_subtree["", 0]
