@@ -404,7 +404,7 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
   end
 
   extrapolating = false
-  table = Table.new [{nowrap: true}, {nowrap: true}, {nowrap: true}, {nowrap: true}, {}]
+  table = Table.new [{nowrap: true}, {nowrap: true}, {}, {nowrap: true}, {}]
   loop do
     at = out_buf.size
     key, code = bit_reader.read_huffman litlen_codes
@@ -414,8 +414,9 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
       table.push_row [
         bit_reader.pop_bytes_read_str , 
         "@#{at}", 
-        "#{fbits[key]} - #{code}",
-        "#{NEW_STR if stats[:block_counts][code] == 1}literal #{code.chr.bytes_to_glyphs.join}",
+        "#{fbits[key]}",
+        "#{code} - #{NEW_STR if stats[:block_counts][code] == 1}" + 
+        "literal #{code.chr.bytes_to_glyphs.join}",
         code.chr.bytes_to_glyphs.join
       ]
       stats[:lit_blocks] += 1
@@ -510,7 +511,7 @@ def word_wrap words, width = IO.console.winsize[1] - 1
   words.reduce [] do |acc, word|
     if word.display_length > width
       acc.concat word.scan /(?:(?:\e.*?m)?.(?:\e.*?m)?){1,#{width}}/
-    elsif !acc.last || acc.last.display_length + word.display_length > width
+    elsif acc.empty? || acc.last.display_length + word.display_length + 1 > width
       acc << word
     else
       acc.last.concat " " + word
@@ -540,8 +541,8 @@ class Table
     auto_opt_total = auto_cols.map{_1[:opt_width]}.sum
     auto_total = @width - fixed_total - @col_styles.count
 
+    auto_cols.each {_1[:width] = _1[:opt_width]}
     if auto_total >= auto_opt_total
-      auto_cols.each {_1[:width] = _1[:opt_width]}
       return
     end
 
@@ -549,13 +550,54 @@ class Table
     return if auto_cols.count <= 1
 
     p auto_cols
-    raise "TODO"
+    max_widths = auto_cols.map{[_1[:opt_width], auto_total].min}
+    to_expand_by_val = {self.height => [max_widths]}
+    pending_by_key = {}
+    puts "starting point: #{max_widths.inspect} => #{self.height}"
+    
+    loop do
+      min_val = to_expand_by_val.keys.min
+      if to_expand_by_val[min_val].empty?
+        to_expand_by_val.delete min_val
+        puts "-"
+        redo
+      end
+      old_key = to_expand_by_val[min_val].pop
+      if old_key.sum == auto_total
+        auto_cols.zip(old_key).each{_1[:width] = _2}
+        return
+      end
+
+      (0 ... old_key.length).each do |ix|
+        new_key = old_key.dup
+        new_key[ix] -= 1
+        unless pending_by_key[new_key]
+          pending_by_key[new_key] = new_key.zip(max_widths).count{_1 != _2}
+        end
+        pending_by_key[new_key] -= 1
+        if pending_by_key[new_key] == 0
+          pending_by_key.delete new_key
+          auto_cols.zip(new_key).each{_1[:width] = _2}
+          new_height = self.height
+          puts "#{new_key.inspect} => #{new_height}"
+          to_expand_by_val[new_height] ||= []
+          to_expand_by_val[new_height] << new_key
+        end
+      end
+    end
   end
 
   def to_s; render_all; end
   def render_all; recalc_widths; @data.map{render_row _1}.join("\n"); end
   def render_last; render_row @data.last; end
 
+  def height
+    @data.map do |row|
+      row.zip(@col_styles).map do |cell, style|
+        word_wrap(cell, style[:width]).count
+      end.max
+    end.sum
+  end
   def render_row(row)
     cell_rows = row.zip(@col_styles).map{|cell, style| word_wrap cell, style[:width]}
     (0 ... cell_rows.map{_1.count}.max).map do |ix|
