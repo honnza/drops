@@ -415,7 +415,7 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
         bit_reader.pop_bytes_read_str , 
         "@#{at}", 
         "#{fbits[key]}",
-        "#{code} - #{NEW_STR if stats[:block_counts][code] == 1}" + 
+        "#{code.to_s.rjust(3)} - #{NEW_STR if stats[:block_counts][code] == 1}" + 
         "literal #{code.chr.bytes_to_glyphs.join}",
         code.chr.bytes_to_glyphs.join
       ]
@@ -541,7 +541,7 @@ class Table
     auto_opt_total = auto_cols.map{_1[:opt_width]}.sum
     auto_total = @width - fixed_total - @col_styles.count
 
-    auto_cols.each {_1[:width] = _1[:opt_width]}
+    auto_cols.each {_1[:width] = [_1[:opt_width], auto_total].min}
     if auto_total >= auto_opt_total
       return
     end
@@ -550,19 +550,31 @@ class Table
     return if auto_cols.count <= 1
 
     p auto_cols
-    max_widths = auto_cols.map{[_1[:opt_width], auto_total].min}
-    to_expand_by_val = {self.height => [max_widths]}
+    max_key = auto_cols.map{[_1[:opt_width], auto_total].min}
+    key_fold = (0 ... auto_cols.length).map do |ix|
+      Hash.new do |hash, k_i|
+        auto_cols.each {_1[:width] = _1[:opt_width]}
+        auto_cols[ix][:width] = k_i
+        v_i = self.height
+        auto_cols[ix][:width] += 1
+        hash[k_i] = v_i == self.height
+      end
+    end
+    (0 ... auto_cols.length).each do |ix|
+      max_key[ix] -= 1 while key_fold[ix][max_key[ix]]
+    end
+    to_expand_by_val = {self.height => [max_key]}
     pending_by_key = {}
-    puts "starting point: #{max_widths.inspect} => #{self.height}"
+    puts "starting point: #{max_key.inspect} => #{self.height}"
     
     loop do
-      min_val = to_expand_by_val.keys.min
-      if to_expand_by_val[min_val].empty?
-        to_expand_by_val.delete min_val
+      old_val = to_expand_by_val.keys.min
+      if to_expand_by_val[old_val].empty?
+        to_expand_by_val.delete old_val
         puts "-"
         redo
       end
-      old_key = to_expand_by_val[min_val].pop
+      old_key = to_expand_by_val[old_val].pop
       if old_key.sum == auto_total
         auto_cols.zip(old_key).each{_1[:width] = _2}
         return
@@ -571,17 +583,16 @@ class Table
       (0 ... old_key.length).each do |ix|
         new_key = old_key.dup
         new_key[ix] -= 1
-        unless pending_by_key[new_key]
-          pending_by_key[new_key] = new_key.zip(max_widths).count{_1 != _2}
-        end
+        new_key[ix] -= 1 while key_fold[ix][new_key[ix]]
+        pending_by_key[new_key] ||= new_key.zip(max_key).count{_1 != _2}
         pending_by_key[new_key] -= 1
         if pending_by_key[new_key] == 0
           pending_by_key.delete new_key
           auto_cols.zip(new_key).each{_1[:width] = _2}
-          new_height = self.height
-          puts "#{new_key.inspect} => #{new_height}"
-          to_expand_by_val[new_height] ||= []
-          to_expand_by_val[new_height] << new_key
+          new_val ||= self.height
+          puts "#{new_key.inspect} => #{new_val}"
+          to_expand_by_val[new_val] ||= []
+          to_expand_by_val[new_val] << new_key
         end
       end
     end
