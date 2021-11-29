@@ -404,7 +404,7 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
   end
 
   extrapolating = false
-  table = Table.new [{nowrap: true}, {nowrap: true}, {}, {nowrap: true}, {}]
+  table = Table.new [{}, {nowrap: true}, {}, {}, {}]
   loop do
     at = out_buf.size
     key, code = bit_reader.read_huffman litlen_codes
@@ -415,7 +415,7 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
         bit_reader.pop_bytes_read_str , 
         "@#{at}", 
         "#{fbits[key]}",
-        "#{code.to_s.rjust(3)} - #{NEW_STR if stats[:block_counts][code] == 1}" + 
+        "#{code.to_s(16).rjust(2, '0')} - #{NEW_STR if stats[:block_counts][code] == 1}" + 
         "literal #{code.chr.bytes_to_glyphs.join}",
         code.chr.bytes_to_glyphs.join
       ]
@@ -506,11 +506,12 @@ end
 
 ################################################################################
 
+$Word_wrap_regex = Hash.new{|h, k| h[k] = /(?:(?:\e.*?m)?.(?:\e.*?m)?){1,#{k}}/}
 def word_wrap words, width = IO.console.winsize[1] - 1
   words = words.split(" ") if words.is_a? String
   words.reduce [] do |acc, word|
     if word.display_length > width
-      acc.concat word.scan /(?:(?:\e.*?m)?.(?:\e.*?m)?){1,#{width}}/
+      acc.concat word.scan $Word_wrap_regex[width]
     elsif acc.empty? || acc.last.display_length + word.display_length + 1 > width
       acc << word
     else
@@ -556,7 +557,7 @@ class Table
         auto_cols.each {_1[:width] = _1[:opt_width]}
         auto_cols[ix][:width] = k_i
         v_i = self.height
-        auto_cols[ix][:width] += 1
+        auto_cols[ix][:width] -= 1
         hash[k_i] = v_i == self.height
       end
     end
@@ -571,7 +572,6 @@ class Table
       old_val = to_expand_by_val.keys.min
       if to_expand_by_val[old_val].empty?
         to_expand_by_val.delete old_val
-        puts "-"
         redo
       end
       old_key = to_expand_by_val[old_val].pop
@@ -590,7 +590,7 @@ class Table
           pending_by_key.delete new_key
           auto_cols.zip(new_key).each{_1[:width] = _2}
           new_val ||= self.height
-          puts "#{new_key.inspect} => #{new_val}"
+          print "#{new_key.inspect} => #{new_val}\n"
           to_expand_by_val[new_val] ||= []
           to_expand_by_val[new_val] << new_key
         end
