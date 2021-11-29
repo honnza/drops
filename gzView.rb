@@ -528,7 +528,11 @@ end
 class Table
   def initialize(col_styles, width = IO.console.winsize[1] - 1)
     @col_styles = col_styles
-    @col_styles.each{_1[:opt_width] = 1; _1[:fixed] = true if _1[:width]}
+    @col_styles.each.with_index do |style, ix|
+      style[:opt_width] = 1
+      style[:fixed] = true if style[:width]
+      style[:ix] = ix
+    end
     @width = width
     @data = []
   end
@@ -552,21 +556,29 @@ class Table
 
     p auto_cols
     max_key = auto_cols.map{[_1[:opt_width], auto_total].min}
+    cell_heights_by_ix_width = Hash.new do |hash, (ix, width)|
+      hash[[ix, width]] = @data.map{|row| word_wrap(row[ix], width).count}
+    end
+    height = lambda do
+      @col_styles
+        .map.with_index{|s, ix| cell_heights_by_ix_width[[ix, s[:width]]]}
+        .transpose.map{_1.max}.sum
+    end
     key_fold = (0 ... auto_cols.length).map do |ix|
       Hash.new do |hash, k_i|
         auto_cols.each {_1[:width] = _1[:opt_width]}
         auto_cols[ix][:width] = k_i
-        v_i = self.height
+        v_i = height[]
         auto_cols[ix][:width] -= 1
-        hash[k_i] = v_i == self.height
+        hash[k_i] = v_i == height[]
       end
     end
     (0 ... auto_cols.length).each do |ix|
       max_key[ix] -= 1 while key_fold[ix][max_key[ix]]
     end
-    to_expand_by_val = {self.height => [max_key]}
+    to_expand_by_val = {height[] => [max_key]}
     pending_by_key = {}
-    puts "starting point: #{max_key.inspect} => #{self.height}"
+    puts "starting point: #{max_key.inspect} => #{height[]}"
     
     loop do
       old_val = to_expand_by_val.keys.min
@@ -589,8 +601,8 @@ class Table
         if pending_by_key[new_key] == 0
           pending_by_key.delete new_key
           auto_cols.zip(new_key).each{_1[:width] = _2}
-          new_val ||= self.height
-          print "#{new_key.inspect} => #{new_val}\n"
+          new_val ||= height[]
+          print "#{new_key.inspect} => #{new_val} \n\e[A"
           to_expand_by_val[new_val] ||= []
           to_expand_by_val[new_val] << new_key
         end
