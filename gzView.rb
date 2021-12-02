@@ -531,7 +531,6 @@ class Table
     @col_styles.each.with_index do |style, ix|
       style[:opt_width] = 1
       style[:fixed] = true if style[:width]
-      style[:ix] = ix
     end
     @width = width
     @data = []

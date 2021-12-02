@@ -83,7 +83,11 @@ def azimuth_str(from, to)
   tan_a_from =  sdl / (Math.cos(from.lat) * Math.tan(  to.lat) - Math.sin(from.lat) * cdl)
   tan_a_to   = -sdl / (Math.cos(  to.lat) * Math.tan(from.lat) - Math.sin(  to.lat) * cdl)
   eastish = sdl > 0
-  raise "TODO" if tan_a_from == 0 || tan_a_to == 0
+  if tan_a_from == 0 || tan_a_to == 0
+    raise "tan = 0 but to.lon != from.lon" unless to.lon == from.lon
+    raise "#{to.name} and #{from.name} have the exact same coordinates" if to.lat == from.lat
+    return to.lat > from.lat ? "N" : "S"
+  end
   northish_from = eastish ^ (tan_a_from < 0)
   northish_to = eastish ^ (tan_a_to < 0)
   from_str = case
