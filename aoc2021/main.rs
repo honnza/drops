@@ -87,7 +87,7 @@ fn day2(part: char, s: &str) -> String {
     let mut x = 0i32;
     let mut y = 0i32;
     let mut aim = 0i32;
-    s.lines().for_each(|line| {
+    for line in s.lines() {
         let (word, num_str) = str_split_once(line, " ").unwrap();
         let num: i32 = num_str.parse().unwrap();
         match (part, word) {
@@ -99,21 +99,57 @@ fn day2(part: char, s: &str) -> String {
             (_, "up") => {aim -= num},
             _ => panic!()
         }
-    });
+    }
     (x * y).to_string()
 }
 
 fn day3(part: char, s: &str) -> String {
-    let slopes = if part == 'a' {
-        vec![(3, 1)]
+    let n_bits = s.lines().next().unwrap().len();
+    if part == 'a' {
+        let mut zero_count = vec![0; n_bits];
+        let mut one_count = vec![0; n_bits];
+        for line in s.lines() {
+            for (ix, byte) in line.bytes().enumerate(){
+                match byte {
+                    b'0' => zero_count[ix] += 1,
+                    b'1' => one_count[ix] += 1,
+                    _ => panic!()
+                }
+            }
+        }
+        let gamma = (0 .. n_bits).fold(0, |a, ix| 2 * a + (one_count[ix] >= zero_count[ix]) as usize);
+        let eps = (1 << n_bits) - 1 - gamma;
+        println!("zeros: {:?}, ones: {:?}, gamma: {:b}, eps: {:b}", zero_count, one_count, gamma, eps);
+        (gamma * eps).to_string()
     } else {
-        vec![(1, 1), (3, 1), (5, 1), (7, 1), (1, 2)]
-    };
-    slopes.iter().map(|(x, y)|
-        s.lines().step_by(*y).enumerate().filter(|(i, line)|
-            line.as_bytes()[x * i % line.len()] == 35
-        ).count()
-    ).product::<usize>().to_string()
+        let (nums_zero, nums_one): (Vec<&str>, Vec<&str>) =
+            s.lines().partition(|line| line.as_bytes()[0] == b'0');
+        let (mut nums_oxy, mut nums_co2) = if nums_one.len() >= nums_zero.len() {
+            (nums_one, nums_zero)
+        } else {
+            (nums_zero, nums_one)
+        };
+
+        for ix in 1 .. n_bits {
+            let n_ones = nums_oxy.iter().filter(|n| n.as_bytes()[ix] == b'1').count();
+            let to_retain = if n_ones >= (nums_oxy.len() - n_ones) {b'1'} else {b'0'};
+            nums_oxy.retain(|n| n.as_bytes()[ix] == to_retain);
+
+            let n_ones = nums_co2.iter().filter(|n| n.as_bytes()[ix] == b'1').count();
+            let to_retain = if n_ones == 0 {b'0'}
+                            else if n_ones == nums_co2.len() {b'1'}
+                            else if n_ones >= (nums_co2.len() - n_ones) {b'0'} 
+                            else {b'1'};
+            
+            nums_co2.retain(|n| n.as_bytes()[ix] == to_retain);
+
+            println!("{} {} {}", ix, nums_oxy.len(), nums_co2.len());
+        }
+        assert_eq!(nums_oxy.len(), 1);
+        assert_eq!(nums_co2.len(), 1);
+        println!("{} {}", nums_oxy[0], nums_co2[0]);
+        (usize::from_str_radix(nums_oxy[0], 2).unwrap() * usize::from_str_radix(nums_co2[0], 2).unwrap()).to_string()
+    }
 }
 
 fn day4(part: char, s: &str) -> String {
