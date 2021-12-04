@@ -153,35 +153,55 @@ fn day3(part: char, s: &str) -> String {
 }
 
 fn day4(part: char, s: &str) -> String {
-    let req_fields = vec!["byr", "iyr", "eyr", "hgt", "hcl", "ecl", "pid"];
-    let eye_colors = vec!["amb", "blu", "brn", "gry", "grn", "hzl", "oth"];
-    s.split("\n\n").filter(|entry| {
-        let fields: HashMap<&str, &str> = entry.split_whitespace().map(|kv|
-            str_split_once(kv, ":").unwrap()
-        ).collect();
-        let valid = req_fields.iter().all(|f| fields.contains_key(f));
-        if !valid {return false}
-        if part == 'a' {return true};
-        
-        fields.get("byr").and_then(|s| s.parse::<u32>().ok())
-                         .map_or(false, |v| v >= 1920 && v <= 2002) &&
-        fields.get("iyr").and_then(|s| s.parse::<u32>().ok())
-                         .map_or(false, |v| v >= 2010 && v <= 2020) &&
-        fields.get("eyr").and_then(|s| s.parse::<u32>().ok())
-                         .map_or(false, |v| v >= 2020 && v <= 2030) &&
-        fields.get("hgt").map_or(false, |hgt| {
-            let n: u32 = hgt.chars().take_while(|c| c.is_ascii_digit()).collect::<String>()
-                          .parse().unwrap_or(0);
-            let unit: String = hgt.chars().skip_while(|c| c.is_ascii_digit()).collect();
-            unit == "cm" && n >= 150 && n <= 193 || unit == "in" && n >= 59 && n <= 76
-        }) && 
-        fields.get("hcl").map_or(false, |hcl|
-            hcl.len() == 7 && hcl.chars().next() == Some('#') && 
-            hcl.chars().skip(1).all(|c| c.is_ascii_hexdigit())
-        ) &&
-        fields.get("ecl").map_or(false, |ecl| eye_colors.contains(ecl)) &&
-        fields.get("pid").map_or(false, |pid| pid.len() == 9 && pid.chars().all(|c| c.is_ascii_digit()))
-    }).count().to_string()
+    const ROWS: [u32; 10] = [
+        0b_00000_00000_00000_00000_11111,
+        0b_00000_00000_00000_11111_00000,
+        0b_00000_00000_11111_00000_00000,
+        0b_00000_11111_00000_00000_00000,
+        0b_11111_00000_00000_00000_00000,
+        0b_00001_00001_00001_00001_00001,
+        0b_00010_00010_00010_00010_00010,
+        0b_00100_00100_00100_00100_00100,
+        0b_01000_01000_01000_01000_01000,
+        0b_10000_10000_10000_10000_10000,
+    ];
+    let mut lines = s.lines().peekable();
+    let draws: Vec<u8> = lines.next().unwrap().split(','
+                                ).map(|s| s.parse().unwrap()).collect();
+    let mut board: Vec<u8> = Vec::with_capacity(25);
+
+    let mut best_time = None;
+    let mut best_score = 0;
+    while lines.next().is_some() {
+        board.clear();
+        for _ in 0 .. 5 {
+            board.extend(
+                lines.next().unwrap().split_ascii_whitespace()
+                        .map(|s| s.parse::<u8>().unwrap())
+            );
+        }
+        assert_eq!(board.len(), 25);
+        let mut board_seen = 0u32;
+        for (t, &draw) in draws.iter().enumerate() {
+            if let Some(ix) = board.iter().position(|&b| b == draw) {
+                board_seen |= 1 << ix;
+                if ROWS.iter().any(|&row| board_seen & row == row) {
+                    if best_time.is_none() || (part == 'b') ^ (best_time.unwrap() >= t) {
+                        best_time = Some(t);
+                        best_score = 0;
+                        for ix in 0 .. 25 {
+                            if board_seen & (1 << ix) == 0 {
+                                best_score += board[ix] as usize;
+                            }
+                        }
+                        best_score *= draw as usize;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+    best_score.to_string()
 }
 
 fn day5(part: char, s: &str) -> String {
