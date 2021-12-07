@@ -205,88 +205,64 @@ fn day4(part: char, s: &str) -> String {
 }
 
 fn day5(part: char, s: &str) -> String {
-    let ticket_id_iter = s.lines().map(|l| u32::from_str_radix(
-        &l.chars().map(|c|
-            match c {'F' | 'L' => '0', 'B' | 'R' => '1', _ => panic!("{}", l)}
-        ).collect::<String>()
-    , 2).unwrap());
-    if part == 'a' {
-        ticket_id_iter.max().unwrap().to_string()
-    } else {
-        let (min, len, sum) = ticket_id_iter.fold((u32::MAX, 0, 0), |(min, len, sum), id|
-            (std::cmp::min(min, id), len + 1, sum + id)
-        );
-        // the sum of all valid tickets is num_valid * (min_valid + max_valid) / 2)
-        ((len + 1) * (2 * min + len) / 2 - sum).to_string()
+    let mut once_set = HashSet::new();
+    let mut twice_set = HashSet::new();
+
+    for line in s.lines() {
+        let (xy1, xy2) = str_split_once(line, " -> ").unwrap();
+        let (x1, y1) = str_split_once(xy1, ",").unwrap();
+        let x1: i32 = x1.parse().unwrap();
+        let y1: i32 = y1.parse().unwrap();
+        let (x2, y2) = str_split_once(xy2, ",").unwrap();
+        let x2: i32 = x2.parse().unwrap();
+        let y2: i32 = y2.parse().unwrap();
+        if x1 == x2 {
+            for y in y1.min(y2) ..= y1.max(y2) {
+                let _ = once_set.insert((x1, y)) || twice_set.insert((x1, y));
+            }
+        } else if y1 == y2 {
+            for x in x1.min(x2) ..= x1.max(x2) {
+                let _ = once_set.insert((x, y1)) || twice_set.insert((x, y1));
+            }
+        } else if part == 'b' {
+            let dx = (x2 > x1) as i32 - (x2 < x1) as i32;
+            let dy = (y2 > y1) as i32 - (y2 < y1) as i32;
+            let (mut x, mut y) = (x1, y1);
+            while x != x2 {
+                let _ = once_set.insert((x, y)) || twice_set.insert((x, y));
+                x += dx; y += dy;
+            }
+            assert_eq!(y, y2);
+            let _ = once_set.insert((x, y)) || twice_set.insert((x, y));
+        }
     }
+
+    twice_set.len().to_string()
 }
 
 fn day6(part: char, s: &str) -> String {
-    s.split("\n\n").map(|group|
-        group.lines().skip(1).fold(
-            group.lines().next().unwrap().chars().collect(),
-        |acc: HashSet<char>, line: &str| {
-            if part == 'a' {
-                acc.union(&line.chars().collect()).cloned().collect()
-            } else {
-                acc.intersection(&line.chars().collect()).cloned().collect()
-            }
-        }).len()
-    ).sum::<usize>().to_string()
+    let mut ns = [0u64; 9];
+    for line in s.trim_end().split(",") {ns[line.parse::<usize>().unwrap()] += 1;}
+    for _ in 0 .. (if part == 'a' {80} else {256}) {
+        ns = [ns[1], ns[2], ns[3], ns[4], ns[5], ns[6], ns[7] + ns[0], ns[8], ns[0]];
+    }
+    ns.iter().sum::<u64>().to_string()
 }
 
 fn day7(part: char, s: &str) -> String {
-    let rules: HashMap<&str, Vec<(u8, &str)>> = s.lines().map(|line| {
-        let (container_str, contents_str) = str_split_once(line, " contain ").expect(line);
-        assert!(container_str.ends_with(" bags"), "{}", line);
-        let contents_vec = if contents_str == "no other bags." {
-            vec![]
-        } else {
-            contents_str.trim_end_matches(".").split(", ").map(|content_str| {
-                let count_len: usize = content_str.chars().take_while(char::is_ascii_digit).count();
-                let count: u8 = content_str[.. count_len].parse().expect(content_str);
-                assert!(&content_str[count_len ..= count_len] == " ");
-                assert!(content_str.ends_with(if count == 1 {"bag"} else {"bags"}));
-                (count, &content_str[
-                    count_len + 1 .. content_str.len() - (if count == 1 {4} else {5})
-                ])
-            }).collect()
-        };
-        (&container_str[.. container_str.len() - 5], contents_vec)
-    }).collect();
-    
+    let mut nums = s.trim_end().split(",")
+                    .map(|num| num.parse::<i32>().unwrap())
+                    .collect::<Vec<_>>();
     if part == 'a' {
-        let mut rules_inverse: HashMap<&str, Vec<(u8, &str)>> = HashMap::new();
-        for (rules_k, rules_vs) in rules {
-            for (n, rules_v) in rules_vs {
-                rules_inverse.entry(rules_v).or_insert_with(|| vec![]).push((n, rules_k));
-            }
-        }
-        let mut container_options: HashSet<&str> = HashSet::new();
-        let mut bags_to_check = vec!["shiny gold"];
-        while !bags_to_check.is_empty() {
-            if let Some(rule) = &rules_inverse.get(bags_to_check.swap_remove(0)) {
-                for (_, new_container) in *rule {
-                    if container_options.insert(new_container) {bags_to_check.push(new_container)}
-                }
-            }
-        }
-        container_options.len().to_string()
+        nums.sort_unstable();
+        let mid = nums[nums.len() / 2];
+        nums.iter().map(|n| (n - mid).abs()).sum::<i32>().to_string()
     } else {
-        let mut cache: HashMap<&str, u32> = HashMap::with_capacity(rules.len());
-        fn calc<'a>(rules: &HashMap<&str, Vec<(u8, &'a str)>>,
-                    cache: &mut HashMap<&'a str, u32>,
-                    bag: &'a str) -> u32
-        {
-            if !cache.contains_key(bag) {
-                let r = rules[bag].iter().map(|(n, content)|
-                    (*n as u32) * (calc(rules, cache, content) + 1)
-                ).sum();
-                cache.insert(bag, r);
-            }
-            cache[bag]
-        }
-        calc(&rules, &mut cache, "shiny gold").to_string()
+        (*nums.iter().min().unwrap() ..= *nums.iter().max().unwrap()).map(|n|
+            nums.iter().map(|n2| {
+                let dn = (n - n2).abs(); dn * (dn + 1) / 2
+            }).sum::<i32>()
+        ).min().unwrap().to_string()
     }
 }
 
