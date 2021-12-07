@@ -511,11 +511,19 @@ def word_wrap words, width = IO.console.winsize[1] - 1
   words = words.split(" ") if words.is_a? String
   words.reduce [] do |acc, word|
     if word.display_length > width
-      acc.concat word.scan $Word_wrap_regex[width]
+      word.scan($Word_wrap_regex[width]).each do |word|
+        escapes = acc.empty? ? "" : acc.last.scan(/\e.*?m/).join
+        escapes.sub /^.*\e\[0m/, ""
+        acc.last << "\e[0m" if acc.last
+        acc << escapes + word
+      end
     elsif acc.empty? || acc.last.display_length + word.display_length + 1 > width
-      acc << word
+      escapes = acc.empty? ? "" : acc.last.scan(/\e.*?m/).join
+      escapes.sub /^.*\e\[0m/, ""
+      acc.last << "\e[0m" if acc.last
+      acc << escapes + word
     else
-      acc.last.concat " " + word
+      acc.last << " " + word
     end
     acc
   end
