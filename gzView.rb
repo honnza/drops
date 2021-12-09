@@ -573,11 +573,15 @@ class Table
     end
     key_fold = (0 ... auto_cols.length).map do |ix|
       Hash.new do |hash, k_i|
-        auto_cols.each {_1[:width] = _1[:opt_width]}
-        auto_cols[ix][:width] = k_i
-        v_i = height[]
-        auto_cols[ix][:width] -= 1
-        hash[k_i] = v_i == height[]
+        if k_i == 1
+          false
+        else
+          auto_cols.each {_1[:width] = _1[:opt_width]}
+          auto_cols[ix][:width] = k_i
+          v_i = height[]
+          auto_cols[ix][:width] -= 1
+          hash[k_i] = v_i == height[]
+        end
       end
     end
     (0 ... auto_cols.length).each do |ix|
@@ -596,10 +600,12 @@ class Table
       old_key = to_expand_by_val[old_val].pop
       if old_key.sum == auto_total
         auto_cols.zip(old_key).each{_1[:width] = _2}
+        puts "found widths: #{old_key.inspect} => #{height[]}"
         return
       end
 
       (0 ... old_key.length).each do |ix|
+        next if old_key[ix] == 1
         new_key = old_key.dup
         new_key[ix] -= 1
         new_key[ix] -= 1 while key_fold[ix][new_key[ix]]

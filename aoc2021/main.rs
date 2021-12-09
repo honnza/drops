@@ -12,54 +12,6 @@ fn lcm(a: u64, b: u64) -> u64 {a / gcd(a, b) * b}
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#[derive(Debug)]
-enum Op {Acc(isize), Jmp(isize), Nop(isize)}
-#[derive(PartialEq)]
-enum RunState {Running, Success, JumpError, Looped}
-struct AocCpu<'a> {code: &'a Vec<Op>, state: RunState, ip: isize, acc: isize, lines_visited: Vec<bool>}
-impl AocCpu<'_> {
-    fn new(code: &Vec<Op>) -> AocCpu { AocCpu {
-        lines_visited: vec![false; code.len()], code, state: RunState::Running, ip: 0, acc: 0
-    }}
-    
-    fn parse_asm(s: &str) -> Vec<Op>{
-        s.lines().map(|line| {
-            let (op_str, arg_str) = str_split_once(line, " ").expect(line);
-            let arg = arg_str.parse().expect(line);
-            match op_str {
-                "acc" => Op::Acc(arg),
-                "jmp" => Op::Jmp(arg),
-                "nop" => Op::Nop(arg),
-                _ => panic!("{}", line)
-            }
-        }).collect()
-    }
-    
-    fn run(&mut self) {while self.state == RunState::Running {self.step()}}
-
-    fn step(&mut self){
-        assert!(self.state == RunState::Running);
-        self.lines_visited[self.ip as usize] = true;
-        match self.code[self.ip as usize] {
-            Op::Acc(arg) => {
-                self.acc += arg;
-                self.ip += 1
-            },
-            Op::Jmp(arg) => {
-                self.ip += arg
-            },
-            Op::Nop(_) => {
-                self.ip += 1
-            },
-        }
-        if self.ip < 0 || (self.ip as usize) > self.code.len() {self.state = RunState::JumpError}
-        else if (self.ip as usize) == self.code.len() {self.state = RunState::Success}
-        else if self.lines_visited[self.ip as usize] {self.state = RunState::Looped};
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 fn day1(part: char, s: &str) -> String {
     let mut nums = s.lines().map(|l| l.parse().unwrap());
     let mut increases = 0u32;
@@ -267,34 +219,34 @@ fn day7(part: char, s: &str) -> String {
 }
 
 fn day8(part: char, s: &str) -> String{
-    let mut code = AocCpu::parse_asm(s);
-    if part == 'a'{
-        let mut cpu = AocCpu::new(&code);
-        cpu.run();
-        assert!(cpu.state == RunState::Looped);
-        cpu.acc.to_string()
+    if part == 'a' {
+        s.lines().flat_map(|line| {
+            let (_, o) = str_split_once(line, " | ").unwrap();
+            o.split(" ").filter(|word| matches!(word.len(), 2 | 3 | 4 | 7))
+        }).count().to_string()
     } else {
-        for i in 0 .. code.len(){
-            code[i] = match code[i] {
-                Op::Jmp(n) => Op::Nop(n),
-                Op::Nop(n) => Op::Jmp(n), 
-                _ => continue
-            };
-            let mut cpu = AocCpu::new(&code);
-            cpu.run();
-            match cpu.state {
-                RunState::Looped => (),
-                RunState::JumpError => println!("jump error ({})", cpu.ip),
-                RunState::Success => println!("code ran to success,  result {}", cpu.acc),
-                RunState::Running => unreachable!()
-            }
-            code[i] = match code[i] {
-                Op::Jmp(n) => Op::Nop(n),
-                Op::Nop(n) => Op::Jmp(n), 
-                _ => unreachable!()
-            };
-        }
-        "done".to_string()
+        s.lines().map(|line| {
+            // we only need to identify enough segments to distinguish 2/3/5 an 0/6/9.
+            // For 2/3 we need E or F. For 3/5 we need B or C.
+            // Further we need two of C for 6, D for 0 or E for 9.
+            // C (top right) and E (bottom left) will suffice.
+            // C appears in 1 and in 8 digits total. E appears in 4 digits total.
+            let (i, o) = str_split_once(line, " | ").unwrap();
+            let dig_1 = i.split(" ").find(|word| word.len() == 2).unwrap();
+            let seg_c = ('a' ..= 'g').find(|&sc|
+                dig_1.contains(sc) && i.chars().filter(|&ic| ic == sc).count() == 8
+            ).unwrap();
+            let seg_e = ('a' ..= 'g').find(|&sc|
+                i.chars().filter(|&ic| ic == sc).count() == 4
+            ).unwrap();
+
+            o.split(" ").map(|word| match (word.len(), word.contains(seg_c), word.contains(seg_e)) {
+                (2,  true, false) => 1, (3,  true, false) => 7, (4,  true, false) => 4, 
+                (5,  true,  true) => 2, (5,  true, false) => 3, (5, false, false) => 5,
+                (6,  true,  true) => 0, (6, false,  true) => 6, (6,  true, false) => 9,
+                (7,  true,  true) => 8, _ => panic!("{} | {}", i, word)
+            }).reduce(|a, d| 10 * a + d).unwrap()
+        }).sum::<usize>().to_string()
     }
 }
 
