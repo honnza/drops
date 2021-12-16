@@ -7,9 +7,6 @@ fn str_split_once<'a>(s: &'a str, pat: &str) -> Option<(&'a str, &'a str)> {
     }
 }
 
-fn gcd(a: u64, b: u64) -> u64 {if b == 0 {a} else {gcd(b, a % b)}}
-fn lcm(a: u64, b: u64) -> u64 {a / gcd(a, b) * b}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 fn day1(part: char, s: &str) -> String {
@@ -251,352 +248,376 @@ fn day8(part: char, s: &str) -> String{
 }
 
 fn day9 (part: char, s: &str) -> String {
-    let mut buf: VecDeque<u64> = VecDeque::with_capacity(26);
-    let mut a_res = None;
-    'outer: for line in s.lines() {
-        let n: u64 = line.parse().unwrap();
-        if buf.len() == 25 {
-            if !buf.iter().any(|x| buf.iter().any(|y| x + y == n)) {a_res = Some(n); break 'outer};
-            buf.pop_front();
+    let grid = &s.lines().collect::<Vec<&str>>();
+    if part == 'a' {
+        (0 .. grid.len()).flat_map(|i|
+            (0 .. grid.len()).filter(move |&j| {
+                let n_ij = grid[i].as_bytes()[j];
+                grid.get(i).and_then(|row| row.as_bytes().get(j - 1))
+                    .map_or(true, |&n| n > n_ij) &&
+                grid.get(i).and_then(|row| row.as_bytes().get(j + 1))
+                    .map_or(true, |&n| n > n_ij) &&
+                grid.get(i - 1).and_then(|row| row.as_bytes().get(j))
+                    .map_or(true, |&n| n > n_ij) &&
+                grid.get(i + 1).and_then(|row| row.as_bytes().get(j))
+                    .map_or(true, |&n| n > n_ij)
+            }).map(move |j| (grid[i].as_bytes()[j] - b'0' + 1) as usize)
+        ).sum::<usize>().to_string()
+    } else {
+        let mut grid = grid.iter().map(|row| row.as_bytes().to_owned()).collect::<Vec<_>>();
+        let mut flood_stack = vec![];
+        let mut biggest_basins = Vec::with_capacity(4);
+        for i_root in 0 .. grid.len() {
+            for j_root in 0 .. grid.len() {
+                if grid[i_root][j_root] == b'9' {continue;}
+                flood_stack.push((i_root, j_root));
+                let mut basin_size = 0;
+                while let Some((i, j)) = flood_stack.pop() {
+                    if grid.get(i).and_then(|row| row.get(j))
+                            .map_or(true, |&n| n == b'9') {continue;}
+                    basin_size += 1;
+                    grid[i][j] = b'9';
+                    flood_stack.push((i, j - 1));
+                    flood_stack.push((i, j + 1));
+                    flood_stack.push((i - 1, j));
+                    flood_stack.push((i + 1, j));
+                }
+                biggest_basins.push(basin_size);
+                biggest_basins.sort_unstable_by_key(|&sz| std::cmp::Reverse(sz));
+                if biggest_basins.len() > 3 {biggest_basins.pop();}
+            }
         }
-        buf.push_back(n);
+        biggest_basins.iter().product::<usize>().to_string()
     }
-    if part == 'a' {return format!("{:?}", a_res)};
-    
-    buf.clear();
-    let mut sum = 0;
-    let goal = a_res.unwrap();
-    for line in s.lines(){
-        let n: u64 = line.parse().unwrap();
-        sum += n; buf.push_back(n);
-        while sum > goal {sum -= buf.pop_front().unwrap()};
-        if sum == goal && buf.len() > 1 {
-            return (buf.iter().min().unwrap() + buf.iter().max().unwrap()).to_string()
-        }
-    }
-    "done".to_string()
 }
 
 fn day10(part: char, s: &str) -> String {
-    let mut data: Vec<usize> = s.lines().map(|line| line.parse().unwrap()).collect();
-    data.sort_unstable();
+    let mut to_match = Vec::new();
+    let mut completions = Vec::new();
+    let iter = s.lines().map(|line| {
+        to_match.clear();
+        for &c in line.as_bytes() {match (to_match.last(), c) {
+            (_, b'(' | b'[' | b'{' | b'<') => {to_match.push(c);},
+            (Some(b'('), b')') | (Some(b'['), b']') |
+            (Some(b'{'), b'}') | (Some(b'<'), b'>') => {to_match.pop();},
+            (_, b')') => return    3, (_, b']') => return    57,
+            (_, b'}') => return 1197, (_, b'>') => return 25137,
+            _ => panic!()
+        }};
+        completions.push(to_match.iter().rev().fold(0u64, |a, d|
+            5 * a + match d {
+                b'(' => 1, b'[' => 2, b'{' => 3, b'<' => 4, _ => unreachable!()
+            }
+        ));
+        0
+    });
+
     if part == 'a' {
-        let mut tallies = [0; 3];
-        for i in 0 .. data.len() {
-            let diff = data[i] - (if i == 0 {0} else {data[i-1]});
-            tallies[diff - 1] += 1;
-        }
-        tallies[2] += 1;
-        (tallies[0] * tallies[2]).to_string()
+        iter.sum::<usize>().to_string()
     } else {
-        let mut t3; let mut t2 = 0u64; let mut t1 = 0u64; let mut t0 = 1u64;
-        for i in 0 .. data.len() {
-            let diff = data[i] - (if i == 0 {0} else {data[i-1]});
-            match diff {
-                1 => {t3 = t2; t2 = t1; t1 = t0},
-                2 => {t3 = t1; t2 = t0; t1 = 0},
-                3 => {t3 = t0; t2 = 0; t1 = 0},
-                _ => unreachable!()
-            };
-            t0 = t1 + t2 + t3;
-        }
-        t0.to_string()
+        for _ in iter {};
+        completions.sort_unstable();
+        completions[completions.len() / 2].to_string()
     }
 }
 
 fn day11(part: char, s: &str) -> String {
-    let rows = s.lines().next().unwrap().len();
-    let cols = s.lines().count();
-    
-    let mut buf_wr = Vec::<u8>::with_capacity((rows + 2) * (cols + 1) + 2);
-    for _ in 0 ..= cols {buf_wr.push(b'.')};
-    buf_wr.push(b'\n');
-    buf_wr.extend_from_slice(s.as_bytes());
-    for _ in 0 ..= cols {buf_wr.push(b'.')};
-    buf_wr.push(b'\n');
-    let mut buf_rd = buf_wr.clone();
-    if part == 'a' {
-        loop {
-            let mut last_iter = true;
-            let mut people = 0;
-            for i in cols + 2 ..= buf_rd.len() - cols - 2 {
-                if buf_rd[i] != b'#' && buf_rd[i] != b'L' {continue;}
-                let neighs = 
-                    (buf_rd[i-cols-2] == b'#') as u8 +
-                    (buf_rd[i-cols-1] == b'#') as u8 +
-                    (buf_rd[i-cols  ] == b'#') as u8 +
-                    (buf_rd[i-1     ] == b'#') as u8 +
-                    (buf_rd[i+1     ] == b'#') as u8 +
-                    (buf_rd[i+cols  ] == b'#') as u8 +
-                    (buf_rd[i+cols+1] == b'#') as u8 +
-                    (buf_rd[i+cols+2] == b'#') as u8;
-                if      buf_rd[i] == b'L' && neighs == 0 {buf_wr[i] = b'#'; last_iter = false;}
-                else if buf_rd[i] == b'#' && neighs >= 4 {buf_wr[i] = b'L'; last_iter = false;}
-                else {buf_wr[i] = buf_rd[i];}
-                if buf_rd[i] == b'#' {people += 1;}
-            }
-            if last_iter {return people.to_string();}
-            let tmp = buf_wr; buf_wr = buf_rd; buf_rd = tmp;
-        }
-    } else {
-        let mut seats_at: Vec<usize> = Vec::with_capacity(cols * rows);
-        for i in cols + 2 ..= buf_rd.len() - cols - 2 {
-            if buf_rd[i] == b'L' {seats_at.push(i);}
-        }
-        let mut seats_seen: Vec<[usize; 8]> = vec![[0; 8]; seats_at.len()];
-        let dirs = [-(cols as isize) - 2, -(cols as isize) - 1, -(cols as isize),
-                    -1, 1, 
-                    cols as isize, cols as isize + 1, cols as isize + 2];
-        for i in 0 .. seats_at.len() {
-            for j in 0 .. 8{
-                let mut ni = seats_at[i] as isize;
-                loop {
-                    ni += dirs[j];
-                    if ni < 0 || ni >= buf_rd.len() as isize ||
-                       buf_rd[ni as usize] == b'\n' {break;}
-                    if buf_rd[ni as usize] == b'L' {seats_seen[i][j] = ni as usize; break;}
-                }
-            }
-        }
-        loop {
-            let mut last_iter = true;
-            let mut people = 0;
-            for i in 0 .. seats_at.len() {
-                let si = seats_at[i];
-                let mut neighs = 0;
-                for ni in &seats_seen[i] {if buf_rd[*ni] == b'#' {neighs += 1;}}
-                if      buf_rd[si] == b'L' && neighs == 0 {buf_wr[si] = b'#'; last_iter = false;}
-                else if buf_rd[si] == b'#' && neighs >= 5 {buf_wr[si] = b'L'; last_iter = false;}
-                else {buf_wr[si] = buf_rd[si]};
-                if buf_rd[si] == b'#' {people += 1};
-            }
-            if last_iter {return people.to_string();}
-            let tmp = buf_wr; buf_wr = buf_rd; buf_rd = tmp;
-        }
-    }
-}
-
-fn day12(part: char, s: &str) -> String {
-    let mut ship_pos: (i32, i32) = (0, 0);
-    if part == 'a' {
-        let mut ship_dir = (1, 0);
-        for l in s.lines() {
-            let op = l.chars().next().unwrap();
-            let arg: i32 = l[1..].parse().unwrap();
-            match op {
-                'L' => {
-                    assert!(arg % 90 == 0);
-                    for _ in 0 .. arg / 90 {ship_dir = (-ship_dir.1, ship_dir.0);}
-                },
-                'R' => {
-                    assert!(arg % 90 == 0);
-                    for _ in 0 .. arg / 90 {ship_dir = (ship_dir.1, -ship_dir.0);}
-                },
-                _ => {
-                    let move_dir = match op {
-                        'N' => (0, 1), 'S' => (0, -1), 'E' => (1, 0), 'W' => (-1, 0),
-                        'F' => ship_dir, _ => unreachable!()
-                    };
-                    ship_pos.0 += move_dir.0 * arg;
-                    ship_pos.1 += move_dir.1 * arg;
-                }
-            }
-        }
-    } else {
-        let mut ship_dir = (10, 1);
-        for l in s.lines() {
-            let op = l.chars().next().unwrap();
-            let arg: i32 = l[1..].parse().unwrap();
-            match op {
-                'L' => {
-                    assert!(arg % 90 == 0);
-                    for _ in 0 .. arg / 90 {ship_dir = (-ship_dir.1, ship_dir.0);}
-                }, 'R' => {
-                    assert!(arg % 90 == 0);
-                    for _ in 0 .. arg / 90 {ship_dir = (ship_dir.1, -ship_dir.0);}
-                }, 'F' => {
-                    ship_pos.0 += ship_dir.0 * arg;
-                    ship_pos.1 += ship_dir.1 * arg;
-                }, _ => {
-                    let move_dir = match op {
-                        'N' => (0, 1), 'S' => (0, -1), 'E' => (1, 0), 'W' => (-1, 0),
-                        _ => unreachable!()
-                    };
-                    ship_dir.0 += move_dir.0 * arg;
-                    ship_dir.1 += move_dir.1 * arg;
-                }
-            }
-        }
-    }
-    (ship_pos.0.abs() + ship_pos.1.abs()).to_string()
-}
-
-fn day13(part: char, s: &str) -> String {
-    let (now_str, buses_str) = str_split_once(s.trim(), "\n").unwrap();
-    if part == 'a' {
-        let now: u32 = now_str.parse().unwrap();
-        let mut best: Option<(u32, u32)> = None;
-        for bus_str in buses_str.split(",") {
-            if let Ok(bus) = bus_str.parse::<u32>() {
-                let next = (now - 1) / bus * bus + bus;
-                if best == None || best.unwrap().0 > next {best = Some((next, bus));}
-            }
-        }
-        if let Some((t, bus)) = best {
-            ((t - now) * bus).to_string()
-        } else {unreachable!()}
-    } else {
-        let mut first = 0;
-        let mut period = 1;
-        for (i, bus_str) in buses_str.split(",").enumerate() {
-            if let Ok(bus) = bus_str.parse::<u64>() {
-                while (first + i as u64) % bus != 0 {first += period};
-                assert_eq!(1, gcd(period, bus));
-                period = lcm(period, bus);
-            }
-        }
-        first.to_string()
-    }
-}
-
-fn day14(part: char, s: &str) -> String {
-    let mut mem: HashMap<u64, u64> = HashMap::new();
-    if part == 'a' {
-        let mut bitmax = 0xfffffffffu64;
-        let mut bitmin = 0x000000000u64;
-        for line in s.lines() {
-            if line.starts_with("mask = ") {
-                let mask_str = &line[7..];
-                bitmax = u64::from_str_radix(&mask_str.chars().map(|c|
-                    if c == 'X' {'1'} else {c}
-                ).collect::<String>(), 2).unwrap();
-                bitmin = u64::from_str_radix(&mask_str.chars().map(|c|
-                    if c == 'X' {'0'} else {c}
-                ).collect::<String>(), 2).unwrap();
-            } else {
-                let (k_str, v_str) = str_split_once(line, "] = ").unwrap();
-                assert!(k_str.starts_with("mem["));
-                let k: u64 = k_str[4..].parse().unwrap();
-                let v: u64 = v_str.parse().unwrap();
-                mem.insert(k, v & bitmax | bitmin);
-            }
-        }
-    } else {
-        let mut mask = "000000000000000000000000000000000000";
-        for line in s.lines() {
-            if line.starts_with("mask = ") {
-                mask = &line[7..];
-            } else {
-                let (k_str, v_str) = str_split_once(line, "] = ").unwrap();
-                assert!(k_str.starts_with("mem["));
-                let v: u64 = v_str.parse().unwrap();
-                let mut k_str = format!("{:036b}", k_str[4..].parse::<u64>().unwrap())
-                                .chars().zip(mask.chars())
-                                .map(|(k_c, m_c)| match m_c {
-                                    '0' => k_c, '1' => '1', 'X' => 'f', _ => panic!()
-                                }).collect::<String>();
-                'key_iter: loop {
-                    mem.insert(u64::from_str_radix(&k_str.chars().map(|c|
-                        match c {'f' => '0', 't' => '1', _ => c}
-                    ).collect::<String>(), 2).unwrap(), v);
-                    unsafe{
-                        for i in (0..36).rev() {
-                            match &k_str.as_bytes()[i] {
-                                b'f' => {k_str.as_bytes_mut()[i] = b't'; continue 'key_iter},
-                                b't' => {k_str.as_bytes_mut()[i] = b'f'},
-                                _ => {}
-                            }
-                        }
-                        break
+    let mut grid: Vec<Vec<u8>> = s.lines().map(|line| line.as_bytes().to_owned()).collect();
+    let mut n_flashes = 0;
+    let w = grid[0].len() - 1;
+    let h = grid.len() - 1;
+    let mut t = 0;
+    while part == 'a' && t < 100 || part == 'b' && n_flashes < (w+1) * (h+1) {
+        for line in &mut grid {for cell in line {*cell += 1;}}
+        t += 1;
+        let mut needs_propagate = true;
+        if part == 'b' {n_flashes = 0;}
+        while needs_propagate {
+            needs_propagate = false;
+            for i in 0 ..= h {
+                for j in 0 ..= w {
+                    if grid[i][j] > b'9' {
+                        n_flashes += 1;
+                        needs_propagate = true;
+                        grid[i][j] = b'0';
+                        if i > 0 && j > 0 && grid[i-1][j-1] != b'0' {grid[i-1][j-1] += 1};
+                        if i > 0          && grid[i-1][j  ] != b'0' {grid[i-1][j  ] += 1};
+                        if i > 0 && j < w && grid[i-1][j+1] != b'0' {grid[i-1][j+1] += 1};
+                        if          j > 0 && grid[i  ][j-1] != b'0' {grid[i  ][j-1] += 1};
+                        if          j < w && grid[i  ][j+1] != b'0' {grid[i  ][j+1] += 1}
+                        if i < h && j > 0 && grid[i+1][j-1] != b'0' {grid[i+1][j-1] += 1}
+                        if i < h          && grid[i+1][j  ] != b'0' {grid[i+1][j  ] += 1}
+                        if i < h && j < w && grid[i+1][j+1] != b'0' {grid[i+1][j+1] += 1}
                     }
                 }
             }
         }
     }
-    mem.values().sum::<u64>().to_string()
+    (if part == 'a' {n_flashes} else {t}).to_string()
+}
+
+fn day12(part: char, s: &str) -> String {
+    let mut node_ids: HashMap<&str, usize> = HashMap::new();
+    let mut edges: Vec<Vec<usize>> = Vec::new();
+    let mut is_small = 0usize;
+    for line in s.lines() {
+        let (from, to) = str_split_once(line, "-").unwrap();
+        let from_id = *node_ids.entry(from).or_insert_with(||{
+            is_small |= (from.as_bytes()[0].is_ascii_lowercase() as usize) << edges.len();
+            edges.push(vec![]);
+            edges.len() - 1
+        });
+        let to_id = *node_ids.entry(to).or_insert_with(||{
+            is_small |= (to.as_bytes()[0].is_ascii_lowercase() as usize) << edges.len();
+            edges.push(vec![]);
+            edges.len() - 1
+        });
+        edges[from_id].push(to_id);
+        edges[to_id].push(from_id);
+    }
+
+    let n_nodes = node_ids.len();
+    assert!(n_nodes <= 32); 
+    let start_node = node_ids["start"];
+    let end_node = node_ids["end"];
+    let mut cache = vec![None; n_nodes << n_nodes + 1];
+
+    fn recurse (
+        prevs: usize, last: usize, start_node: usize, end_node: usize, is_small: usize,
+        edges: &Vec<Vec<usize>>, cache: &mut Vec<Option<usize>>, revisit_budget: bool
+    ) -> usize {
+        let n_nodes = edges.len();
+        if last == end_node {return 1;}
+        let cache_ix = (prevs << 1) + (last << (n_nodes + 1)) + (revisit_budget as usize);
+        if let Some(res) = cache[cache_ix] {return res;}
+
+        let res = edges[last].iter().map(|&next| {
+            if prevs & (1 << next) == 0 {
+                recurse(prevs | is_small & (1 << next), next,
+                        start_node, end_node, is_small, edges, cache, revisit_budget)
+            } else if revisit_budget && next != start_node {
+                recurse(prevs | is_small & (1 << next), next,
+                        start_node, end_node, is_small, edges, cache, false)
+            } else {0}
+        }).sum();
+
+        cache[cache_ix] = Some(res);
+        res
+    }
+
+    recurse(1 << start_node, start_node, start_node, end_node, is_small,
+            &edges, &mut cache, part == 'b').to_string()
+}
+
+fn day13(part: char, s: &str) -> String {
+    let mut lines = s.lines();
+    let mut dots = lines.by_ref().take_while(|line| line.len() > 0).map(|line| {
+        let (x, y) = str_split_once(line, ",").unwrap();
+        (x.parse().unwrap(), y.parse().unwrap())
+    }).collect::<Vec<(i32, i32)>>();
+
+    let mut do_fold = |line: &str| {
+        let (xy, n) = str_split_once(
+            line.strip_prefix("fold along ").unwrap(), "="
+        ).unwrap();
+        let n: i32 = n.parse().unwrap();
+        if xy == "x" {
+            for dot in &mut dots {if dot.0 > n {dot.0 = 2 * n - dot.0}}
+        } else {
+            for dot in &mut dots {if dot.1 > n {dot.1 = 2 * n - dot.1}}
+        }
+    };
+
+    if part == 'a' {
+        do_fold(lines.next().unwrap());
+        dots.sort_unstable();
+        dots.dedup();
+        dots.len().to_string()
+    } else {
+        for line in lines{do_fold(line)}
+        dots.sort_unstable();
+        dots.dedup();
+        (
+            dots.iter().map(|&(_, y)| y).min().unwrap() ..= 
+            dots.iter().map(|&(_, y)| y).max().unwrap()
+        ).map(|y|
+            (
+                dots.iter().map(|&(x, _)| x).min().unwrap() ..= 
+                dots.iter().map(|&(x, _)| x).max().unwrap()
+            ).map(|x|
+                if dots.contains(&(x, y)) {"# "} else {"  "}
+            ).collect::<String>()
+        ).collect::<Vec<_>>().join("\n")
+    }
+}
+
+fn day14(part: char, s: &str) -> String {
+    let mut lines = s.lines();
+    let start = lines.next().unwrap().as_bytes();
+    assert_eq!(lines.next(), Some(""));
+    let pair_ids = lines.clone().enumerate().map(|(id, line)|
+        ([line.as_bytes()[0], line.as_bytes()[1]], id)
+    ).collect::<HashMap<[u8;2], usize>>();
+    let rules = lines.map(|line| {
+        let line = line.as_bytes();
+        [pair_ids[&[line[0], line[6]]], pair_ids[&[line[6], line[1]]]]
+    }).collect::<Vec<[usize; 2]>>();
+
+    let mut tally = vec![0; rules.len()];
+    for i in 1 .. start.len() {tally[pair_ids[&[start[i-1], start[i]]]] += 1;}
+    for _ in 0 .. (if part == 'a' {10} else {40}) {
+        let mut new_tally = vec![0; rules.len()];
+        for (from, &[to_1, to_2]) in rules.iter().enumerate() {
+            new_tally[to_1] += tally[from];
+            new_tally[to_2] += tally[from];
+        }
+        tally = new_tally;
+    }
+
+    let mut char_tally = [0usize; 26];
+    for (&[_, c], &id) in &pair_ids {char_tally[(c - b'A') as usize] += tally[id]};
+    char_tally[(start[0] - b'A') as usize] += 1;
+
+    (
+        char_tally.iter().max().unwrap() - 
+        char_tally.iter().filter(|&&n| n > 0).min().unwrap()
+    ).to_string()
 }
 
 fn day15(part: char, s: &str) -> String {
-    let t_max = if part == 'a' {2020} else {30000000};
-    let mut seen_at: Vec<Option<usize>> = vec![None; t_max];
-    let mut last : usize = 0xdead;
-    let mut init = s.trim().split(',');
-    for t in 1 ..= t_max {
-        let next = init.next().map(|x_str| x_str.parse().unwrap())
-                          .unwrap_or_else(||t - 1 - seen_at[last].unwrap_or(t - 1));
-        if t > 1 {seen_at[last] = Some(t - 1)};
-        last = next;
+    let mut grid = s.lines().map(|line| line.as_bytes().to_owned())
+                    .collect::<Vec<Vec<u8>>>();
+    let mut to_check: VecDeque<Vec<(usize, usize)>> = VecDeque::new();
+    let mut cur_risk = 0;
+    let mut w = grid[0].len();
+    let mut h = grid.len();
+
+    if part == 'b' {
+        for row in &mut grid {
+            for j in 0 .. 4 * w {
+                row.push(if row[j] == b'9' {b'1'} else {row[j] + 1});
+            }
+        }
+        for i in 0 .. 4 * h {
+            grid.push(grid[i].clone());
+            for cell in grid.last_mut().unwrap() {
+                *cell = if *cell == b'9' {b'1'} else {*cell + 1}
+            }
+        }
+        w *= 5;
+        h *= 5;
     }
-    last.to_string()
+
+    to_check.push_back(vec![(0, 0)]);
+    for _ in 0 .. 8 {to_check.push_back(Vec::new());}
+    loop {
+        to_check.push_back(Vec::new());
+        let row = to_check.pop_front().unwrap();
+        for (i, j) in row {
+            grid[i][j] = b'#';
+            if i == h - 1 && j == w - 1 {
+                return cur_risk.to_string();
+            }
+            for &(ni, nj) in &[(i, j-1), (i, j+1), (i-1, j), (i+1, j)] {
+                if let Some(&c @ b'1' ..= b'9') = 
+                        grid.get(ni).and_then(|row| row.get(nj)) {
+                    grid[ni][nj] = b'.';
+                    to_check[(c - b'1') as usize].push((ni, nj));
+                }
+            }
+        }
+        cur_risk += 1;
+    }
+}
+
+mod bits {
+    pub enum Lti {Bits, Packets}
+    pub enum Data {Lit(u64), Op{op: u8, lti: Lti, args: Vec<Packet>}}
+    pub struct Packet {pub v: u8, pub data: Data}
+
+    trait Read {
+        fn read_int(&mut self, bits: usize) -> usize;
+        fn take(&mut self, bits: usize) -> Take<Self> {Take(self, bits)}
+    }
+
+    struct Take<'a, Src: Read + ?Sized> (&'a mut Src, usize);
+    impl<Src: Read> Take<'_, Src> {fn is_empty(&self) -> bool {self.1 == 0}}
+    impl<Src: Read> Read for Take<'_, Src> {
+        fn read_int(&mut self, bits: usize) -> usize {
+            self.1 = self.1.checked_sub(bits).unwrap();
+            self.0.read_int(bits)
+        }
+    }
+
+    impl Packet {
+        fn from_bits<R: Read> (bits: &mut R) -> Self {
+            let v = bits.read_int(3) as u8;
+            let op = bits.read_int(3) as u8;
+            if op == 4 {
+                let mut acc = 0u64;
+                loop {
+                    let word = bits.read_int(5) as u8;
+                    acc = 16 * acc + (word & 0xf) as u64;
+                    if word & 0x10 == 0 {break;}
+                }
+                Packet{v, data: Data::Lit(acc)}
+            } else {
+                let lti = bits.read_int(1) as u8;
+                let mut args = Vec::new();
+                if lti == 0 {
+                    let tlen = bits.read_int(15);
+                    let mut arg_bits = bits.take(tlen);
+                    while !arg_bits.is_empty() {args.push(Packet::from_bits(&mut arg_bits));}
+                } else {
+                    let argc = bits.read_int(11);
+                    for _ in 0 .. argc {args.push(Packet::from_bits(&mut *bits));}
+                }
+                Packet{v, data: Data::Op{
+                    op, args, 
+                    lti: if lti == 0 {Lti::Bits} else {Lti::Packets}
+                }}
+            }
+        }
+    }
+
+    struct HexRead<Src: std::io::Read> {src: std::io::Bytes<Src>, buf: u8, buf_len: u8}
+    impl<Src: std::io::Read> HexRead<Src> {
+        pub fn new(src: Src) -> Self {Self{src: src.bytes(), buf: 0, buf_len: 0}}
+    }
+    impl<Src: std::io::Read> Read for HexRead<Src> {
+        fn read_int(&mut self, bits: usize) -> usize{
+            let mut acc = 0;
+            for _ in 0 .. bits {
+                if self.buf_len == 0 {
+                    self.buf = match self.src.next(){
+                        Some(Ok(c @ b'0' ..= b'9')) => c - b'0',
+                        Some(Ok(c @ b'A' ..= b'F')) => c - b'A' + 10,
+                        e => panic!("{:?}", e)
+                    };
+                    self.buf_len = 4;
+                }
+                self.buf_len -= 1;
+                acc = 2 * acc + (self.buf >> self.buf_len & 1) as usize;
+            }
+            acc
+        }
+    }
+
+    impl From<&str> for Packet {
+        fn from(s: &str) -> Packet {
+            Packet::from_bits(&mut HexRead::new(s.as_bytes()))
+        }
+    }
 }
 
 fn day16(part: char, s: &str) -> String {
-    let mut lines = s.lines();
-    let rules = lines.by_ref().take_while(|line| line.len() > 0).map(|line| {
-        let (name, ranges_str) = str_split_once(line, ": ").unwrap();
-        let ranges = ranges_str.split(" or ").flat_map(|s| {
-            let (beg, end) = str_split_once(s, "-").unwrap();
-            vec![beg.parse::<u32>().unwrap(), end.parse::<u32>().unwrap() + 1]
-        }).collect::<Vec<_>>();
-        (name, ranges)
-    }).collect::<Vec<_>>();
-    let rule_union = rules.iter().map(|r| &r.1).fold(vec![], |a, d| {
-        let mut ai = a.iter().peekable();
-        let mut di = d.iter().peekable();
-        let mut a_open = false;
-        let mut d_open = false;
-        let mut r = vec![];
-        loop {
-            if ai.peek() == None {r.extend(di); return r;}
-            if di.peek() == None {r.extend(ai); return r;}
-            if ai.peek().unwrap() > di.peek().unwrap() {
-                d_open ^= true;
-                if !a_open {r.push(**di.peek().unwrap());}
-                di.next();
-            } else {
-                a_open ^= true;
-                if !d_open {r.push(**ai.peek().unwrap());}
-                ai.next();
-            }
-        }
-    });
-    assert_eq!(Some("your ticket:"), lines.next());
-    let our_ticket = lines.next().unwrap().split(",").map(|s| s.parse::<u32>().unwrap())
-                          .collect::<Vec<_>>();
-    assert_eq!(Some(""), lines.next());
-    assert_eq!(Some("nearby tickets:"), lines.next());
-    if part == 'a' {
-        return lines.flat_map(|s| s.split(",")).map(|s| s.parse::<u32>().unwrap()).filter(|x|
-            rule_union.iter().take_while(|r| *r <= x).count() % 2 == 0
-        ).sum::<u32>().to_string()
-    }
-    
-    let mut valids = vec![(1 << rules.len()) - 1; rules.len()];
-    for line in lines {
-        let line_valids = line.split(",").map(|s| s.parse::<u32>().unwrap()).map(|v| 
-            rules.iter().map(|r| (r.1.iter().take_while(|r| **r <= v).count() % 2))
-                 .fold(0, |a, d| a * 2 + d)
-        );
-        let new_valids = valids.iter().zip(line_valids).map(|(a, b)| a & b).collect::<Vec<_>>();
-        if *new_valids.iter().min().unwrap() > 0 {
-            valids = new_valids;
+    fn versum (p: &bits::Packet) -> usize {
+        p.v as usize + match &p.data {
+            bits::Data::Lit(..) => 0, 
+            bits::Data::Op{args, ..} => args.iter().map(|arg| versum(arg)).sum()
         }
     }
-    
-    let mut field_map = HashMap::<u32, u32>::new();
-    for i in (0..valids.len()).cycle() {
-        if valids[i].count_ones() == 1 {
-            field_map.insert(i as u32, rules.len() as u32 - valids[i].trailing_zeros() - 1);
-            let mask = !valids[i];
-            for v in &mut valids {*v &= mask;}
-            if field_map.len() == rules.len() {break};
-        }
-    }
-    our_ticket.iter().enumerate().filter_map(|(i, v)|
-        if rules[field_map[&(i as u32)] as usize].0.starts_with("departure ") {
-            Some(*v as u64)
-        } else {None}
-    ).product::<u64>().to_string()
+    versum(&bits::Packet::from(s)).to_string()
 }
 
 fn day17(part: char, s: &str) -> String {
