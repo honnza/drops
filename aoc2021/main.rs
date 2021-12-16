@@ -532,17 +532,21 @@ fn day15(part: char, s: &str) -> String {
 
 mod bits {
     pub enum Lti {Bits, Packets}
-    pub enum Data {Lit(u64), Op{op: u8, lti: Lti, args: Vec<Packet>}}
+    pub enum Opcode {Sum = 0, Prod, Min, Max, Gt = 5, Lt, Eq}
+    impl From<u8> for Opcode {fn from(n: u8) -> Opcode {use bits::Opcode::*; match n {
+        0 => Sum, 1 => Prod, 2 => Min, 3 => Max, 5 => Gt, 6 => Lt, 7 => Eq, _ => panic!()
+    }}}
+    pub enum Data {Lit(usize), Op{op: Opcode, lti: Lti, args: Vec<Packet>}}
     pub struct Packet {pub v: u8, pub data: Data}
 
     trait Read {
         fn read_int(&mut self, bits: usize) -> usize;
-        fn take(&mut self, bits: usize) -> Take<Self> {Take(self, bits)}
+        fn take(&mut self, bits: usize) -> Take where Self: Sized {Take(self, bits)}
     }
 
-    struct Take<'a, Src: Read + ?Sized> (&'a mut Src, usize);
-    impl<Src: Read> Take<'_, Src> {fn is_empty(&self) -> bool {self.1 == 0}}
-    impl<Src: Read> Read for Take<'_, Src> {
+    struct Take<'a> (&'a mut dyn Read, usize);
+    impl Take<'_> {fn is_empty(&self) -> bool {self.1 == 0}}
+    impl Read for Take<'_> {
         fn read_int(&mut self, bits: usize) -> usize {
             self.1 = self.1.checked_sub(bits).unwrap();
             self.0.read_int(bits)
@@ -554,10 +558,10 @@ mod bits {
             let v = bits.read_int(3) as u8;
             let op = bits.read_int(3) as u8;
             if op == 4 {
-                let mut acc = 0u64;
+                let mut acc = 0;
                 loop {
                     let word = bits.read_int(5) as u8;
-                    acc = 16 * acc + (word & 0xf) as u64;
+                    acc = 16 * acc + (word & 0xf) as usize;
                     if word & 0x10 == 0 {break;}
                 }
                 Packet{v, data: Data::Lit(acc)}
@@ -573,9 +577,27 @@ mod bits {
                     for _ in 0 .. argc {args.push(Packet::from_bits(&mut *bits));}
                 }
                 Packet{v, data: Data::Op{
-                    op, args, 
+                    op: op.into(), args, 
                     lti: if lti == 0 {Lti::Bits} else {Lti::Packets}
                 }}
+            }
+        }
+        pub fn eval(&self) -> usize {
+            match &self.data {
+                Data::Lit(n) => *n,
+                Data::Op{args, op, ..} => {
+                    let mut args = args.iter().map(|arg| Packet::eval(&arg));
+                    match op {
+                        Opcode::Sum  => args.sum(),
+                        Opcode::Prod => args.product(),
+                        Opcode::Min  => args.min().unwrap(),
+                        Opcode::Max  => args.max().unwrap(),
+                        Opcode::Gt   => (args.next().unwrap() >  args.next().unwrap()) as usize,
+                        Opcode::Lt   => (args.next().unwrap() <  args.next().unwrap()) as usize,
+                        Opcode::Eq   => (args.next().unwrap() == args.next().unwrap()) as usize,
+                        
+                    }
+                }
             }
         }
     }
@@ -617,7 +639,13 @@ fn day16(part: char, s: &str) -> String {
             bits::Data::Op{args, ..} => args.iter().map(|arg| versum(arg)).sum()
         }
     }
-    versum(&bits::Packet::from(s)).to_string()
+    
+    let p = &bits::Packet::from(s);
+    if part == 'a' {
+        versum(&p).to_string()
+    } else {
+        bits::Packet::eval(&p).to_string()
+    }
 }
 
 fn day17(part: char, s: &str) -> String {
