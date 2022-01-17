@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::convert::TryInto;
 
 fn str_split_once<'a>(s: &'a str, pat: &str) -> Option<(&'a str, &'a str)> {
     match s.split(pat).collect::<Vec<_>>()[..] {
@@ -649,166 +650,243 @@ fn day16(part: char, s: &str) -> String {
 }
 
 fn day17(part: char, s: &str) -> String {
-    let mut buf_rd = vec![vec![s.lines().map(|line| Vec::from(line)).collect::<Vec<_>>()]];
+    let mut tl = 0; let mut tr = 0;
+    let mut tu = 0; let mut td = 0;
+    let mut bytes = s.bytes().peekable();
+    while !bytes.peek().unwrap().is_ascii_digit() {bytes.next();}
+    while bytes.peek().unwrap().is_ascii_digit() {tl = 10 * tl + (bytes.next().unwrap() - b'0') as i32;}
+    while !bytes.peek().unwrap().is_ascii_digit() {bytes.next();}
+    while bytes.peek().unwrap().is_ascii_digit() {tr = 10 * tr + (bytes.next().unwrap() - b'0') as i32;}
+    while !bytes.peek().unwrap().is_ascii_digit() {bytes.next();}
+    while bytes.peek().unwrap().is_ascii_digit() {td = 10 * td - (bytes.next().unwrap() - b'0') as i32;}
+    while !bytes.peek().unwrap().is_ascii_digit() {bytes.next();}
+    while bytes.peek().unwrap().is_ascii_digit() {tu = 10 * tu - (bytes.next().unwrap() - b'0') as i32;}
 
-    for _t in 1 ..= 6 {
-        let mut buf_wr = vec![vec![
-            vec![vec![b'.'; buf_rd[0][0][0].len() + 2]; buf_rd[0][0].len() + 2]
-        ; buf_rd[0].len() + 2]; buf_rd.len() + 2];
-        
-        for z in 0 .. buf_wr.len() {
-            for y in 0 .. buf_wr[z].len() {
-                for x in 0 .. buf_wr[z][y].len() {
-                    for w in 0 .. buf_wr[z][y][x].len(){
-                        let mut neighs = 0;
-                        for dz in &[0, 1, 2] {
-                            for dy in &[0, 1, 2] {
-                                for dx in &[0, 1, 2] {
-                                    for dw in &[0, 1, 2] {
-                                        if z >= *dz && y >= *dy && x >= *dx && w >= *dw {
-                                            if let Some(c) = buf_rd.get(z - dz)
-                                                                   .and_then(|a| a.get(y - dy))
-                                                                   .and_then(|a| a.get(x - dx))
-                                                                   .and_then(|a| a.get(w - dw))
-                                            {
-                                                if *c == b'#' {neighs += 1;}
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        if neighs == 3 {buf_wr[z][y][x][w] = b'#'}
-                        else if neighs == 4 && z >= 1 && y >= 1 && x >= 1 && w >= 1{
-                            if let Some(c) = buf_rd.get(z - 1)
-                                                   .and_then(|a| a.get(y - 1))
-                                                   .and_then(|a| a.get(x - 1))
-                                                   .and_then(|a| a.get(w - 1))
-                            {
-                                if *c == b'#' {buf_wr[z][y][x][w] = b'#';}
-                            }
-                        }
-                    }
-                }
+    let mut sols = vec![];
+    let mut vx_min = tl; let mut vx_max = tr; 
+    let mut vy_min = td; let mut vy_max = tu;
+    for tof in 1 .. {
+        while tof.min(vx_min) * (2 * vx_min - (tof.min(vx_min) - 1)) >= 2 * tl {
+            vx_min -= 1;
+        }
+        vx_min += 1;
+        while tof.min(vx_max) * (2 * vx_max - (tof.min(vx_max) - 1)) >  2 * tr {
+            vx_max -= 1;
+        }
+        while tof * (2 * vy_min - (tof - 1)) <  2 * td {vy_min += 1};
+        while tof * (2 * vy_max - (tof - 1)) <= 2 * tu {vy_max += 1};
+        vy_max -= 1;
+        for vx in vx_min ..= vx_max {
+            for vy in vy_min ..= vy_max {
+                sols.push((vx, vy));
             }
         }
-        if part == 'a' {
-            buf_wr.pop();
-            buf_wr.remove(0);
-        }
-        buf_rd = buf_wr;
+
+        if vy_min > -td - 1 {break;}
     }
-    buf_rd.iter().flatten().flatten().flatten().filter(|c| **c == b'#').count().to_string()
+
+    sols.sort_unstable();
+    sols.dedup();
+    if part == 'a' {
+        let vy = - sols.iter().map(|v| v.1).min().unwrap() - 1;
+        (vy * (vy + 1) / 2).to_string()
+    } else {
+        sols.len().to_string()
+    }
 }
 
-#[derive(Clone, Copy)]
-enum MathToken {Int(i64), Op(char), LPar, RPar}
-impl std::fmt::Debug for MathToken {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result { match self{
-        MathToken::Int(v) =>  f.write_str(&v.to_string()),
-        MathToken::Op(c)  =>  f.write_str(&c.to_string()),
-        MathToken::LPar   =>  f.write_str("("),
-        MathToken::RPar   =>  f.write_str(")")
-    }}
+#[derive(Clone, Copy, Debug)]
+struct SnailfishBit{n: usize, d: u8}
+#[derive(Clone, Debug)]
+struct SnailfishInt(Vec<SnailfishBit>);
+
+impl std::str::FromStr for SnailfishInt {
+    type Err = String;
+    fn from_str (src: &str) -> Result<Self, String> {
+        let mut expected = vec![b'#'];
+        let mut bytes = src.bytes();
+        let mut depth = 0;
+        let mut res = SnailfishInt(Vec::with_capacity(16));
+        loop {
+            match (expected.pop(), bytes.next()) {
+                (Some(b'#'), Some(b'[')) => {
+                    expected.push(b']');
+                    expected.push(b'#');
+                    expected.push(b',');
+                    expected.push(b'#');
+                    depth += 1;
+                },
+                (Some(b'#'), Some(c @ b'0' ..= b'9')) => {
+                    res.0.push(SnailfishBit{n: (c - b'0') as usize, d: depth});
+                },
+                (Some(b','), Some(b',')) => {},
+                (Some(b']'), Some(b']')) => {depth -= 1},
+                (None, None) => return Ok(res),
+                (e, b) => return Err(format!("expected {:?}, found {:?}", e, b))
+            }
+        }
+    }
+}
+
+impl<'a> std::ops::Add<&'a SnailfishInt> for &'a SnailfishInt {
+    type Output = SnailfishInt;
+    fn add(self, other: Self) -> SnailfishInt{
+        let mut res = SnailfishInt([&self.0[..], &other.0[..]].concat());
+        for bit in &mut res.0 {bit.d += 1};        
+        res.reduce();
+        res
+    }
+}
+
+impl std::iter::Sum for SnailfishInt {
+    fn sum<I: Iterator<Item = Self>>(mut iter: I) -> Self {
+        let mut a = iter.next().unwrap();
+        while let Some(rhs) = iter.next() {a = &a + &rhs;}
+        a
+    }
+}
+
+impl SnailfishInt {
+    fn reduce(&mut self) {
+        loop {
+            if let Some(ix) = self.0.iter().position(|bit| bit.d == 5) {
+                //explode
+                if ix > 0 {self.0[ix - 1].n += self.0[ix].n}
+                if ix + 2 < self.0.len() {self.0[ix + 2].n += self.0[ix + 1].n}
+                self.0[ix].n = 0;
+                self.0[ix].d -= 1;
+                self.0.remove(ix + 1);
+            } else if let Some(ix) = self.0.iter().position(|bit| bit.n > 9) {
+                //split
+                self.0[ix].d += 1;
+                self.0.insert(ix + 1, self.0[ix]);
+                self.0[ix].n /= 2;
+                self.0[ix + 1].n = (self.0[ix + 1].n + 1) / 2;
+            } else {break;}
+        }
+    }
+
+    fn magnitude(mut self) -> usize{
+        while self.0.len() > 1 {
+            let ix = (0 ..= self.0.len() - 2).rfind(|&ix|
+                self.0[ix].d == self.0[ix + 1].d
+            ).unwrap();
+            self.0[ix].d -= 1;
+            self.0[ix].n = 3 * self.0[ix].n + 2 * self.0[ix + 1].n;
+            self.0.remove(ix + 1);
+        }
+        self.0[0].n
+    }
 }
 
 fn day18(part: char, s: &str) -> String {
-    use self::MathToken::*;
-    s.lines().map(|line| {
-        let mut tok_stack: Vec<MathToken> = vec![];
-        for c in line.chars() {
-            match c {
-                '0' ..= '9' => tok_stack.push(Int((c as u8 - b'0') as i64)),
-                '+' | '*'   => tok_stack.push(Op(c)),
-                '('         => tok_stack.push(LPar),
-                ')'         => tok_stack.push(RPar),
-                ' '         => (),
-                _           => panic!("{}", line)
-            }
-            if part == 'b' {
-                if let [.., Int(l), Op('*'), Int(r), next] = tok_stack[..]{
-                    if matches!(next, Op('*') | RPar){
-                        tok_stack.truncate(tok_stack.len() - 4);
-                        tok_stack.push(Int(l * r));
-                        tok_stack.push(next);
-                    }
-                }
-            }
-            if let [.., LPar, Int(v), RPar] = tok_stack[..] {
-                tok_stack.truncate(tok_stack.len() - 3);
-                tok_stack.push(Int(v));
-            }
-            if let [.., Int(l), Op('+'), Int(r)] = tok_stack[..]{
-                tok_stack.truncate(tok_stack.len() - 3);
-                tok_stack.push(Int(l + r));
-            }
-            if part == 'a' {
-                if let [.., Int(l), Op('*'), Int(r)] = tok_stack[..]{
-                    tok_stack.truncate(tok_stack.len() - 3);
-                    tok_stack.push(Int(l * r));
-                }
-            }
-        }
-        if let [.., Int(l), Op('*'), Int(r)] = tok_stack[..]{
-            tok_stack.truncate(tok_stack.len() - 3);
-            tok_stack.push(Int(l * r));
-        }
-        if let [Int(v)] = tok_stack[..] {v} else {panic!("{} produced {:?}", line, tok_stack)}
-    }).sum::<i64>().to_string()
+    let ns = s.lines().map(|line| line.parse::<SnailfishInt>().unwrap());
+    
+    if part == 'a' {
+        ns.sum::<SnailfishInt>().magnitude().to_string()
+    } else {
+        let ns = ns.collect::<Vec<SnailfishInt>>();
+        ns.iter().flat_map(|x|
+            ns.iter().map(move |y| (x + y).magnitude())
+        ).max().unwrap().to_string()
+    }
 }
 
 fn day19(part: char, s: &str) -> String {
-    let mut lines = s.lines();
-    #[derive(Clone, Debug)]
-    enum Rule {Unknown, Lit(char), Opt(Vec<Vec<usize>>)}
-    let mut rules = vec![];
-    
-    for line in lines.by_ref().take_while(|line| !line.is_empty()) {
-        let (id_str, def_str) = str_split_once(line, ": ").unwrap();
-        let id: usize = id_str.parse().unwrap();
-        if rules.len() <= id {rules.resize(id + 1, Rule::Unknown)}
-        rules[id] = match def_str {
-            "\"a\"" => Rule::Lit('a'),
-            "\"b\"" => Rule::Lit('b'),
-            _ => Rule::Opt(def_str.split(" | ").map(|opt_str|
-                opt_str.split(" ").map(|num_str| num_str.parse().unwrap()).collect()
-            ).collect())
-        };
+
+    fn rot_matrix(n: u8) -> [[i8; 3]; 3]{
+        let mut vs = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+        if n & 16 != 0 {for v in &mut vs {*v = [v[1], v[2], v[0]]}}
+        if n &  8 != 0 {for v in &mut vs {*v = [v[2], v[0], v[1]]}}
+        if n &  4 != 0 {for v in &mut vs {v[1] *= -1; v[2] *= -1}}
+        if n &  2 != 0 {for v in &mut vs {v[0] *= -1; v[2] *= -1}}
+        if n &  1 != 0 {for v in &mut vs {*v = [-v[2], v[1], v[0]]}}
+        vs
     }
-    
-    if part == 'b' {
-        rules[8] = Rule::Opt(vec![vec![42], vec![42, 8]]);
-        rules[11] = Rule::Opt(vec![vec![42, 31], vec![42, 11, 31]]);
+
+    fn rotate(vs: &mut [[i32; 3]], m: [[i8; 3]; 3]) {
+        let [[cxx, cxy, cxz], [cyx, cyy, cyz], [czx, czy, czz]] = m;
+        for v @ &mut[x, y, z] in vs {
+            *v = [
+                cxx as i32 * x + cyx as i32 * y + czx as i32 * z,
+                cxy as i32 * x + cyy as i32 * y + czy as i32 * z,
+                cxz as i32 * x + cyz as i32 * y + czz as i32 * z
+            ]
+        }
     }
-    
-    lines.filter(|line| {
-        let mut parses_rem: Vec<Vec<usize>> = vec![vec![0]];
-        for c in line.chars() {
-            let mut next_parses: Vec<Vec<usize>> = vec![];
-            while !parses_rem.is_empty() {
-                let mut parse: Vec<usize> = parses_rem.pop().unwrap();
-                if parse.is_empty() {continue;}
-                match &rules[parse.remove(0)] {
-                    Rule::Lit(lit_c) => {
-                        if c == *lit_c {
-                            next_parses.push(parse);
+
+    fn compose(vs: &mut [[i8; 3]; 3], m: [[i8; 3]; 3]) {
+        let [[cxx, cxy, cxz], [cyx, cyy, cyz], [czx, czy, czz]] = m;
+        for v @ &mut[x, y, z] in vs {
+            *v = [
+                cxx  * x + cyx  * y + czx  * z,
+                cxy  * x + cyy  * y + czy  * z,
+                cxz  * x + cyz  * y + czz  * z
+            ]
+        }
+    }
+
+    let scans = s.split("\n\n").map(|para| {
+        let mut lines = para.lines();
+        lines.next();
+        lines.map(|line| 
+            line.split(",").map(|n| 
+                n.parse().unwrap()
+            ).collect::<Vec<i32>>().try_into().unwrap()
+        ).collect()
+    }).collect::<Vec<Vec<[i32; 3]>>>();
+
+    let mut matches = vec![];
+    for r in 0 ..  24 {
+        for (i, si) in scans.iter().enumerate() {
+            let sir = &mut si.clone()[..];
+            rotate(sir, rot_matrix(r));
+            for (j, sj) in scans.iter().enumerate() {
+                if i != j {
+                    let mut t_score = HashMap::new();
+                    for bir in &*sir {
+                        for bj in sj {
+                            *t_score.entry([bir[0] - bj[0], bir[1] - bj[1], bir[2] - bj[2]])
+                                    .or_insert(0) += 1;
                         }
-                    },
-                    Rule::Opt(opt_parses) => {
-                        for opt_parse in opt_parses {
-                            let mut new_parse = opt_parse.clone();
-                            new_parse.extend(&parse);
-                            parses_rem.push(new_parse);
-                        }
-                    },
-                    _ => unreachable!()
+                    }
+                    // transform from i's reference frame to j's reference frame
+                    // translation after rotation
+                    for (t, v) in t_score {if v > 11 {matches.push((i, j, rot_matrix(r), t))}}
                 }
             }
-            parses_rem = next_parses;
-            if parses_rem.is_empty() {return false};
         }
-        parses_rem.iter().any(|parse| parse.is_empty())
-    }).count().to_string()
+    }
+    for m in &matches {println!("{:?}", m);}
+    // transform from i's reference frame to 0's reference frame
+    let mut sat_t = vec![None; scans.len()];
+    sat_t[0] = Some((rot_matrix(0), [0, 0, 0]));
+    let mut done = false;
+    while !done {
+        done = true;
+        for (i, j, rij, tij) in &matches {
+            if let Some((rjo, tjo)) = sat_t[*j] {
+                let mut rio = *rij;
+                compose(&mut rio, rjo);
+                let mut tio = *tij;
+                rotate(&mut [tio], rjo);
+                tio[0] += tjo[0]; tio[1] += tjo[1]; tio[2] += tjo[2];
+
+                match sat_t[*i] {
+                    None => {
+                        done = false;
+                        sat_t[*i] = Some((rio, tio));
+                        println!("{} through {}: {:?}", i, j, (rio, tio));
+                    }
+                    Some((r, t)) if r == rio && t == tio => {},
+                    Some((r, t)) => {panic!(
+                        "verification error for {} through {} - {:?} expected, {:?} calculated",
+                        i, j, (r, t), (rio, tio));}
+                }
+            }
+        }
+    }
+    format!("{:?}", sat_t)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

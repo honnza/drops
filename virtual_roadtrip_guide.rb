@@ -78,6 +78,7 @@ def geo_dist(from, to)
 end
 
 def azimuth_str(from, to)
+  return "" unless USE_GEO
   sdl = Math.sin(to.lon - from.lon)
   cdl = Math.cos(to.lon - from.lon)
   tan_a_from =  sdl / (Math.cos(from.lat) * Math.tan(  to.lat) - Math.sin(from.lat) * cdl)
@@ -109,9 +110,12 @@ end
 ###############################################################################
 
 input = gets("\n\n")
-dests = JSON.parse(input, symbolize_names: true) rescue input.chomp.lines.map(&:chomp)
+dests = JSON.parse(input.tr("\n", ""), symbolize_names: true) rescue input.chomp.lines.map(&:chomp)
 
-at_exit{puts JSON.generate(dests.map{_1.is_a?(Dest) ? _1.to_hash : _1})}
+at_exit do
+  puts JSON.generate(dests.map{_1.is_a?(Dest) ? _1.to_hash : _1})
+            .gsub(/.{800}/, "\\&\n")
+end
 
 dests.map!.with_index do |row, ix|
   row = [row, 1] if row.is_a?(String)
@@ -134,7 +138,8 @@ dests.map!.with_index do |row, ix|
   Dest.new(ix, row[:name], row[:size], 0r, 0r, row[:lat], row[:lon])
 end
 
-puts JSON.generate(dests.map(&:to_hash))
+puts JSON.generate(dests.map(&:to_hash)).gsub(/.{800}/, "\\&\n")
+
 
 last_dest = dests[0]
 
