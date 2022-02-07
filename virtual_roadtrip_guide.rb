@@ -256,7 +256,7 @@ until pairs.empty?
   pairs.delete pair
   used_pairs << pair
   last_dest = pair[1]
-  geo_dist_str = USE_GEO ? " (distance #{geo_dist(*pair)} km)" : ""
+  geo_dist_str = USE_GEO ? "\ndistance #{geo_dist(*pair)} km" : ""
   length_str = if USE_LENGTHS
     path_ixes = [pair[0].ix];
     path_ixes << path_next[path_ixes.last][pair[1].ix] until path_ixes.last == pair[1].ix 
@@ -285,8 +285,8 @@ until pairs.empty?
     end
       inames = shortenings.map{_1[0]}.uniq
       jnames = shortenings.map{_1[1]}.uniq
-      puts "#{shortenings.count} paths from \e[1m#{inames.count}\e[0m places (#{inames.join(", ")}) " +
-            "to \e[1m#{jnames.count}\e[0m places (#{jnames.join(", ")}) shortened"
+      puts "\e[36m#{shortenings.count}\e[0m paths from \e[36m#{inames.count}\e[0m places (#{inames.join(", ")}) " +
+            "to \e[36m#{jnames.count}\e[0m places (#{jnames.join(", ")}) shortened"
   end
 
   if !USE_LENGTHS
