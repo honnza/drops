@@ -190,37 +190,40 @@ def squeeze_path_str(str, len)
   raise "TODO: how to squeeze #{str.inspect}"
 end
 
-plan = []
-if USE_GEO && PRIM # todo: figure out what the user wants when prim and not use_geo
-  pairs.sort_by!{|x, y| geo_dist(x, y)}
-  tree_parents = []
-  subtree_costs = dests.map{0}
-  (dests.count - 1).times do
-    x, y = pairs.find{|x, y| (x.ix == 0 || tree_parents[x.ix]) && y.ix != 0 && !tree_parents[y.ix]}
-    tree_parents[y.ix] = x
-    pair_len = geo_dist(x, y)
-    while y.ix != 0 
-      subtree_costs[y.ix] += pair_len
-      y = tree_parents[y.ix]
-    end
-  end
-  plan_subtree = lambda do |path_str, pid|
-    subtrees = (0 ... dests.count).filter{|cid| cid != 0 && tree_parents[cid].ix == pid}
-      .sort_by{|cid| subtree_costs[cid]}
-    
-    subtrees.each.with_index(1) do |cid, ix|
-      grandchildren = (0 ... dests.count).count{|gid| gid != 0 && tree_parents[gid].ix == cid}
-      subpath_str = "#{path_str} - (#{ix}/#{subtrees.count})"
-      ww = IO.console.winsize[1]
-      plan << [squeeze_path_str("#{subpath_str} > (#{grandchildren})\n", ww), [dests[pid], dests[cid]]]
-      plan_subtree[subpath_str, cid]
-      plan << [squeeze_path_str("#{subpath_str} < (#{grandchildren})\n", ww), [dests[cid], dests[pid]]]
-    end
-  end
-  plan_subtree["", 0]
-end
-
+plan = nil
 until pairs.empty?
+  if USE_GEO && PRIM && (plan.nil? || MULTIMST && plan.empty?)
+    # todo: figure out what the user wants when prim and not use_geo
+    pair_lengths = Array.new(dests.size){|i|Array.new(dests.size){|j| i == j ? 0 : 40000}}
+    plan = []
+    pairs.sort_by!{|x, y| geo_dist(x, y)}
+    tree_parents = []
+    subtree_costs = dests.map{0}
+    (dests.count - 1).times do
+      x, y = pairs.find{|x, y| (x.ix == 0 || tree_parents[x.ix]) && y.ix != 0 && !tree_parents[y.ix]}
+      tree_parents[y.ix] = x
+      pair_len = geo_dist(x, y)
+      while y.ix != 0 
+        subtree_costs[y.ix] += pair_len
+        y = tree_parents[y.ix]
+      end
+    end
+    plan_subtree = lambda do |path_str, pid|
+      subtrees = (0 ... dests.count).filter{|cid| cid != 0 && tree_parents[cid].ix == pid}
+        .sort_by{|cid| subtree_costs[cid]}
+      
+      subtrees.each.with_index(1) do |cid, ix|
+        grandchildren = (0 ... dests.count).count{|gid| gid != 0 && tree_parents[gid].ix == cid}
+        subpath_str = "#{path_str} - (#{ix}/#{subtrees.count})"
+        ww = IO.console.winsize[1]
+        plan << [squeeze_path_str("#{subpath_str} > (#{grandchildren})\n", ww), [dests[pid], dests[cid]]]
+        plan_subtree[subpath_str, cid]
+        plan << [squeeze_path_str("#{subpath_str} < (#{grandchildren})\n", ww), [dests[cid], dests[pid]]]
+      end
+    end
+    plan_subtree["", 0]
+  end
+
   if !plan.empty?
     prefix, pair = plan.shift
   elsif USE_LENGTHS || USE_GEO
