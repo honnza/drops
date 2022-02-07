@@ -617,7 +617,7 @@ class Table
     end
     to_expand_by_val = {height[] => [max_key]}
     pending_by_key = {}
-    puts "starting point: #{max_key.inspect} => #{height[]}"
+    print "starting point: #{max_key.inspect} => #{height[]}\n"
     
     loop do
       old_val = to_expand_by_val.keys.min
@@ -628,7 +628,7 @@ class Table
       old_key = to_expand_by_val[old_val].pop
       if old_key.sum == auto_total
         auto_cols.zip(old_key).each{_1[:width] = _2}
-        puts "found widths: #{old_key.inspect} => #{height[]}"
+        print "found widths: #{old_key.inspect} => #{height[]}\n"
         return
       end
 
@@ -643,7 +643,7 @@ class Table
           pending_by_key.delete new_key
           auto_cols.zip(new_key).each{_1[:width] = _2}
           new_val ||= height[]
-          print "#{new_key.inspect} => #{new_val} \n\e[A"
+          print "#{new_key.inspect} => #{new_val} \n\e[A" if rand < 0.01
           to_expand_by_val[new_val] ||= []
           to_expand_by_val[new_val] << new_key
         end
