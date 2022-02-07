@@ -1,5 +1,6 @@
 require 'io/console'
 require 'json'
+require 'uri'
 
 RAD2DEG = 180 / Math::PI
 
@@ -63,8 +64,9 @@ class PairEnum
 end
 
 def dms_to_radians(str)
-  raise "invalid dms string #{str}" unless /([+-]?)([\d. ]+)/ =~ str
-  ($1 == '-' ? -1 : 1) * $2.split(" ").map(&:to_f).reverse.reduce{|a, d| a/60 + d} * (Math::PI / 180)
+  raise "invalid dms string #{str}" unless /([+-]?)([\d. ]+)([NEWS]?)/ =~ str
+  ($1 == '-' ? -1 : 1) * ($3 == "S" || $3 == "W" ? -1 : 1) *
+  $2.split(" ").map(&:to_f).reverse.reduce{|a, d| a/60 + d} * (Math::PI / 180)
 end
 
 EARTH_DIAMETER = 2 * 6371 # uses mean Earth radius
@@ -117,8 +119,26 @@ at_exit do
             .gsub(/.{800}/, "\\&\n")
 end
 
+def try_parse_geohack_url(uri)
+  uri = URI(uri) rescue (return nil)
+  return nil unless uri.scheme
+  # apparently a single word is a valid URI according to the constructor ¯\_(ツ)_/¯
+  puts "unexpected URL host #{uri.host}" unless uri.host == "geohack.toolforge.org"
+  puts "unexpected URL path #{uri.path}" unless uri.path == "/geohack.php"
+  raise "no query string in #{uri}" unless uri.query
+  query = Hash[URI.decode_www_form uri.query.tr("_", " ")]
+  raise "no name param in #{uri}" unless query["pagename"]
+  raise "no params param in #{uri}" unless query["params"]
+  name = query["pagename"]
+  latlon_str = query["params"][/^([^:]+ )(?:$|[^: ]+:)/, 1]
+  unless latlon_str =~ /([\d. ]+[NS]) ([\d. ]+[EW]) /
+    raise "unknown lat/lon string #{latlon_str} in #{uri}"
+  end
+  {name: name, lat: dms_to_radians($1), lon: dms_to_radians($2)}
+end
+
 dests.map!.with_index do |row, ix|
-  row = [row, 1] if row.is_a?(String)
+  row = try_parse_geohack_url(row) || [row, 1] if row.is_a?(String)
   row = {name: row[0], size: row[1]} if row.is_a?(Array)
   size = size.tr("^0-9.", "").to_f if size.is_a?(String)
 
