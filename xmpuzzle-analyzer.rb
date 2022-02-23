@@ -162,8 +162,33 @@ def sort_pieces(pieces)
 end
 
 grid_types = {
-    "0" => {
+    "0" => {# each voxel is a cube - default mode
         name: "block",
+        place_piece: method(:block_place_piece),
+        render: method(:block_render)
+    },
+    "1" => {# each voxel is a triangular prism that spans one layer. Prisms at even
+            # coordinates within layer touch those at (x, y-1), prisms at odd coordinates
+            # touch those at (x, y+1). 
+        name: "triangular prism",
+        place_piece: nil,
+        render: method(:block_render)
+    },
+    "2" => {# voxels are spheres at alternate vertices of the cubic grid; 0,0,0 is a voxel
+        name: "spheres",
+        place_piece: method(:block_place_piece),
+        render: method(:block_render)
+    },
+    "3" => {# each voxel is a tetrahedron spanning an edge, face center and body center
+            # of a unit cube that spans 5x5x5 of the save file cubic grid. 
+        name: "rhombic tetrahedra", 
+        place_piece: method(:block_place_piece),
+        render: method(:block_render)
+    },
+    "4" => {# each voxel is a tetrahedron spanned by four alternate vertices
+            # or four adjacent vertices of a unit cube that spans 3x3x3 of the cubic grid.
+            # alternate vertices are chosen such that they form octahedra, one centered at 0.5/0.5/0.5
+        name: "tetrahedra-octahedra",
         place_piece: method(:block_place_piece),
         render: method(:block_render)
     }
