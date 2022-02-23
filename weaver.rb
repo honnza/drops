@@ -26,7 +26,8 @@ end
 
 class CombinationGenerator
   Literal = Struct.new :ix, :is_neg, :for_gen do
-    def to_s; (is_neg ? "-" : "+") + for_gen.names[ix]; end
+    def name; for_gen.names[ix]; end
+    def to_s; (is_neg ? "-" : "+") + name; end
   end
   class Filter
     class << self
@@ -392,6 +393,14 @@ def do_command line
     when /^stats$/
       puts $enum.stats
       puts $solution_tracker.stats
+    when /^show filters$/
+      $enum.filters.each do |filter|
+        puts filter
+        if $renderer
+          puts $renderer[filter.literals.map(&:name).join(" "), $enum]
+          gets
+        end
+      end
     when /^save as (.*)$/
       json = JSON.generate({n: $new_str, e: $enum.serialize})
       Zlib::GzipWriter.open($1 + ".wvrz") {|gz| gz.write json}
@@ -406,7 +415,7 @@ def do_command line
         puts "ok; #{$enum.filters.join ' '}"
         $undo = []
       end
-    when /^exit$|^quit$|^q$/ then exit
+    when /^exit$|^quit$/ then exit
 
     when /^pop level$/
       if $solution_tracker.speculation
