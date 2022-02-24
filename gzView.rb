@@ -516,7 +516,7 @@ def define_more(scan_to)
           line = Fiber.yield
           p line unless line.is_a? String
           orig_puts[line]
-          break if line.include? NEW_STR
+          break if line.include?(NEW_STR) || line.include?("#")
         end
       when "\n", "\r" then orig_puts[Fiber.yield]
       when "\x03", "\x1a" then exit
