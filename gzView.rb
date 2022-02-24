@@ -265,6 +265,8 @@ def name_offset k
               1025-1536 1537-2048 2049-3072 3073-4096 4097-6144 6145-8192 8193-12288 12289-16384 16385-24576 24577-32768}[k]
 end
 
+def name_block_offset((kb, ko)); "#{name_block kb}/#{name_offset ko}"; end
+
 def read_lencodes bit_reader, len_codes, demand
   r = []
   until r.size >= demand
@@ -467,6 +469,7 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
       extra = bit_reader.get_bits extra_bits[code-257] rescue p [key, code]
       okey, ocode = bit_reader.read_huffman offset_codes
       stats[:offset_counts][ocode] += 1
+      stats[:block_offset_counts][[code, ocode]] += 1
       oextra = bit_reader.get_bits oextra_bits[ocode]
 
       length = extra_offset[code-257] + extra.bits_to_int
@@ -742,18 +745,31 @@ if $0 == __FILE__
   base64 = ARGV.include?("--base64")
   ARGV.delete("--base64")
   
-  hash_stats = %i{block_counts offset_counts}
+  p_stats = ARGV.include?("--stats")
+  ARGV.delete("--stats")
+  p_stats2 = ARGV.include?("--stats2")
+  ARGV.delete("--stats2")
+
+  hash_stats = %i{block_counts offset_counts block_offset_counts}
   bit_reader = BitReader.new ARGF, base64: base64
   out_buf = String.new encoding:"ASCII-8BIT"
-  stats_sum = {lit_blocks: 0, rep_blocks: 0, compressed_size: 0, uncompressed_size: 0, 
-                block_counts: Hash[(0..285).map{|k| [k,0]}], offset_counts: Hash[(0..29).map{|k| [k,0]}]}
+  stats_sum = {
+    lit_blocks: 0, rep_blocks: 0, compressed_size: 0, uncompressed_size: 0, 
+      block_counts: Hash[(0..285).map{|k| [k,0]}], 
+      offset_counts: Hash[(0..29).map{|k| [k,0]}],
+      block_offset_counts: Hash[(257..285).flat_map{|kb| (0..29).map{|ko| [[kb, ko], 0]}}]
+    }
 
   show_parse_header bit_reader
   last_cs = 0
   last_ucs = 0
   loop do
-    stats = {lit_blocks: 0, rep_blocks: 0, 
-              block_counts: Hash[(0..285).map{|k| [k,0]}], offset_counts: Hash[(0..29).map{|k| [k,0]}]}
+    stats = {
+      lit_blocks: 0, rep_blocks: 0, 
+      block_counts: Hash[(0..285).map{|k| [k,0]}], 
+      offset_counts: Hash[(0..29).map{|k| [k,0]}],
+      block_offset_counts: Hash[(257..285).flat_map{|kb| (0..29).map{|ko| [[kb, ko], 0]}}]
+    }
     last = show_parse_block bit_reader, out_buf, stats, quiet: quiet, extrapolate: extrapolate
     stats[:compressed_size] = ARGF.pos - last_cs; last_cs = ARGF.pos
     stats[:uncompressed_size] = out_buf.size - last_ucs; last_ucs = out_buf.size
@@ -762,15 +778,23 @@ if $0 == __FILE__
     hash_stats.each{|k| stats_sum[k].keys.each{|hk| stats_sum[k][hk] += stats[k][hk]}}
 
     p stats.select{|k, v| v.is_a? Integer}
-    
-    puts list_wrap digest_hash stats[:block_counts], key_transform: method(:name_block)
-    puts list_wrap digest_hash stats[:offset_counts], key_transform: method(:name_offset)
-    if stats_sum[:compressed_size] > stats[:compressed_size]
-      p stats_sum.select{|k, v| v.is_a? Integer}
-      puts list_wrap digest_hash stats_sum[:block_counts], key_transform: method(:name_block)
-      puts list_wrap digest_hash stats_sum[:offset_counts], key_transform: method(:name_offset)
+
+    if p_stats
+      puts list_wrap digest_hash stats[:block_counts], key_transform: method(:name_block)
+      puts list_wrap digest_hash stats[:offset_counts], key_transform: method(:name_offset)
+      if stats_sum[:compressed_size] > stats[:compressed_size]
+        p stats_sum.select{|k, v| v.is_a? Integer}
+        puts list_wrap digest_hash stats_sum[:block_counts], key_transform: method(:name_block)
+        puts list_wrap digest_hash stats_sum[:offset_counts], key_transform: method(:name_offset)
+      end
     end
-    break if last
+    if p_stats2
+      puts list_wrap digest_hash stats[:block_offset_counts], key_transform: method(:name_block_offset)
+      if stats_sum[:compressed_size] > stats[:compressed_size]
+        puts list_wrap digest_hash stats_sum[:block_offset_counts], key_transform: method(:name_block_offset)
+      end
+    end
+  break if last
   end
   
   puts "CRC32: " + to_bytes_str(bit_reader.get_bytes(4))
