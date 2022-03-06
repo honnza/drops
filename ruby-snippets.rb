@@ -395,6 +395,7 @@ def foo(x, limit = nil, n: :n4, f: 0.1, grid: nil, lowcolor: false, hicolor: fal
     plan.map!{|i, j, r, g, b| [i, j, r & ~7, g & ~3, b & ~7]}
   end
   
+  dr2 = -> x, y {x[2..4].zip(y[2..4]).map{|cx, cy| (cx - cy).abs ** 0.5}.sum}
   d1 = -> x, y {x[2..4].zip(y[2..4]).map{|cx, cy| (cx - cy).abs}.sum}
   d2 = -> x, y {x[2..4].zip(y[2..4]).map{|cx, cy| (cx - cy) ** 2}.sum ** 0.5}
   d16 = -> x, y {x[2..4].zip(y[2..4]).map{|cx, cy| 
@@ -403,19 +404,19 @@ def foo(x, limit = nil, n: :n4, f: 0.1, grid: nil, lowcolor: false, hicolor: fal
   }.sum}
 
   # nearest neighbor heuristic from top left corner biased for space-continuity
-  todo = plan
-  plan = [todo.first]
-  todo.shift
-  until todo.empty?
-    el = todo.filter do |el|
-    plan.any?{|el2| el[0..1].zip(el2).all?{|x, y| (x - y).abs <= 1}}
-  end.min_by{|el| d16[plan.last, el]}
-    plan << el
-    todo.delete el
-  end
+  # todo = plan
+  # plan = [todo.first]
+  # todo.shift
+  # until todo.empty?
+  #   el = todo.filter do |el|
+  #   plan.any?{|el2| el[0..1].zip(el2).all?{|x, y| (x - y).abs <= 1}}
+  # end.min_by{|el| d16[plan.last, el]}
+  #   plan << el
+  #   todo.delete el
+  # end
 
   # 2.5-opt: flip strands and move individual nodes
-  [d16].each do |d|
+  [dr2].each do |d|
     loop do
       prev_plan = plan.dup
       (0 ... plan.length).each do |elix|
