@@ -1,4 +1,4 @@
-def gc x; (255 * x**(1/2.2)).round; end
+def gc x; (255 * x ** (1/2.2)).round; end
 
 def find_collatz(x, triple_even = true)
   paths_to = {x => [""]}
