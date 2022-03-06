@@ -200,8 +200,13 @@ end
 
 require "io/console"
 def progress_bar progress, text = "", width = IO.console.winsize[1] - 1
-  on_cells = ((width - 2) * progress.clamp(0 .. 1)).round
-  (text.ljust(width - 2) + "]").insert(on_cells, "\e[27m").insert(0, "[\e[7m")
+  on_cells = ((width - 2) * progress.clamp(0 .. 1))
+  bg = (on_cells % 1 * 256).floor
+  fg = bg > 127 ? 30 : 97
+  (text.ljust(width - 2) + "]")
+    .insert(on_cells.floor + 1, "\e[0m")
+    .insert(on_cells.floor, "\e[48;2;#{bg};#{bg};#{bg};#{fg}m")
+    .insert(0, "[\e[107;30m")
 end
 
 def relax_rescale(grid, f: 0.1, n: :n4, s: [])
