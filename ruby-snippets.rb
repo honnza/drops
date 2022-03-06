@@ -230,12 +230,13 @@ def relax_rescale(grid, f: 0.1, n: :n4, s: [])
   end
 
   fmt = lambda do |i, j, val|
+    rval = val.abs ** 0.5 * (val > 0 ? 1 : -1) if val
     logval = Math.log10(val.abs) / -10 if val
     c = ->x{(255 * x).round.clamp(0, 255)}
     case val
     when nil then " " * (precision + 2)
-    when -1 .. 0  then "\e[38;2;255;#{c[1+val]};#{c[logval]}m%.*f\e[0m"
-    when  0 .. 1  then "\e[38;2;#{c[logval]};#{c[1-val]};255m%.*f\e[0m"
+    when -1 .. 0  then "\e[38;2;255;#{c[1+rval]};#{c[logval]}m%.*f\e[0m"
+    when  0 .. 1  then "\e[38;2;#{c[logval]};#{c[1-rval]};255m%.*f\e[0m"
     else "\e[32;1m%.*f\e[0m"
     end % [precision, val&.abs]
   rescue
