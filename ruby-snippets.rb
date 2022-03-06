@@ -403,17 +403,26 @@ def foo(x, limit = nil, n: :n4, f: 0.1, grid: nil, lowcolor: false, hicolor: fal
     2 * high + [low, 18 - low].min
   }.sum}
 
-  # nearest neighbor heuristic from top left corner biased for space-continuity
-  todo = plan
-  plan = [todo.first]
-  todo.shift
-  until todo.empty?
-    el = todo.filter do |el|
-    plan.any?{|el2| el[0..1].zip(el2).all?{|x, y| (x - y).abs <= 1}}
-  end.min_by{|el| dr2[plan.last, el]}
-    plan << el
-    todo.delete el
+  # global nearest neighbor (kruskal TSP) heuristic
+  plan.map!{|x| [x]}
+  while plan.size > 1
+    d, s1r, s2r, s1, s2 = plan.combination(2).flat_map do |s1, s2|
+      [false, s1.size > 1].uniq.flat_map do |s1r|
+        [false, s2.size > 2].uniq.map do |s2r|
+          s1end = s1r ? s1.first : s1.last
+          s2end = s2r ? s2.last : s2.first
+          [dr2[s1end, s2end], s1r ? 1 : 0, s2r ? 1 : 0, s1, s2]
+        end
+      end
+    end.min
+    plan.delete s1
+    plan.delete s2
+    s1.reverse! if s1r
+    s2.reverse! if s2r
+    plan << s1 + s2
+    puts "#{s1.last} - #{s2.first} = #{d}"
   end
+  plan = plan[0]
 
   # 2.5-opt: flip strands and move individual nodes
   [dr2].each do |d|
