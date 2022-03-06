@@ -270,7 +270,7 @@ def relax_rescale(grid, f: 0.1, n: :n4, s: [])
   prev_frame_t = nil
   prev_max_delta = nil
   time_start = Time.now
-  smooth_time_est = Float::NAN
+  smooth_speed = Float::NAN
   loop.with_index do |_, t|
     energy = 0
     grid = (0 ... grid.size).map do |i|
@@ -302,23 +302,21 @@ def relax_rescale(grid, f: 0.1, n: :n4, s: [])
     max_delta = prev_grid && grid.zip(prev_grid).map do |xs, pxs|
       xs.zip(pxs).map{|x, px| (x - px).abs if x}
     end.flatten.compact.max
+    t_delta = Time.now - prev_frame_t if prev_frame_t
     last_frame = t > 1 && scale < 1e-10 || (max_delta &.<= 2 * Float::EPSILON)
     
-    if(t == 0 || Time.now - prev_frame_t > 0.1 || last_frame)
-      time_est = if prev_max_delta && (max_delta < prev_max_delta || max_delta > 1e-15)
-        delta_goal = max_delta < prev_max_delta ? Float::EPSILON : 1
-          (Time.now - prev_frame_t) * 
-          (Math.log(max_delta) - Math.log(delta_goal)) / 
-          (Math.log(prev_max_delta) - Math.log(max_delta))
-      else Float::NAN
-      end
+    if(t == 0 || t_delta > 0.1 || last_frame)
+      if prev_max_delta
+        frame_speed = (Math.log(max_delta) - Math.log(prev_max_delta)) / t_delta
+        smooth_speed = if smooth_speed.finite?
+          smooth_speed * 0.9 + frame_speed * 0.1
+        else frame_speed end
 
-      smooth_time_est = case
-      when !smooth_time_est.finite? then time_est
-      when !time_est.finite? then smooth_time_est
-      else 0.9 * smooth_time_est + 0.1 * time_est
+        delta_goal = smooth_speed < 0 ? Math.log(Float::EPSILON) : 1
+        time_est = (delta_goal - Math.log(max_delta)) / smooth_speed
+      else
+        time_est = Float::NAN
       end
-
 
       cout = [""]
       grid.each.with_index{|row, i| cout << row.map.with_index{|val, j| fmt[i, j, val]}.join(" ").rstrip}
@@ -329,9 +327,9 @@ def relax_rescale(grid, f: 0.1, n: :n4, s: [])
       # cout << "suppression factors = %p" % [suppression_factors.map{|f| "%.1e" % f}]
       # \e[A moves cursor up; \e[?25l hides it; \e[?25h shows it again
       cout << progress_bar(
-                Math.log(max_delta || 1) / Math.log(Float::EPSILON), 
-                "elapsed: #{fmt_secs[Time.now - time_start]} | remaining: #{fmt_secs[smooth_time_est]}"
-              )
+        Math.log(max_delta || 1) / Math.log(Float::EPSILON),
+        "elapsed: #{fmt_secs[Time.now - time_start]} | remaining: #{fmt_secs[time_est]}"
+      )
       cout << "\e[#{cout.size}A\e[?25l" unless last_frame
       print cout.join("\n")
       return nil if last_frame && scale < 1e-10
