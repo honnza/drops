@@ -169,7 +169,7 @@ def grid_sampler(h, w, torus: false, neighbor_count: 8, show: true)
 end
 
 def outercalate(str, scale = 1)
-  outercalate_line = ->x{" #{x.join} ".gsub(/(.)(?=(.))/){$1 * scale + (($1 + $2) == "  " ? " " : ".")}[1...-1].chars}
+  outercalate_line = ->x{" #{x.join} ".gsub(/(.)(?=(.))/){$1 * scale + (($1 + $2) == "  " ? " " : "e")}[1...-1].chars}
   ary = str.split(%r[[\n\/]]).map(&:chars)
   ary.map! &outercalate_line
   ary = ary.transpose
@@ -179,7 +179,7 @@ def outercalate(str, scale = 1)
 end
 
 def intercalate(str, scale = 1)
-  intercalate_line = ->x{" #{x.join} ".gsub(/(.)(?=(.))/){$1 * scale + (($1 + $2) =~ / / ? " " : ".")}[1...-1].chars}
+  intercalate_line = ->x{" #{x.join} ".gsub(/(.)(?=(.))/){$1 * scale + (($1 + $2) =~ / / ? " " : "e")}[1...-1].chars}
   ary = str.split(%r[[\n\/]]).map(&:chars)
   ary.map! &intercalate_line
   ary = ary.transpose
