@@ -272,6 +272,7 @@ def relax_rescale(grid, f: 0.1, n: :n4, s: [])
   prev_max_delta = nil
   time_start = Time.now
   smooth_speed = Float::NAN
+  smooth_time_est = Float::NAN
   loop.with_index do |_, t|
     energy = 0
     grid = (0 ... grid.size).map do |i|
@@ -318,6 +319,9 @@ def relax_rescale(grid, f: 0.1, n: :n4, s: [])
       else
         time_est = Float::NAN
       end
+      smooth_time_est = if smooth_time_est.finite?
+        (smooth_time_est - t_delta).clamp(0..) * 0.9 + time_est * 0.1
+      else time_est end
 
       cout = [""]
       grid.each.with_index{|row, i| cout << row.map.with_index{|val, j| fmt[i, j, val]}.join(" ").rstrip}
@@ -329,7 +333,7 @@ def relax_rescale(grid, f: 0.1, n: :n4, s: [])
       # \e[A moves cursor up; \e[?25l hides it; \e[?25h shows it again
       cout << progress_bar(
         Math.log(max_delta || 1) / Math.log(Float::EPSILON),
-        "elapsed: #{fmt_secs[Time.now - time_start]} | remaining: #{fmt_secs[time_est]}"
+        "elapsed: #{fmt_secs[Time.now - time_start]} | remaining: #{fmt_secs[smooth_time_est]}"
       )
       cout << "\e[#{cout.size}A\e[?25l" unless last_frame
       print cout.join("\n")
