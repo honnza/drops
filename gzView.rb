@@ -25,7 +25,8 @@ class String
         .chars.map do |c|
           case 
           when c == "\0" then "\e[7m \e[27m"
-          when c.valid_encoding? && c.ord > 0x20 then c
+          when !$binary && c == " " then "•"
+          when !$binary && c.valid_encoding? && c.ord > 0x20 then c
           else 
             bits = c.bytes[0]
             dots =  bits[7] << 0 | bits[3] << 3 |
@@ -744,6 +745,8 @@ if $0 == __FILE__
   ARGV.delete("--headers-only")
   base64 = ARGV.include?("--base64")
   ARGV.delete("--base64")
+  $binary = ARGV.include?("--bin")
+  ARGV.delete("--bin")
   
   p_stats = ARGV.include?("--stats")
   ARGV.delete("--stats")
