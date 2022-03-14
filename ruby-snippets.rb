@@ -351,7 +351,7 @@ ensure
   print "\e[0m\e[?25h\n"
 end
 
-def foo(x, limit = nil, n: :n4, f: 0.1, grid: nil, lowcolor: false, hicolor: false)
+def foo(x, limit = nil, n: :n4, f: 0.1, grid: nil, lowcolor: false, hicolor: false, rgb: false)
   # generate channels
   xs = x.split(/[\/\n]/)
   modes = []
@@ -398,6 +398,21 @@ def foo(x, limit = nil, n: :n4, f: 0.1, grid: nil, lowcolor: false, hicolor: fal
 
   if hicolor
     plan.map!{|i, j, r, g, b| [i, j, r & ~7, g & ~3, b & ~7]}
+  end
+
+  if rgb
+    [["[-, -, %d]", 4], ["[%d, -, -]", 2], ["[-, %d, -]", 3]].each do |cf, ci|
+      bitmap = xs.map{|x| " " * x.size}
+      plan.each{|i, j, _, _, _| bitmap[i][j] = grid && (i % grid == grid - 2 || j % grid == grid - 2) ? "," : "."}
+      plan.group_by{|el| el[ci]}.to_a.sort.each do |cv, els|
+        puts [("#{els.count}x" if els.count > 1), cf % cv].compact.join " "
+        els.each{|el| bitmap[el[0]][el[1]] = "o"}
+        bitmap.each{|row| puts row.gsub(/./, '\& ')}
+        els.each{|el| bitmap[el[0]][el[1]] = "@"}
+        gets
+      end
+    end
+    return
   end
   
   dr2 = -> x, y {x[2..4].zip(y[2..4]).map{|cx, cy| (cx - cy).abs ** 0.5}.sum}
@@ -463,7 +478,7 @@ def foo(x, limit = nil, n: :n4, f: 0.1, grid: nil, lowcolor: false, hicolor: fal
   bitmap = xs.map{|x| " " * x.size}
   plan.each{|i, j, _, _, _| bitmap[i][j] = grid && (i % grid == grid - 2 || j % grid == grid - 2) ? "," : "."}
   plan.chunk{|el| el[2..4]}.each do |rgb, els|
-    puts [("#{els.count}x" if els.count > 1),rgb.inspect].compact.join " "
+    puts [("#{els.count}x" if els.count > 1), rgb.inspect].compact.join " "
     els.each{|el| bitmap[el[0]][el[1]] = "o"}
     bitmap.each{|row| puts row.gsub(/./, '\& ')}
     els.each{|el| bitmap[el[0]][el[1]] = "@"}
