@@ -214,7 +214,7 @@ def relax_rescale(grid, f: 0.1, n: :n4, s: [])
   grid = grid.split(/[\n\/]/).map{|row| row.chars.map{|c|
     {?- => -1.0, ?. => 0.0, ?+ => 1.0, ?? => rand, ?e => rand / 1e10}[c]
   }} if grid.is_a? String
-  precision = IO.console.winsize[1] / grid.map(&:length).max - 3
+  precision = IO.console.winsize[1] / grid.map(&:length).max - 1
   precision = 16 if precision > 16
   (puts "warning: precision = #{precision}"; precision = 1) if precision < 1
 
@@ -233,12 +233,13 @@ def relax_rescale(grid, f: 0.1, n: :n4, s: [])
     rval = val.abs ** 0.5 * (val > 0 ? 1 : -1) if val
     logval = Math.log10(val.abs) / -10 if val
     c = ->x{(255 * x).round.clamp(0, 255)}
+    s = ("%.*f" % [precision, val.abs]).sub("0.", "").sub("1.0", "A") if val
     case val
-    when nil then " " * (precision + 2)
-    when -1 .. 0  then "\e[38;2;255;#{c[1+rval]};#{c[logval]}m%.*f\e[0m"
-    when  0 .. 1  then "\e[38;2;#{c[logval]};#{c[1-rval]};255m%.*f\e[0m"
-    else "\e[32;1m%.*f\e[0m"
-    end % [precision, val&.abs]
+    when nil then " " * precision
+    when -1 .. 0  then "\e[38;2;255;#{c[1+rval]};#{c[logval]}m#{s}\e[0m"
+    when  0 .. 1  then "\e[38;2;#{c[logval]};#{c[1-rval]};255m#{s}\e[0m"
+    else "\e[32;1m#{s}\e[0m"
+    end 
   rescue
     "\e[32;1m%.*f\e[0m" % [precision, val&.abs]
   end
