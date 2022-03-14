@@ -423,14 +423,12 @@ def foo(x, limit = nil, n: :n4, f: 0.1, grid: nil, lowcolor: false, hicolor: fal
     2 * high + [low, 18 - low].min
   }.sum}
 
-  # nearest neighbor heuristic from top left corner biased for space-continuity
+  # nearest neighbor heuristic from top left corner
   todo = plan
   plan = [todo.first]
   todo.shift
   until todo.empty?
-    el = todo.filter do |el|
-    plan.any?{|el2| el[0..1].zip(el2).all?{|x, y| (x - y).abs <= 1}}
-  end.min_by{|el| dr2[plan.last, el]}
+    el = todo.min_by{|el| dr2[plan.last, el]}
     plan << el
     todo.delete el
   end
