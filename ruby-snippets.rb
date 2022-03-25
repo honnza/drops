@@ -434,6 +434,7 @@ def foo(x, limit = nil, n: :n4, f: 0.1, grid: nil, lowcolor: false, hicolor: fal
   end
 
   # 2.5-opt: flip strands and move individual nodes
+  # 3-opt: any three cuts
   [dr2].each do |d|
     loop do
       prev_plan = plan.dup
@@ -467,8 +468,51 @@ def foo(x, limit = nil, n: :n4, f: 0.1, grid: nil, lowcolor: false, hicolor: fal
           end
         end
       end
-      break if prev_plan == plan
-      puts "---"
+      (puts "---"; redo) if prev_plan != plan
+      (0 .. plan.length).to_a.combination(3) do |i1, i2, i3|
+        # single element move or simple flip
+        next if i2 == i1 + 1 || i3 == i2 + 1
+        # ---a b---c d---e f---
+        d_ab = i1 == 0 ? 0 : d[plan[i1 - 1], plan[i1]]
+        d_ac = i1 == 0 ? 0 : d[plan[i1 - 1], plan[i2 - 1]]
+        d_ad = i1 == 0 ? 0 : d[plan[i1 - 1], plan[i2]]
+        d_ae = i1 == 0 ? 0 : d[plan[i1 - 1], plan[i3 - 1]]
+        d_bd = d[plan[i1], plan[i2]]
+        d_be = d[plan[i1], plan[i3 - 1]]
+        d_bf = i3 == plan.length ? 0 : d[plan[i1], plan[i3]]
+        d_cd = d[plan[i2 - 1], plan[i2]]
+        d_ce = d[plan[i2 - 1], plan[i3 - 1]]
+        d_cf = i3 == plan.length ? 0 : d[plan[i2 - 1], plan[i3]]
+        d_df = i3 == plan.length ? 0 : d[plan[i2], plan[i3]]
+        d_ef = i3 == plan.length ? 0 : d[plan[i3 - 1], plan[i3]]
+        
+        d_abcdef = d_ab + d_cd + d_ef
+        # abcedf = simple flip
+        # acbdef = simple flip
+        d_acbedf = d_ac + d_be + d_df
+        d_adebcf = d_ad + d_be + d_cf
+        d_adecbf = d_ad + d_ce + d_bf
+        d_aedbcf = d_ae + d_bd + d_cf
+        # aedcbf = simple flip
+        best = [d_abcdef, d_acbedf, d_adebcf, d_adecbf, d_aedbcf].min
+        next if d_abcdef == best
+        plan = plan [... i1] + case best
+        when d_acbedf
+          puts "double flip at #{[i1, i2, i3]}; saved #{d_abcdef - best} points"
+          plan[i1 ... i2].reverse + plan[i2 ... i3].reverse
+        when d_adebcf
+          puts "strand exchange at #{[i1, i2, i3]}; saved #{d_abcdef - best} points"
+          plan[i2 ... i3] + plan[i1 ... i2]
+        when d_adecbf
+          puts "swap and flip second at #{[i1, i2, i3]}; saved #{d_abcdef - best} points"
+          plan[i2 ... i3] + plan[i1 ... i2].reverse
+        when d_aedbcf
+          puts "swap and flip first at #{[i1, i2, i3]}; saved #{d_abcdef - best} points"
+          plan[i2 ... i3].reverse + plan[i1 ... i2]
+        end + plan[i3 ...]
+      end
+      (puts "---"; redo) if prev_plan != plan
+      break
     end
   end
 
