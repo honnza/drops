@@ -232,7 +232,7 @@ def relax_rescale(grid, f: 0.1, n: :n4, s: [])
   fmt = lambda do |i, j, val|
     rval = val.abs ** 0.5 * (val > 0 ? 1 : -1) if val
     logval = Math.log10(val.abs) / -10 if val
-    c = ->x{(255 * x).round.clamp(0, 255)}
+    c = ->x{(255 * x).clamp(0, 255).round}
     s = ("%.*f" % [precision, val.abs]).sub("0.", "").sub("1.0", "A") if val
     case val
     when nil then " " * precision
