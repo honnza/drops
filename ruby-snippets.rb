@@ -369,7 +369,7 @@ def foo(x, limit = nil, n: :n4, f: 0.1, grid: nil, lowcolor: false, hicolor: fal
       puts "mode #{modes.size} strength = #{dot} / #{len} = #{dot / len}", "---"
       accepted_modes << [dot / len, modes.size, modes.last[:mode]]
   else
-    puts "rejected mode: dot product = #{dot}"
+    puts "rejected mode #{modes.size}: dot product = #{dot}"
     end
   puts "strongest modes: #{accepted_modes.sort.reverse.map{|_, ix, _| ix}}" if limit
   #sleep [dot / len * 2, 1].max
