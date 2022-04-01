@@ -443,7 +443,21 @@ def foo(x, limit = nil, n: :n4, f: 0.1, grid: nil, lowcolor: false, hicolor: fal
   # 3-opt: any three cuts
   [dr2].each do |d|
     loop do
+      puts "score: #{plan.each_cons(2).map{|e1, e2| d[e1, e2]}.sum}"
       prev_plan = plan.dup
+      (0 .. plan.length - 2).reverse_each do |lix|
+        (lix + 2 .. plan.length).each do |rix|
+          dol = lix == 0 ? 0 : d[plan[lix - 1], plan[lix]]
+          dor = rix == plan.length ? 0 : d[plan[rix - 1], plan[rix]]
+          dnl = lix == 0 ? 0 : d[plan[lix - 1], plan[rix - 1]]
+          dnr = rix == plan.length ? 0 : d[plan[lix], plan[rix]]
+          if dol + dor > dnl + dnr + 1e-9
+            plan = plan[0 ... lix] + plan[lix ... rix].reverse + plan[rix ...]
+            puts "flipped [#{lix} ... #{rix}]; saved #{dol + dor - dnl - dnr} points"
+          end
+        end
+      end
+      (puts "---"; redo) if prev_plan != plan
       (0 ... plan.length).each do |elix|
         (0 .. plan.length).each do |gapix|
           next if (elix - gapix).abs < 2
@@ -458,19 +472,6 @@ def foo(x, limit = nil, n: :n4, f: 0.1, grid: nil, lowcolor: false, hicolor: fal
             plan.insert(gapix, plan[elix])
             plan.delete_at(elix > gapix ? elix + 1 : elix)
             puts "moved [#{elix}] to #{gapix}; saved #{dol + dor + dog - dnl - dnr - dng} points"
-          end
-        end
-      end
-    (puts "---"; redo) if prev_plan != plan
-      (0 .. plan.length - 2).reverse_each do |lix|
-        (lix + 2 .. plan.length).each do |rix|
-          dol = lix == 0 ? 0 : d[plan[lix - 1], plan[lix]]
-          dor = rix == plan.length ? 0 : d[plan[rix - 1], plan[rix]]
-          dnl = lix == 0 ? 0 : d[plan[lix - 1], plan[rix - 1]]
-          dnr = rix == plan.length ? 0 : d[plan[lix], plan[rix]]
-          if dol + dor > dnl + dnr
-            plan = plan[0 ... lix] + plan[lix ... rix].reverse + plan[rix ...]
-            puts "flipped [#{lix} ... #{rix}]; saved #{dol + dor - dnl - dnr} points"
           end
         end
       end
