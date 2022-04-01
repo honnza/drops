@@ -360,14 +360,15 @@ def foo(x, limit = nil, n: :n4, f: 0.1, grid: nil, lowcolor: false, hicolor: fal
     modes << relax_rescale(x, n: n, s: modes.map{|x| x[:mode]}, f: f)
   break if modes.last.nil? || limit.is_a?(Float) && modes.last[:delta_1] >= limit
 
-    dot = xs.zip(modes.last[:mode]).map do |cs, ms|
-      cs.chars.zip(ms).map{|c, m|m.nil? ? 0 : m * {"-" => -1, "+" => 1, "." => 0, "?" => rand, "e" => 0}.fetch(c, c)}
-    end.flatten.sum
-  len = modes.last[:mode].map{|ms| ms.map{|m| m &.** 2}}.flatten.compact.sort.sum ** 0.5
-  
+  dot = xs.zip(modes.last[:mode]).map do |cs, ms|
+    cs.chars.zip(ms).map{|c, m|m.nil? ? 0 : m * {"-" => -1, "+" => 1, "." => 0, "?" => rand, "e" => 0}.fetch(c, c)}
+  end.flatten.sum
+  abs_dot = xs.zip(modes.last[:mode]).map do |cs, ms|
+    cs.chars.zip(ms).map{|c, m|m.nil? ? 0 : m.abs * {"-" => 1, "+" => 1, "." => 0, "?" => rand, "e" => 0}.fetch(c, c)}
+  end.flatten.sum
   if dot.abs > 1e-7
-      puts "mode #{modes.size} strength = #{dot} / #{len} = #{dot / len}", "---"
-      accepted_modes << [dot / len, modes.size, modes.last[:mode]]
+      puts "mode #{modes.size} strength = #{dot} / #{abs_dot} = #{dot / abs_dot}", "---"
+      accepted_modes << [dot / abs_dot, modes.size, modes.last[:mode]]
   else
     puts "rejected mode #{modes.size}: dot product = #{dot}"
     end
