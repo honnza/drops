@@ -387,10 +387,15 @@ def foo(x, limit = nil, n: :n4, f: 0.1, grid: nil, lowcolor: false, hicolor: fal
     (0 ... xs[i].size).map do |j|
       if g[i][j]
         [i, j] + [r, g, b].map do |c|
-          case
-          when c.nil? then 128
-          when lowcolor then [128, 255, 0][c[i][j].round(10) <=> 0]
-          else (c[i][j].round(10) * 128 + 128).floor.clamp(0, 255)
+          if c.nil?
+            128
+          else
+            c01 = xs.any?{|cs| cs.include?(??)} ? c[i][j].abs : c[i][j]/2 + 0.5
+            if lowcolor
+              [128, 255, 0][c01.round(10) <=> 0.5]
+            else
+              (c01.round(10) * 256).floor.clamp(0, 255)
+            end
           end
         end
       end
