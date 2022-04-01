@@ -467,7 +467,7 @@ def foo(x, limit = nil, n: :n4, f: 0.1, grid: nil, lowcolor: false, hicolor: fal
           dnl = gapix == 0 ? 0 : d[plan[gapix - 1], plan[elix]]
           dnr = gapix == plan.length ? 0 : d[plan[elix], plan[gapix]]
           dng = elix == 0 || elix == plan.length - 1 ? 0 : d[plan[elix - 1], plan[elix + 1]]
-          if dol + dor + dog > dnl + dnr + dng
+          if dol + dor + dog > dnl + dnr + dng + 1e-9
             plan = plan.dup
             plan.insert(gapix, plan[elix])
             plan.delete_at(elix > gapix ? elix + 1 : elix)
@@ -493,7 +493,7 @@ def foo(x, limit = nil, n: :n4, f: 0.1, grid: nil, lowcolor: false, hicolor: fal
         d_df = i3 == plan.length ? 0 : d[plan[i2], plan[i3]]
         d_ef = i3 == plan.length ? 0 : d[plan[i3 - 1], plan[i3]]
         
-        d_abcdef = d_ab + d_cd + d_ef
+        d_abcdef = d_ab + d_cd + d_ef - 1e-9
         # abcedf = simple flip
         # acbdef = simple flip
         d_acbedf = d_ac + d_be + d_df
