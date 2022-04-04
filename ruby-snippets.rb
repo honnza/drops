@@ -351,7 +351,7 @@ ensure
   print "\e[0m\e[?25h\n"
 end
 
-def foo(x, limit = nil, n: :n4, f: 0.1, grid: nil, lowcolor: false, hicolor: false, rgb: false)
+def foo(x, limit = nil, n: :n4, f: 0.1, grid: nil, lowcolor: false, hicolor: false, rgb: false, png: false)
   # generate channels
   xs = x.split(/[\/\n]/)
   modes = []
@@ -404,6 +404,29 @@ def foo(x, limit = nil, n: :n4, f: 0.1, grid: nil, lowcolor: false, hicolor: fal
 
   if hicolor
     plan.map!{|i, j, r, g, b| [i, j, r & ~7, g & ~3, b & ~7]}
+  end
+
+  if png
+    require 'chunky_png'
+    image = ChunkyPNG::Image.new(
+      plan.map{|_, j, _, _, _| j}.max + 1,
+      plan.map{|i, _, _, _, _| i}.max + 1
+    )
+    plan.each{|i, j, r, g, b| image[j, i] = ChunkyPNG::Color.rgb(r, g, b)}
+    (0 ... image.height).each do |i|
+      (0 ... image.width).each do |j|
+        rgba = image[j, i]
+        if rgba & 0xff > 128
+          rgb_str = "#{rgba >> 24 & 0xff};#{rgba >> 16 & 0xff};#{rgba >> 8 & 0xff}"
+          print "\e[38;2;#{rgb_str};48;2;#{rgb_str}m##\e[0m"
+        else
+          print "><"
+        end
+      end
+      puts
+    end
+    image.save png.to_s
+    return
   end
 
   if rgb
