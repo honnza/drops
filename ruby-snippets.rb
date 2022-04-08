@@ -335,7 +335,7 @@ def relax_rescale(grid, f: 0.1, n: :n4, s: [])
         Math.log(max_delta || 1) / Math.log(Float::EPSILON),
         "elapsed: #{fmt_secs[Time.now - time_start]} | remaining: #{fmt_secs[smooth_time_est]}"
       )
-      cout << "\e[#{cout.size}A\e[?25l" unless last_frame
+      print "\e[#{cout.size - 1}A\e[?25l" if prev_frame_t
       print cout.join("\n")
       return nil if last_frame && scale < 1e-10
       return {
@@ -369,13 +369,16 @@ def foo(x, limit = nil, n: :n4, f: 0.1, grid: nil, lowcolor: false, hicolor: fal
     if dot.abs > 1e-7
       puts "mode #{modes.size} strength = #{dot} / #{abs_dot} = #{dot / abs_dot}", "---"
       accepted_modes << [dot / abs_dot, modes.size, modes.last[:mode]]
-  else
-    puts "rejected mode #{modes.size}: dot product = #{dot}"
-    end
-  puts "strongest modes: #{accepted_modes.sort.reverse.map{|_, ix, _| ix}}" if limit
-  #sleep [dot / len * 2, 1].max
-  gets
-  break if limit.nil? && accepted_modes.size == 3 || limit.is_a?(Integer) && modes.size >= limit
+    else
+      puts "rejected mode #{modes.size}: dot product = #{dot}"
+      end
+    puts "strongest modes: #{accepted_modes.sort.reverse.map{|_, ix, _| ix}}" if limit
+    #sleep [dot / len * 2, 1].max
+    gets
+    break if limit.nil? && accepted_modes.size == 3 || limit.is_a?(Integer) && modes.size >= limit
+  rescue Interrupt, IRB::Abort
+    puts "user abort"
+    break
   end
 
   accepted_modes.sort.reverse.each{|strength, ix, _| p [strength, ix]} if limit
