@@ -212,7 +212,7 @@ end
 def relax_rescale(grid, f: 0.1, n: :n4, s: [])
   strength = f; neighborhood = n; suppressed_modes = s.dup
   grid = grid.split(/[\n\/]/).map{|row| row.chars.map{|c|
-    {?- => -1.0, ?. => 0.0, ?+ => 1.0, ?? => rand, ?e => rand / 1e10}[c]
+    {?- => -1.0, ?. => 0.0, ?+ => 1.0, ?? => rand(-1 .. 1), ?e => rand(-1e-10 .. 1e-10)}[c]
   }} if grid.is_a? String
   precision = IO.console.winsize[1] / grid.map(&:length).max - 1
   precision = 16 if precision > 16
@@ -356,17 +356,17 @@ def foo(x, limit = nil, n: :n4, f: 0.1, grid: nil, lowcolor: false, hicolor: fal
   xs = x.split(/[\/\n]/)
   modes = []
   accepted_modes = []
-  loop do  
+  loop do
     modes << relax_rescale(x, n: n, s: modes.map{|x| x[:mode]}, f: f)
-  break if modes.last.nil? || limit.is_a?(Float) && modes.last[:delta_1] >= limit
+    break if modes.last.nil? || limit.is_a?(Float) && modes.last[:delta_1] >= limit
 
-  dot = xs.zip(modes.last[:mode]).map do |cs, ms|
-    cs.chars.zip(ms).map{|c, m|m.nil? ? 0 : m * {"-" => -1, "+" => 1, "." => 0, "?" => rand, "e" => 0}.fetch(c, c)}
-  end.flatten.sum
-  abs_dot = xs.zip(modes.last[:mode]).map do |cs, ms|
-    cs.chars.zip(ms).map{|c, m|m.nil? ? 0 : m.abs * {"-" => 1, "+" => 1, "." => 0, "?" => rand, "e" => 0}.fetch(c, c)}
-  end.flatten.sum
-  if dot.abs > 1e-7
+    dot = xs.zip(modes.last[:mode]).map do |cs, ms|
+      cs.chars.zip(ms).map{|c, m|m.nil? ? 0 : m * {"-" => -1, "+" => 1, "." => 0, "?" => rand(-1 .. 1), "e" => 0}.fetch(c, c)}
+    end.flatten.sum
+    abs_dot = xs.zip(modes.last[:mode]).map do |cs, ms|
+      cs.chars.zip(ms).map{|c, m|m.nil? ? 0 : m.abs * {"-" => 1, "+" => 1, "." => 0, "?" => rand(-1 .. 1), "e" => 0}.fetch(c, c)}
+    end.flatten.sum
+    if dot.abs > 1e-7
       puts "mode #{modes.size} strength = #{dot} / #{abs_dot} = #{dot / abs_dot}", "---"
       accepted_modes << [dot / abs_dot, modes.size, modes.last[:mode]]
   else
