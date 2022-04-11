@@ -402,10 +402,10 @@ def foo(x, limit = nil, filter: nil, n: :n4, f: 0.1, grid: nil, hicolor: false, 
                 when c[i][j].round(10) == 0 then 1
                 when c[i + di].nil? || c[i + di][j + dj].nil? then 0
                 when c[i][j] * c[i + di][j + dj] > 0 then 0
-                else (c[i + di][j + dj] / (c[i][j] - c[i + di][j + dj])) ** 2
+                else c[i + di][j + dj] / (c[i + di][j + dj] - c[i][j])
                 end
-              end.sum.clamp(0 .. 1) ** 0.5
-            else 
+              end.max.clamp(0 .. 1)
+            else
               puts "unknown filter #{filter}" if filter
               c[i][j]/2 + 0.5
             end
