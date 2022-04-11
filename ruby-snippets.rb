@@ -396,7 +396,7 @@ def foo(x, limit = nil, filter: nil, n: :n4, f: 0.1, grid: nil, hicolor: false, 
             c01 = case filter
             when :abs then c[i][j].abs
             when :lowcolor then (c[i][j].round(10) <=> 0) / 2.0 + 0.5
-            when :contour
+            when :contour, :acon
               [[-1, 0], [0, -1], [0, 1], [1, 0]].map do |di, dj|
                 case
                 when c[i][j].round(10) == 0 then 1
@@ -404,7 +404,7 @@ def foo(x, limit = nil, filter: nil, n: :n4, f: 0.1, grid: nil, hicolor: false, 
                 when c[i][j] * c[i + di][j + dj] > 0 then 0
                 else c[i + di][j + dj] / (c[i + di][j + dj] - c[i][j])
                 end
-              end.max.clamp(0 .. 1)
+              end.max.clamp(0 .. 1) ** 0.45 + (filter == :acon ? c[i][j].abs : 0)
             else
               puts "unknown filter #{filter}" if filter
               c[i][j]/2 + 0.5
