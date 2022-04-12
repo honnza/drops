@@ -396,6 +396,16 @@ def foo(x, limit = nil, filter: nil, n: :n4, f: 0.1, grid: nil, hicolor: false, 
             c01 = case filter
             when :abs then c[i][j].abs
             when :lowcolor then (c[i][j].round(10) <=> 0) / 2.0 + 0.5
+            when :thinc, :athinc
+              if [[-1, 0], [0, -1], [0, 1], [1, 0]].any? do |di, dj|
+                c[i + di] && c[i + di][j + dj] &&
+                c[i][j] * c[i + di][j + dj] < 0 &&
+                c[i][j].abs < c[i + di][j + dj].abs
+              end || c[i][j] == 0
+                1
+              else
+                filter == :athinc ? c[i][j].abs : 0
+              end
             when :contour, :acon
               [[-1, 0], [0, -1], [0, 1], [1, 0]].map do |di, dj|
                 case
