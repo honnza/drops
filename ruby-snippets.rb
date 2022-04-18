@@ -386,7 +386,9 @@ def foo(x, limit = nil, filter: nil, n: :n4, f: 0.1, grid: nil, hicolor: false, 
   
   # transpose into pixels
   g, r, b = (limit.nil? ? accepted_modes : accepted_modes.max(3)).map(&:last)
-  [g, r, b].each{|c| c.each{ |ci| ci.map! {|cij| cij&.round(10)}}}
+  return unless g
+  b = r = g unless r
+  [g, r, b].each{|c| c&.each{ |ci| ci.map! {|cij| cij&.round(10)}}}
   plan = (0 ... xs.size).map do |i|
     (0 ... xs[i].size).map do |j|
       if g[i][j]
