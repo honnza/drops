@@ -386,6 +386,7 @@ def foo(x, limit = nil, filter: nil, n: :n4, f: 0.1, grid: nil, hicolor: false, 
   
   # transpose into pixels
   g, r, b = (limit.nil? ? accepted_modes : accepted_modes.max(3)).map(&:last)
+  [g, r, b].each{|c| c.each{ |ci| ci.map! {|cij| cij&.round(10)}}}
   plan = (0 ... xs.size).map do |i|
     (0 ... xs[i].size).map do |j|
       if g[i][j]
@@ -395,21 +396,22 @@ def foo(x, limit = nil, filter: nil, n: :n4, f: 0.1, grid: nil, hicolor: false, 
           else
             c01 = case filter
             when :abs then c[i][j].abs
-            when :lowcolor then (c[i][j].round(10) <=> 0) / 2.0 + 0.5
+            when :lowcolor then (c[i][j] <=> 0) / 2.0 + 0.5
             when :thinc, :athinc
-              if [[-1, 0], [0, -1], [0, 1], [1, 0]].any? do |di, dj|
-                c[i + di] && c[i + di][j + dj] &&
-                c[i][j] * c[i + di][j + dj] < 0 &&
-                c[i][j].abs < c[i + di][j + dj].abs
-              end || c[i][j] == 0
-                1
-              else
-                filter == :athinc ? c[i][j].abs : 0
+              is_thinc = lambda do |i, j|
+                [[-1, 0], [0, -1], [0, 1], [1, 0]].any? do |di, dj|
+                  c[i + di] && c[i + di][j + dj] &&
+                  c[i][j] * c[i + di][j + dj] <= 0 &&
+                  (c[i][j].abs < c[i + di][j + dj].abs &&
+                  ! is_thinc[i + di, j + dj] ||
+                  c[i][j].abs == c[i + di][j + dj].abs)
+                end
               end
+              is_thinc[i, j] ? 1 : filter == :athinc ? c[i][j].abs : 0
             when :contour, :acon
               [[-1, 0], [0, -1], [0, 1], [1, 0]].map do |di, dj|
                 case
-                when c[i][j].round(10) == 0 then 1
+                when c[i][j] == 0 then 1
                 when c[i + di].nil? || c[i + di][j + dj].nil? then 0
                 when c[i][j] * c[i + di][j + dj] > 0 then 0
                 else c[i + di][j + dj] / (c[i + di][j + dj] - c[i][j])
