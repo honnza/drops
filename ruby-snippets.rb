@@ -579,7 +579,7 @@ def foo(x, limit = nil, filter: nil, n: :n4, f: 0.1, grid: nil, hicolor: false, 
   plan.each{|i, j, _, _, _| bitmap[i][j] = grid && (i % grid == grid - 2 || j % grid == grid - 2) ? "," : "."}
   ([[[nil, nil, nil], nil]] + plan.chunk{|el| el[2..4]}.to_a).each_cons(2) do |(prev_rgb, _), (rgb, els)|
     print "#{els.count}x " if els.count > 1
-    print "[#{rgb.zip(prev_rgb).map do |c, pc|
+    puts "[#{rgb.zip(prev_rgb).map do |c, pc|
       "\e[3#{[7, 6, 3][pc.nil? ? 0 : c <=> pc]}m#{c}\e[0m"
     end.join ", "}]"
     els.each{|el| bitmap[el[0]][el[1]] = "o"}
