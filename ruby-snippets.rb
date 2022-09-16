@@ -1,3 +1,4 @@
+require "io/console"
 def gc x; (255 * x ** (1/2.2)).round; end
 
 def find_collatz(x, triple_even = true)
@@ -198,7 +199,6 @@ def upscale(str, n=2)
   ary.map(&:join).join("\n")
 end
 
-require "io/console"
 def progress_bar progress, text = "", width = IO.console.winsize[1] - 1
   on_cells = ((width - 2) * progress.clamp(0 .. 1))
   bg = (on_cells % 1 * 256).floor
