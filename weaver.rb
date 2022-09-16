@@ -308,6 +308,9 @@ def make_gen type, dimStr
       end
       hedges.zip(vedges).map{|h, v| v ? "#{h}\n#{v}\n#{v}" : h}.join "\n"
     end
+  when "list"
+    names = dimStr.split(" ")
+    $renderer = nil
   else
     raise ArgumentError, "new ?"
   end
