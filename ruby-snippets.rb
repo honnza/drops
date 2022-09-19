@@ -1,4 +1,5 @@
 require "io/console"
+require "matrix"
 def gc x; (255 * x ** (1/2.2)).round; end
 
 def find_collatz(x, triple_even = true)
@@ -600,5 +601,83 @@ def bisect(min, max, &fn)
     bisect(mid, max, &fn)
   else
     raise ArgumentError, "cannot bisect: " + [min, max].inspect
+  end
+end
+
+# math yanked from https://en.m.wikipedia.org/wiki/Delaunay_triangulation 
+# and https://en.m.wikipedia.org/wiki/Circumscribed_circle#Triangles
+class Triangle
+  def initialize(*pts)
+    @pts = pts.map{|pt| Vector[pt[0], pt[1], 0]}
+    @es = [@pts[2] - @pts[1], @pts[0] - @pts[2],  @pts[1] - @pts[0]]
+    @pts_paraboloid = @pts.map{|pt| Vector[pt[0], pt[1], pt.dot(pt)]}
+    @ns = pts.map{|pt| pt[2]}
+    @priority = [ # not 1x1; not obtuse; maximize uncertainty in value; maximize area
+      (@es[0].dot(@es[0]) < 3 && @es[1].dot(@es[1]) < 3 && @es[2].dot(@es[2]) < 3) ? 0 : 1,
+      # (@es[0].dot(@es[1]) > 0 || @es[1].dot(@es[2]) > 0 || @es[2].dot(@es[0]) > 0) ? 0 : 1,
+      @ns.max - @ns.min,
+      @es[1].cross(@es[0])[2]
+    ]
+    puts self
+    (puts "triangle rejected"; raise ArgumentError) if @priority.last <= 0
+  end
+
+  def pts; @pts.zip(@ns).map{|pt, n| [pt[0], pt[1], n]}; end
+  attr_reader :priority
+
+  def circumcircle_contains(x, y)
+    xyp = Vector[x, y, x**2 + y**2]
+    Matrix::LUPDecomposition.new(Matrix.rows(@pts_paraboloid.map{|pt| (xyp - pt).to_a})).det > 0
+  end
+  
+  def bounding_center
+    pts = @pts.map{|pt| pt.map &:to_f}
+    pt = case
+         when @es[0].dot(@es[1]) > 0 then (pts[0] + pts[1]) / 2
+         when @es[1].dot(@es[2]) > 0 then (pts[1] + pts[2]) / 2
+         when @es[2].dot(@es[0]) > 0 then (pts[2] + pts[0]) / 2
+         else
+            l0_2 = @es[0].dot @es[0]
+            l1_2 = @es[1].dot @es[1]
+            l2_2 = @es[2].dot @es[2]
+            w0 = l0_2 * (l1_2 + l2_2 - l0_2)
+            w1 = l1_2 * (l2_2 + l0_2 - l1_2)
+            w2 = l2_2 * (l0_2 + l1_2 - l2_2)
+            (w0 * pts[0] + w1 * pts[1] + w2 * pts[2]) / (w0 + w1 + w2)
+         end
+    [pt[0], pt[1]]
+  end
+
+  def to_s; "Triangle #{pts}, priority #{@priority}"; end
+  def inspect; to_s; end
+end
+def voronoi_subdivide(xs, ys, reflexive = false)
+
+  p [xs.first, ys.first]
+  n_0_0 = gets.to_i
+  p [xs.last, ys.first] unless reflexive
+  n_1_0 = gets.to_i unless reflexive
+  p [xs.first, ys.last]
+  n_0_1 = gets.to_i
+  p [xs.last, ys.last]
+  n_1_1 = gets.to_i
+  xl = xs.length - 1
+  yl = ys.length - 1
+  triangles = [
+    Triangle.new([0, 0, n_0_0], [0, yl, n_0_1], [xl, yl, n_1_1]),
+    (Triangle.new([xl, 0, n_1_0], [0, 0, n_0_0], [xl, yl, n_1_1]) unless reflexive)
+  ].compact
+  
+  loop do
+    print "\npop "
+    x, y = p p(triangles.max_by(&:priority)).bounding_center
+    x = x.round; y = y.round
+    ts = triangles.select{|t| t.circumcircle_contains(x, y)}
+    triangles.reject!{|t| ts.include? t}
+    ts.each{|t| puts ?- + t.to_s}
+    pts = p ts.flat_map(&:pts).uniq.sort_by{|px, py, _| Math.atan2(px - x, py - y)}
+    p [xs[x], ys[y]]
+    n = gets.to_i
+    triangles += (pts + [pts.first]).each_cons(2).map{|pt1, pt2| Triangle.new pt1, pt2, [x, y, n] rescue nil}.compact
   end
 end
