@@ -705,7 +705,7 @@ def voronoi_subdivide(xs, ys, reflexive = false)
     ts.each{|t| puts ?- + t.to_s}
     pts = p ts.flat_map(&:pts).uniq.sort_by{|px, py, _| Math.atan2(px - x, py - y)}
     p [xs[x], ys[y]]
-    n = gets.to_i
+    n = loop{break Integer(gets) rescue print "? "}
     triangles += (pts + [pts.first]).each_cons(2).map{|pt1, pt2| Triangle.new pt1, pt2, [x, y, n] rescue nil}.compact
   end
 end
