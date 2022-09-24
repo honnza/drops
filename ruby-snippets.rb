@@ -590,6 +590,11 @@ def foo(x, limit = nil, filter: nil, n: :n4, f: 0.1, grid: nil, hicolor: false, 
   end
 end
 
+class Float
+  def round_toward(other); round(half: (self > other) ^ (self < 0) ? :down : :up); end
+  def round_away(other); round(half: (self < other) ^ (self < 0) ? :down : :up); end
+end
+
 def bisect(min, max, &fn)
   mid = (min+max)/2
   case
@@ -630,6 +635,15 @@ class Triangle
     Matrix::LUPDecomposition.new(Matrix.rows(@pts_paraboloid.map{|pt| (xyp - pt).to_a})).det > 0
   end
   
+  def obtuse_pt
+    case
+    when @es[0].dot(@es[1]) >= 0 then pts[2]
+    when @es[1].dot(@es[2]) >= 0 then pts[0]
+    when @es[2].dot(@es[0]) >= 0 then pts[1]
+    else nil
+    end
+  end
+
   def bounding_center
     pts = @pts.map{|pt| pt.map &:to_f}
     pt = case
@@ -670,8 +684,22 @@ def voronoi_subdivide(xs, ys, reflexive = false)
   
   loop do
     print "\npop "
-    x, y = p p(triangles.max_by(&:priority)).bounding_center
-    x = x.round; y = y.round
+    t = p triangles.max_by(&:priority)
+    x, y = nil
+    cx, cy = p t.bounding_center
+    if t.obtuse_pt
+      ox, oy = t.obtuse_pt
+      x = cx.round_toward ox
+      y = cy.round_toward oy
+      if x == ox && y == oy
+        x = cx.round_away ox
+        y = cy.round_away oy
+      end
+    else
+      x = cx.round
+      y = cy.round
+    end
+    p x, y
     ts = triangles.select{|t| t.circumcircle_contains(x, y)}
     triangles.reject!{|t| ts.include? t}
     ts.each{|t| puts ?- + t.to_s}
