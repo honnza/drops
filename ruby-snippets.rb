@@ -593,6 +593,7 @@ end
 class Numeric
   def round_toward(other); round(half: (self > other) ^ (self < 0) ? :down : :up); end
   def round_away(other); round(half: (self < other) ^ (self < 0) ? :down : :up); end
+  def to_mixed_s; r = to_r; "#{?- if r < 0}#{r.to_i.abs} #{(r-r.to_i).numerator.abs}/#{r.denominator}"; end
 end
 
 def bisect(min, max, &fn)
@@ -686,7 +687,8 @@ def voronoi_subdivide(xs, ys, reflexive = false)
     print "\npop "
     t = p triangles.max_by(&:priority)
     x, y = nil
-    cx, cy = p t.bounding_center
+    cx, cy = t.bounding_center
+    puts "[#{cx.to_mixed_s}, #{cy.to_mixed_s}]"
     if t.obtuse_pt
       ox, oy = t.obtuse_pt
       x = cx.round_toward ox
