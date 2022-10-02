@@ -631,9 +631,16 @@ class Triangle
   def pts; @pts.zip(@ns).map{|pt, n| [pt[0], pt[1], n]}; end
   attr_reader :priority
 
-  def circumcircle_contains(x, y)
+  def include?(x, y)
+    pt = Vector[x, y, 0]
+    (pt - @pts[0]).cross(@pts[1] - @pts[0])[2] >= 0 &&
+    (pt - @pts[1]).cross(@pts[2] - @pts[1])[2] >= 0 &&
+    (pt - @pts[2]).cross(@pts[0] - @pts[2])[2] >= 0
+  end
+
+  def circumcircle_include?(x, y)
     xyp = Vector[x, y, x**2 + y**2]
-    Matrix::LUPDecomposition.new(Matrix.rows(@pts_paraboloid.map{|pt| (xyp - pt).to_a})).det > 0
+    Matrix::LUPDecomposition.new(Matrix.rows(@pts_paraboloid.map{|pt| (xyp - pt).to_a})).det >= 0
   end
   
   def obtuse_pt
@@ -693,7 +700,7 @@ def voronoi_subdivide(xs, ys, reflexive = false)
       ox, oy = t.obtuse_pt
       x = cx.round_toward ox
       y = cy.round_toward oy
-      if x == ox || y == oy
+      if [x, y] == [ox, oy] || !t.include?(x, y)
         x = cx.round_away ox
         y = cy.round_away oy
       end
@@ -702,7 +709,7 @@ def voronoi_subdivide(xs, ys, reflexive = false)
       y = cy.round
     end
     p x, y
-    ts = triangles.select{|t| t.circumcircle_contains(x, y)}
+    ts = triangles.select{|t| t.circumcircle_include?(x, y)}
     triangles.reject!{|t| ts.include? t}
     ts.each{|t| puts ?- + t.to_s}
     pts = p ts.flat_map(&:pts).uniq.sort_by{|px, py, _| Math.atan2(px - x, py - y)}
