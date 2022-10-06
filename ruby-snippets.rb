@@ -643,14 +643,7 @@ class Triangle
     Matrix::LUPDecomposition.new(Matrix.rows(@pts_paraboloid.map{|pt| (xyp - pt).to_a})).det >= 0
   end
   
-  def obtuse_pt
-    case
-    when @es[0].dot(@es[1]) >= 0 then pts[2]
-    when @es[1].dot(@es[2]) >= 0 then pts[0]
-    when @es[2].dot(@es[0]) >= 0 then pts[1]
-    else nil
-    end
-  end
+  def centroid; (@pts.inject(&:+) / 3r).to_a; end
 
   def bounding_center
     pts = @pts.map{|pt| pt.map &:to_r}
@@ -696,17 +689,12 @@ def voronoi_subdivide(xs, ys, reflexive = false)
     x, y = nil
     cx, cy = t.bounding_center
     puts "[#{cx.to_mixed_s}, #{cy.to_mixed_s}]"
-    if t.obtuse_pt
-      ox, oy = t.obtuse_pt
-      x = cx.round_toward ox
-      y = cy.round_toward oy
-      if [x, y] == [ox, oy] || !t.include?(x, y)
-        x = cx.round_away ox
-        y = cy.round_away oy
-      end
-    else
-      x = cx.round
-      y = cy.round
+    ox, oy = t.centroid
+    x = cx.round_toward ox
+    y = cy.round_toward oy
+    if t.pts.any?{|px, py, _| px == x && py == y} || !t.include?(x, y)
+      x = cx.round_away ox
+      y = cy.round_away oy
     end
     p x, y
     ts = triangles.select{|t| t.circumcircle_include?(x, y)}
