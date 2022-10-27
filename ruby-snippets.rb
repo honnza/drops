@@ -622,13 +622,15 @@ class Triangle
       (@es[0].dot(@es[0]) < 3 && @es[1].dot(@es[1]) < 3 && @es[2].dot(@es[2]) < 3) ? 0 : 1,
       # (@es[0].dot(@es[1]) > 0 || @es[1].dot(@es[2]) > 0 || @es[2].dot(@es[0]) > 0) ? 0 : 1,
       @ns.max - @ns.min,
-      @es[1].cross(@es[0])[2]
+      - @es.map(&:norm).sum
     ]
     puts self
-    (puts "triangle rejected"; raise ArgumentError) if @priority.last <= 0
+    (puts "triangle rejected"; raise ArgumentError) if @es[1].cross(@es[0])[2] <= 0
   end
 
   def pts; @pts.zip(@ns).map{|pt, n| [pt[0], pt[1], n]}; end
+  def reject; @priority[0] = 0; end
+  def z_gap; @priority[1]; end
   attr_reader :priority
 
   def include?(x, y)
@@ -648,9 +650,9 @@ class Triangle
   def bounding_center
     pts = @pts.map{|pt| pt.map &:to_r}
     pt = case
-         when @es[0].dot(@es[1]) > 0 then (pts[0] + pts[1]) / 2
-         when @es[1].dot(@es[2]) > 0 then (pts[1] + pts[2]) / 2
-         when @es[2].dot(@es[0]) > 0 then (pts[2] + pts[0]) / 2
+         when @es[0].dot(@es[1]) >= 0 then (pts[0] + pts[1]) / 2
+         when @es[1].dot(@es[2]) >= 0 then (pts[1] + pts[2]) / 2
+         when @es[2].dot(@es[0]) >= 0 then (pts[2] + pts[0]) / 2
          else
             l0_2 = @es[0].dot @es[0]
             l1_2 = @es[1].dot @es[1]
@@ -658,7 +660,13 @@ class Triangle
             w0 = l0_2 * (l1_2 + l2_2 - l0_2)
             w1 = l1_2 * (l2_2 + l0_2 - l1_2)
             w2 = l2_2 * (l0_2 + l1_2 - l2_2)
-            (w0 * pts[0] + w1 * pts[1] + w2 * pts[2]) / (w0 + w1 + w2)
+            pt = (w0 * pts[0] + w1 * pts[1] + w2 * pts[2]) / (w0 + w1 + w2)
+            puts(@pts.map do |pt2|
+              [0, 1].map do |ix|
+                "#{((pt[ix] - pt2[ix]).abs * (w0 + w1 + w2)).to_i}^2"
+              end.join(" + ")
+            end.join(" = "))
+            pt
          end
     [pt[0], pt[1]]
   end
@@ -682,27 +690,67 @@ def voronoi_subdivide(xs, ys, reflexive = false)
     Triangle.new([0, 0, n_0_0], [0, yl, n_0_1], [xl, yl, n_1_1]),
     (Triangle.new([xl, 0, n_1_0], [0, 0, n_0_0], [xl, yl, n_1_1]) unless reflexive)
   ].compact
+  lines_by_z_gap = Hash.new{|h, k| h[k] = []}
   
   loop do
     print "\npop "
-    t = p triangles.max_by(&:priority)
+    t = triangles.max_by(&:priority)
     x, y = nil
-    cx, cy = t.bounding_center
-    puts "[#{cx.to_mixed_s}, #{cy.to_mixed_s}]"
-    ox, oy = t.centroid
-    x = cx.round_toward ox
-    y = cy.round_toward oy
-    if t.pts.any?{|px, py, _| px == x && py == y} || !t.include?(x, y)
-      x = cx.round_away ox
-      y = cy.round_away oy
+    if lines_by_z_gap.empty? || t.z_gap > lines_by_z_gap.keys.max
+      p t
+      cx, cy = t.bounding_center
+      puts "[#{cx.to_mixed_s}, #{cy.to_mixed_s}]"
+      ox, oy = t.centroid
+      x = cx.round_toward ox
+      y = cy.round_toward oy
+      if t.pts.any?{|px, py, _| px == x && py == y} || !t.include?(x, y)
+        x = cx.round_away ox
+        y = cy.round_away oy
+      end
+      if t.pts.any?{|px, py, _| px == x && py == y} || x > y && reflexive
+        t.reject
+        puts "rejected"
+        next
+      end
+    else
+      line = p lines_by_z_gap[lines_by_z_gap.keys.max].first
+      x, y = ([line[0][0], line[1][0]].max - 1 .. [line[0][0], line[1][0]].min + 1).to_a
+        .product(([line[0][1], line[1][1]].max - 1 .. [line[0][1], line[1][1]].min + 1).to_a)
+        .find do |x, y|
+          x >= 0 && x <= xl && y >= 0 && y <= yl && (x <= y || !reflexive) &&
+            !triangles.any?{|t| t.pts.any?{|px, py| px == x && py == y}}
+        end
+      if x.nil?
+        lines_by_z_gap.each_value{|ls| ls.delete line}
+        lines_by_z_gap.reject!{|_, v| v.empty?}
+        next
+      end
     end
     p x, y
+    p [xs[x], ys[y]]
+
+    n = nil
+    loop do
+      case gets
+      when /^(\d+)$/ then n = $1.to_i
+      when /^(\d+) (\d+) (\d+)$/
+        x = $1.to_i; y = $2.to_i; n = $3.to_i
+        lines_by_z_gap.each_value{|ls| ls.reject!{|pt1, pt2| pt1 == [x, y] || pt2 == [x, y]}}
+        lines_by_z_gap.reject!{|_, v| v.empty?}
+      else redo
+      end
+      break
+    end
+
     ts = triangles.select{|t| t.circumcircle_include?(x, y)}
     triangles.reject!{|t| ts.include? t}
     ts.each{|t| puts ?- + t.to_s}
-    pts = p ts.flat_map(&:pts).uniq.sort_by{|px, py, _| Math.atan2(px - x, py - y)}
-    p [xs[x], ys[y]]
-    n = loop{break Integer(gets) rescue print "? "}
+    pts = p ts.flat_map(&:pts).uniq.sort_by{|px, py, _| Math.atan2(px - x, py - y)}.reject{|px, py| px == x && py == y}
     triangles += (pts + [pts.first]).each_cons(2).map{|pt1, pt2| Triangle.new pt1, pt2, [x, y, n] rescue nil}.compact
+    pts.each do |pt|
+      if (pt[0] - x).abs <= 1 && (pt[1] - y).abs <= 1
+        lines_by_z_gap[(pt[2] - n).abs] << p([[pt[0], pt[1]], [x, y]]) 
+      end
+    end
   end
 end
