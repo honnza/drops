@@ -593,8 +593,13 @@ end
 class Numeric
   def round_toward(other); round(half: (self > other) ^ (self < 0) ? :down : :up); end
   def round_away(other); round(half: (self < other) ^ (self < 0) ? :down : :up); end
-  def to_mixed_s; r = to_r; "#{?- if r < 0}#{r.to_i.abs} #{(r-r.to_i).numerator.abs}/#{r.denominator}"; end
 end
+
+class Rational
+  def to_mixed_s; r = to_r; "#{r < 0 ? ?- : ""}#{r.to_i.abs} #{(r-r.to_i).numerator.abs}/#{r.denominator}"; end
+  def gcd(other); self.numerator.gcd(other.numerator).to_r / self.denominator.lcm(other.denominator); end
+end
+
 
 def bisect(min, max, &fn)
   mid = (min+max)/2
@@ -613,16 +618,16 @@ end
 # math yanked from https://en.m.wikipedia.org/wiki/Delaunay_triangulation 
 # and https://en.m.wikipedia.org/wiki/Circumscribed_circle#Triangles
 class Triangle
-  def initialize(*pts)
+  def initialize(*pts, z_metric:)
     @pts = pts.map{|pt| Vector[pt[0], pt[1], 0]}
     @es = [@pts[2] - @pts[1], @pts[0] - @pts[2],  @pts[1] - @pts[0]]
     @pts_paraboloid = @pts.map{|pt| Vector[pt[0], pt[1], pt.dot(pt)]}
     @ns = pts.map{|pt| pt[2]}
-    @priority = [ # not 1x1; not obtuse; maximize uncertainty in value; maximize area
+    @priority = [ # not 1x1; maximize uncertainty in value; minimize perimeter; top to bottom
       (@es[0].dot(@es[0]) < 3 && @es[1].dot(@es[1]) < 3 && @es[2].dot(@es[2]) < 3) ? 0 : 1,
-      # (@es[0].dot(@es[1]) > 0 || @es[1].dot(@es[2]) > 0 || @es[2].dot(@es[0]) > 0) ? 0 : 1,
-      @ns.max - @ns.min,
-      - @es.map(&:norm).sum
+      [z_metric[@ns[0], @ns[1]], z_metric[@ns[1], @ns[2]], z_metric[@ns[2], @ns[0]]].max,
+      - @es.map(&:norm).sum,
+      pts.sort
     ]
     puts self
     (puts "triangle rejected"; raise ArgumentError) if @es[1].cross(@es[0])[2] <= 0
@@ -661,11 +666,11 @@ class Triangle
             w1 = l1_2 * (l2_2 + l0_2 - l1_2)
             w2 = l2_2 * (l0_2 + l1_2 - l2_2)
             pt = (w0 * pts[0] + w1 * pts[1] + w2 * pts[2]) / (w0 + w1 + w2)
-            puts(@pts.map do |pt2|
-              [0, 1].map do |ix|
-                "#{((pt[ix] - pt2[ix]).abs * (w0 + w1 + w2)).to_i}^2"
-              end.join(" + ")
-            end.join(" = "))
+            gcd = @pts.flat_map{|pt2| [pt[0] - pt2[0], pt[1] - pt2[1]]}.reduce(0r, &:gcd)
+            xys = @pts.map do |pt2|
+              [0, 1].map{|ix| (pt[ix] - pt2[ix]).abs / gcd}.sort
+            end.sort.uniq
+            puts xys.map{|x, y| "#{x}^2 + #{y}^2"}.join " = "
             pt
          end
     [pt[0], pt[1]]
@@ -674,7 +679,7 @@ class Triangle
   def to_s; "Triangle #{pts}, priority #{@priority}"; end
   def inspect; to_s; end
 end
-def voronoi_subdivide(xs, ys, reflexive = false)
+def voronoi_subdivide(xs, ys, reflexive = false, z_metric: -> a, b {(a - b).abs})
 
   p [xs.first, ys.first]
   n_0_0 = gets.to_i
@@ -687,8 +692,8 @@ def voronoi_subdivide(xs, ys, reflexive = false)
   xl = xs.length - 1
   yl = ys.length - 1
   triangles = [
-    Triangle.new([0, 0, n_0_0], [0, yl, n_0_1], [xl, yl, n_1_1]),
-    (Triangle.new([xl, 0, n_1_0], [0, 0, n_0_0], [xl, yl, n_1_1]) unless reflexive)
+    Triangle.new([0, 0, n_0_0], [0, yl, n_0_1], [xl, yl, n_1_1], z_metric:),
+    (Triangle.new([xl, 0, n_1_0], [0, 0, n_0_0], [xl, yl, n_1_1], z_metric:) unless reflexive)
   ].compact
   lines_by_z_gap = Hash.new{|h, k| h[k] = []}
   
@@ -707,13 +712,13 @@ def voronoi_subdivide(xs, ys, reflexive = false)
         x = cx.round_away ox
         y = cy.round_away oy
       end
-      if t.pts.any?{|px, py, _| px == x && py == y} || x > y && reflexive
+      if triangles.any?{|t| t.pts.any?{|px, py, _| px == x && py == y}} || x > y && reflexive
         t.reject
         puts "rejected"
         next
       end
     else
-      line = p lines_by_z_gap[lines_by_z_gap.keys.max].first
+      line = p lines_by_z_gap[lines_by_z_gap.keys.max].min
       x, y = ([line[0][0], line[1][0]].max - 1 .. [line[0][0], line[1][0]].min + 1).to_a
         .product(([line[0][1], line[1][1]].max - 1 .. [line[0][1], line[1][1]].min + 1).to_a)
         .find do |x, y|
@@ -746,10 +751,10 @@ def voronoi_subdivide(xs, ys, reflexive = false)
     triangles.reject!{|t| ts.include? t}
     ts.each{|t| puts ?- + t.to_s}
     pts = p ts.flat_map(&:pts).uniq.sort_by{|px, py, _| Math.atan2(px - x, py - y)}.reject{|px, py| px == x && py == y}
-    triangles += (pts + [pts.first]).each_cons(2).map{|pt1, pt2| Triangle.new pt1, pt2, [x, y, n] rescue nil}.compact
+    triangles += (pts + [pts.first]).each_cons(2).map{|pt1, pt2| Triangle.new(pt1, pt2, [x, y, n], z_metric:) rescue nil}.compact
     pts.each do |pt|
-      if (pt[0] - x).abs <= 1 && (pt[1] - y).abs <= 1
-        lines_by_z_gap[(pt[2] - n).abs] << p([[pt[0], pt[1]], [x, y]]) 
+      if (pt[0] - x).abs <= 2 && (pt[1] - y).abs <= 2
+        lines_by_z_gap[z_metric[pt[2], n]] << p([pt, [x, y, n]].sort) 
       end
     end
   end
