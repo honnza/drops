@@ -71,7 +71,7 @@ def snake_boxing(w,h)
   end
 end
 
-def generate_hypergrid(total, &op)
+def generate_hypercube(total, &op)
   r = [rand(total)]
   until r.size >= total
     gen = rand(total)
@@ -92,6 +92,32 @@ def generate_group(first, gens, &op)
         gen_at[gen_ix] += 1
       end
     end or return elems
+  end
+end
+
+def generate_lattice(dims, first = nil, gens = [])
+  gens_at = []
+  gen_stats = []
+  elems = [first || dims.map{|d| rand d}]
+  loop do
+    gen_ix = gens_at.find_index{|gen_at| gen_at < elems.count}
+    if gen_ix
+      new_elem = elems[gens_at[gen_ix]]
+        .zip(gens[gen_ix]).map{|x, y| x + y}
+      if new_elem.zip(dims).all? {|e, d| (0...d).include? e} && !elems.include?(new_elem)
+        elems |= [new_elem]
+        gen_stats[gen_ix] += 1
+        if elems.count == dims.reduce(&:*)
+          p gens.zip gen_stats
+          return elems
+        end
+      end
+      gens_at[gen_ix] += 1
+    else
+      gens << dims.map{|d| rand (-d+1)..(d-1)}
+      gens_at << 0
+      gen_stats << 0
+    end
   end
 end
 
@@ -279,6 +305,7 @@ def relax_rescale(grid, f: 0.1, n: :n4, s: [])
     grid = (0 ... grid.size).map do |i|
       (0 ... grid[i].size).map &lambda{|j|
         return nil if grid[i][j].nil?
+        neighbors = neighborhood.is_a?(Proc) ? neighborhood[i, j] : neighborhood
         delta = neighborhood.map do |di, dj|
           grid[i+di][j+dj] - grid[i][j] if grid[i+di] && grid[i+di][j+dj]
         end.compact.sort.sum
@@ -329,6 +356,15 @@ def relax_rescale(grid, f: 0.1, n: :n4, s: [])
       cout << ""
       cout << "@#{t}"
       cout << "energy = %.16f" % [energy]
+      smooth_time_est = if smooth_time_est.finite?
+        (smooth_time_est - t_delta).clamp(0..) * 0.9 + time_est * 0.1
+      else time_est end
+
+      cout = [""]
+      grid.each.with_index{|row, i| cout << row.map.with_index{|val, j| fmt[i, j, val]}.join(" ").rstrip}
+      cout << ""
+      cout << "@#{t}"
+      cout << "energy = %.16f" % [energy]
       cout << "delta_1 = %.16f" % [(1 - scale) / strength]
       # cout << "suppression factors = %p" % [suppression_factors.map{|f| "%.1e" % f}]
       # \e[A moves cursor up; \e[?25l hides it; \e[?25h shows it again
@@ -361,12 +397,17 @@ def foo(x, limit = nil, filter: nil, n: :n4, f: 0.1, grid: nil, hicolor: false, 
     modes << relax_rescale(x, n: n, s: modes.map{|x| x[:mode]}, f: f)
     break if modes.last.nil? || limit.is_a?(Float) && modes.last[:delta_1] >= limit
 
-    dot = xs.zip(modes.last[:mode]).map do |cs, ms|
-      cs.chars.zip(ms).map{|c, m|m.nil? ? 0 : m * {"-" => -1, "+" => 1, "." => 0, "?" => rand(-1 .. 1), "e" => 0}.fetch(c, c)}
-    end.flatten.sum
-    abs_dot = xs.zip(modes.last[:mode]).map do |cs, ms|
-      cs.chars.zip(ms).map{|c, m|m.nil? ? 0 : m.abs * {"-" => 1, "+" => 1, "." => 0, "?" => rand(-1 .. 1), "e" => 0}.fetch(c, c)}
-    end.flatten.sum
+    if xs.any?{|cs| cs[/\?/]} 
+      dot = modes.last[:mode].flatten.compact.map{|m| m*m}.sum
+      abs_dot = 1
+    else
+      dot = xs.zip(modes.last[:mode]).map do |cs, ms|
+        cs.chars.zip(ms).map{|c, m|m.nil? ? 0 : m * {"-" => -1, "+" => 1, "." => 0, "?" => rand(-1 .. 1), "e" => 0}.fetch(c, c)}
+      end.flatten.sum
+      abs_dot = xs.zip(modes.last[:mode]).map do |cs, ms|
+        cs.chars.zip(ms).map{|c, m|m.nil? ? 0 : m.abs * {"-" => 1, "+" => 1, "." => 0, "?" => rand(-1 .. 1), "e" => 0}.fetch(c, c)}
+      end.flatten.sum
+    end
     if dot.abs > 1e-7
       puts "mode #{modes.size} strength = #{dot} / #{abs_dot} = #{dot / abs_dot}", "---"
       accepted_modes << [dot / abs_dot, modes.size, modes.last[:mode]]
@@ -596,7 +637,13 @@ class Numeric
 end
 
 class Rational
-  def to_mixed_s; r = to_r; "#{r < 0 ? ?- : ""}#{r.to_i.abs} #{(r-r.to_i).numerator.abs}/#{r.denominator}"; end
+  def to_mixed_s
+    if denominator == 1
+      "#{self < 0 ? ?- : ""}#{to_i.abs}r"
+    else
+      "#{self < 0 ? ?- : ""}#{to_i.abs} #{(self-to_i).numerator.abs}/#{denominator}"
+    end
+  end
   def gcd(other); self.numerator.gcd(other.numerator).to_r / self.denominator.lcm(other.denominator); end
 end
 
@@ -623,11 +670,12 @@ class Triangle
     @es = [@pts[2] - @pts[1], @pts[0] - @pts[2],  @pts[1] - @pts[0]]
     @pts_paraboloid = @pts.map{|pt| Vector[pt[0], pt[1], pt.dot(pt)]}
     @ns = pts.map{|pt| pt[2]}
+    z_gap = [z_metric[@ns[0], @ns[1]], z_metric[@ns[1], @ns[2]], z_metric[@ns[2], @ns[0]]].max
     @priority = [ # not 1x1; maximize uncertainty in value; minimize perimeter; top to bottom
       (@es[0].dot(@es[0]) < 3 && @es[1].dot(@es[1]) < 3 && @es[2].dot(@es[2]) < 3) ? 0 : 1,
-      [z_metric[@ns[0], @ns[1]], z_metric[@ns[1], @ns[2]], z_metric[@ns[2], @ns[0]]].max,
-      - @es.map(&:norm).sum,
-      pts.sort
+      z_gap,  
+      (z_gap > 0 ? -1 : 1) * @es.map(&:norm).sum,
+      pts.sort.flatten.map(&:-@)
     ]
     puts self
     (puts "triangle rejected"; raise ArgumentError) if @es[1].cross(@es[0])[2] <= 0
@@ -670,13 +718,14 @@ class Triangle
             xys = @pts.map do |pt2|
               [0, 1].map{|ix| (pt[ix] - pt2[ix]).abs / gcd}.sort
             end.sort.uniq
-            puts xys.map{|x, y| "#{x}^2 + #{y}^2"}.join " = "
+            puts xys.map{|x, y| "#{x.to_mixed_s}^2 + #{y.to_mixed_s}^2"}.join(" = ")
+                    .gsub(/0r\^2 + \| \+ 0r\^2/, "")
             pt
          end
     [pt[0], pt[1]]
   end
 
-  def to_s; "Triangle #{pts}, priority #{@priority}"; end
+  def to_s; "T#{pts}"; end
   def inspect; to_s; end
 end
 def voronoi_subdivide(xs, ys, reflexive = false, z_metric: -> a, b {(a - b).abs})
@@ -704,27 +753,42 @@ def voronoi_subdivide(xs, ys, reflexive = false, z_metric: -> a, b {(a - b).abs}
     if lines_by_z_gap.empty? || t.z_gap > lines_by_z_gap.keys.max
       p t
       cx, cy = t.bounding_center
-      puts "[#{cx.to_mixed_s}, #{cy.to_mixed_s}]"
       ox, oy = t.centroid
-      x = cx.round_toward ox
-      y = cy.round_toward oy
-      if t.pts.any?{|px, py, _| px == x && py == y} || !t.include?(x, y)
-        x = cx.round_away ox
-        y = cy.round_away oy
+      x = cx.round_away ox
+      y = cy.round_away oy
+      op = "<-"
+      if t.pts.any?{|px, py, _| px == x && py == y} || x > y && reflexive
+        x = cx.round_toward ox
+        y = cy.round_toward oy
+        op = "->"
       end
-      if triangles.any?{|t| t.pts.any?{|px, py, _| px == x && py == y}} || x > y && reflexive
+      if triangles.any?{|t| t.pts.any?{|px, py, _| px == x && py == y}}
         t.reject
         puts "rejected"
         next
       end
+      puts case
+      when cx.denominator != 2 && cy.denominator != 2
+        "[#{cx.to_mixed_s}, #{cy.to_mixed_s}] | [#{ox.to_mixed_s}, #{oy.to_mixed_s}]"
+      when op == "->"
+        "[#{cx.to_mixed_s}, #{cy.to_mixed_s}] -> [#{ox.to_mixed_s}, #{oy.to_mixed_s}]"
+      else
+        "<- [#{cx.to_mixed_s}, #{cy.to_mixed_s}] | [#{ox.to_mixed_s}, #{oy.to_mixed_s}]"
+      end
     else
       line = p lines_by_z_gap[lines_by_z_gap.keys.max].min
-      x, y = ([line[0][0], line[1][0]].max - 1 .. [line[0][0], line[1][0]].min + 1).to_a
-        .product(([line[0][1], line[1][1]].max - 1 .. [line[0][1], line[1][1]].min + 1).to_a)
-        .find do |x, y|
-          x >= 0 && x <= xl && y >= 0 && y <= yl && (x <= y || !reflexive) &&
-            !triangles.any?{|t| t.pts.any?{|px, py| px == x && py == y}}
-        end
+      if (line[0][0] - line[1][0]) ** 2 + (line[0][1] - line[1][1]) ** 2 == 4
+        x = (line[0][0] + line[1][0]) / 2
+        y = (line[0][1] + line[1][1]) / 2
+        x, y = nil if triangles.any?{|t| t.pts.any?{|px, py| px == x && py == y}}
+      else
+        x, y = ([line[0][0], line[1][0]].max - 1 .. [line[0][0], line[1][0]].min + 1).to_a
+          .product(([line[0][1], line[1][1]].max - 1 .. [line[0][1], line[1][1]].min + 1).to_a)
+          .find do |x, y|
+            x >= 0 && x <= xl && y >= 0 && y <= yl && (x <= y || !reflexive) &&
+              !triangles.any?{|t| t.pts.any?{|px, py| px == x && py == y}}
+          end
+      end
       if x.nil?
         lines_by_z_gap.each_value{|ls| ls.delete line}
         lines_by_z_gap.reject!{|_, v| v.empty?}
@@ -740,7 +804,9 @@ def voronoi_subdivide(xs, ys, reflexive = false, z_metric: -> a, b {(a - b).abs}
       when /^(\d+)$/ then n = $1.to_i
       when /^(\d+) (\d+) (\d+)$/
         x = $1.to_i; y = $2.to_i; n = $3.to_i
-        lines_by_z_gap.each_value{|ls| ls.reject!{|pt1, pt2| pt1 == [x, y] || pt2 == [x, y]}}
+        lines_by_z_gap.each_value do |ls|
+          ls.reject!{|pt1, pt2| pt1[0] == x && pt1[1] == y || pt2[0] == x && pt2[1] == y}
+        end
         lines_by_z_gap.reject!{|_, v| v.empty?}
       else redo
       end
