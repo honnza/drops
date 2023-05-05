@@ -239,7 +239,7 @@ end
 def relax_rescale(grid, f: 0.1, n: :n4, s: [])
   strength = f; neighborhood = n; suppressed_modes = s.dup
   grid = grid.split(/[\n\/]/).map{|row| row.chars.map{|c|
-    {?- => -1.0, ?. => 0.0, ?+ => 1.0, ?? => rand(-1 .. 1), ?e => rand(-1e-10 .. 1e-10)}[c]
+    {?- => -1.0, ?. => 0.0, ?+ => 1.0, ?? => rand(-1.0 .. 1.0), ?e => rand(-1e-10 .. 1e-10)}[c]
   }} if grid.is_a? String
   precision = IO.console.winsize[1] / grid.map(&:length).max - 1
   precision = 16 if precision > 16
@@ -402,7 +402,7 @@ def foo(x, limit = nil, filter: nil, n: :n4, f: 0.1, grid: nil, hicolor: false, 
       abs_dot = 1
     else
       dot = xs.zip(modes.last[:mode]).map do |cs, ms|
-        cs.chars.zip(ms).map{|c, m|m.nil? ? 0 : m * {"-" => -1, "+" => 1, "." => 0, "?" => rand(-1 .. 1), "e" => 0}.fetch(c, c)}
+        cs.chars.zip(ms).map{|c, m|m.nil? ? 0 : m * {"-" => -1, "+" => 1, "." => 0, "?" => rand(-1.0 .. 1.0), "e" => 0}.fetch(c, c)}
       end.flatten.sum
       abs_dot = xs.zip(modes.last[:mode]).map do |cs, ms|
         cs.chars.zip(ms).map{|c, m|m.nil? ? 0 : m.abs * {"-" => 1, "+" => 1, "." => 0, "?" => rand(-1 .. 1), "e" => 0}.fetch(c, c)}
