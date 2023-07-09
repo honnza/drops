@@ -239,6 +239,11 @@ def digitwise_sum(b)
   f = Proc.new{|x, y| (x + y) % b + (x < b && y < b ? 0 : f[x/b, y/b] * b)}
 end
 
+def generate_symmetric(dims, &orbit_f)
+  dims.map{(0 ... _1).to_a}.reduce(&:product).map(&:flatten)
+      .group_by(&orbit_f).values.shuffle.map(&:shuffle).flatten(1)
+end
+
 # x = generate_group(rand(144), x=[*0..143].shuffle, &digitwise_sum(12))
 
 # #x=[*0..99].shuffle; x.each_slice(20).map{|x| puts x.join " "}
