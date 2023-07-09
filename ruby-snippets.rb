@@ -121,6 +121,120 @@ def generate_lattice(dims, first = nil, gens = [])
   end
 end
 
+def gen_latin_square(size, steps = size ** 3)
+  # algorithm taken from
+  # http://sedici.unlp.edu.ar/bitstream/handle/10915/42155/Documento_completo.pdf?sequence=1
+  # originally descrirbed in terms of an incidence cube
+  # starting from a particular square, we do a series of steps:
+  #
+  # First we pick a random cell [px, py] and a new value pz;
+  # let [ox, py] and [px, oy] be the cell in which pz resides and oz be the current value of [px, py]
+  # remove pz from [ox, py] and [px, oy] and add oz there
+  # remove oz from [px, py] and [ox, oy] and add pz there
+  # this generally results in a situation in which [px, py] has two values at the same time,
+  # and another one negative one time. We call this value a borrow, and store one of the values in sx/sy/sz
+  #
+  # If there is a borrow, we instead choose [px, py, pz] to be the borrow,
+  # [ox, py], [px, oy] randomly one of the two cells where pz lies, and oz one of the values in [px, pz].
+  # either way, the order is to remove old seconds (ppo), return old borrow (ppp),
+  # create new borrow (ooo), create new seconds (poo)
+
+  xy = [*0 ... size].map{|i| [*0 ... size].map{|j| (i+j) % size}}
+  xz = [xy[0].dup] + xy[1..].map(&:dup).reverse
+  yz = xz.map(&:dup)
+  bx = nil; by = nil; bz = nil;
+  sx = nil; sy = nil; sz = nil;
+
+  rem = lambda do |x, y, z|
+    if xy[x][y] != z && [x, y, z] != [bx, by, sz]
+      if xz[x][z] == y || yz[y][z] == x || [x, y, z] == [bx, sy, bz] || [x, y, z] == [sx, by, bz]
+        raise "borrow consistency error removing [#{x}, #{y}, #{z}]"
+      end
+      raise "can't remove [#{x}, #{y}, #{z}]: already borrowing" unless bx.nil? && by.nil? && bz.nil?
+      bx = x; by = y; bz = z; return
+    end
+
+    case
+    when [x, y, z] == [bx, by, sz]
+      sz = nil
+    when [x, y] == [bx, by] && xy[x][y] == z
+      xy[x][y] = sz
+      sz = nil
+    when xy[x][y] == z
+      xy[x][y] = nil
+    else
+      raise "error removing [#{x}, #{y}, #{z}] from xy"
+    end
+
+    case
+    when [x, y, z] == [bx, sy, bz]
+      sy = nil
+    when [x, z] == [bx, bz] && xz[x][z] == y
+      xz[x][z] = sy
+      sy = nil
+    when xz[x][z] == y
+      xz[x][z] = nil
+    else
+      raise "error removing [#{x}, #{y}, #{z}] from xz"
+    end
+
+    case
+    when [x, y, z] == [sx, by, bz]
+      sx = nil
+    when [y, z] == [by, bz] && yz[y][z] == x
+      yz[y][z] = sx
+      sx = nil
+    when yz[y][z] == x
+      yz[y][z] = nil
+    else
+      raise "error removing [#{x}, #{y}, #{z}] from yz"
+    end
+  end
+
+  add = lambda do |x, y, z|
+    if [x, y, z] == [bx, by, bz]
+      raise "can't repay borrow [#{x}, #{y}, #{z}]: still in use" unless sx.nil? && sy.nil? && sz.nil?
+      bx = nil; by = nil; bz = nil
+      return
+    end
+
+    case
+    when xy[x][y].nil? then xy[x][y] = z
+    when [x, y] == [bx, by] && sz.nil? then sz = z
+    else "error adding [#{x}, #{y}, #{z}] to xy"
+    end
+
+    case
+    when xz[x][z].nil? then xz[x][z] = y
+    when [x, z] == [bx, bz] && sy.nil? then sy = y
+    else "error adding [#{x}, #{y}, #{z}] to xz"
+    end
+
+    case
+    when yz[y][z].nil? then yz[y][z] = x
+    when [y, z] == [by, bz] && sz.nil? then sx = x
+    else "error adding [#{x}, #{y}, #{z}] to yz"
+    end
+  end
+
+  (0..).each do |t|
+    return xy if t >= steps && bz.nil?
+    
+    if bz.nil?
+      px = rand size; py = rand size; pz = rand size; pz = rand size while xy[px][py] == pz
+      ox = yz[py][pz]; oy = xz[px][pz]; oz = xy[px][py]
+    else
+      px = bx; py = by; pz = bz
+      ox = rand > 0.5 ? yz[py][pz] : sx
+      oy = rand > 0.5 ? xz[px][pz] : sy
+      oz = rand > 0.5 ? xy[px][py] : sz
+    end
+
+    rem[px, py, oz]; rem[px, oy, pz]; rem[ox, py, pz]; add[px, py, pz]
+    rem[ox, oy, oz]; add[px, oy, oz]; add[ox, py, oz]; add[ox, oy, pz]
+  end
+end
+
 def digitwise_sum(b)
   f = Proc.new{|x, y| (x + y) % b + (x < b && y < b ? 0 : f[x/b, y/b] * b)}
 end
