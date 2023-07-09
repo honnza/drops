@@ -532,21 +532,22 @@ def foo(x, limit = nil, filter: nil, n: :n4, f: 0.1, grid: nil, hicolor: false, 
       accepted_modes << [dot / abs_dot, modes.size, modes.last[:mode]]
     else
       puts "rejected mode #{modes.size}: dot product = #{dot}"
-      end
+    end
     puts "strongest modes: #{accepted_modes.sort.reverse.map{|_, ix, _| ix}}" if limit
     #sleep [dot / len * 2, 1].max
     gets
-    break if limit.nil? && accepted_modes.size == 3 || limit.is_a?(Integer) && modes.size >= limit
+    break if limit.nil? && accepted_modes.size == 3 || limit.is_a?(Integer) && modes.size >= limit || limit.is_a?(Array) && modes.size >= limit.max
   rescue Interrupt, IRB::Abort
     puts "user abort"
     break
   end
 
-  accepted_modes.sort.reverse.each{|strength, ix, _| p [strength, ix]} if limit
-  #sleep 5 if limit
-  
   # transpose into pixels
-  g, r, b = (limit.nil? ? accepted_modes : accepted_modes.max(3)).map(&:last)
+  g, r, b = case limit
+            when nil then accepted_modes
+            when Integer then accepted_modes.reverse.each{|strength, ix, _| p [strength, ix]}.max(3)
+            when Array then limit.map{|i| accepted_modes[i-1]}
+            end.map(&:last)
   return unless g
   b = r = g unless r
   [g, r, b].each{|c| c&.each{ |ci| ci.map! {|cij| cij&.round(10)}}}
