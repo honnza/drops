@@ -790,8 +790,12 @@ class Triangle
     @es = [@pts[2] - @pts[1], @pts[0] - @pts[2],  @pts[1] - @pts[0]]
     @pts_paraboloid = @pts.map{|pt| Vector[pt[0], pt[1], pt.dot(pt)]}
     @ns = pts.map{|pt| pt[2]}
-    z_gap = [z_metric[@ns[0], @ns[1]], z_metric[@ns[1], @ns[2]], z_metric[@ns[2], @ns[0]]].max
-    @priority = [ # not 1x1; maximize uncertainty in value; minimize perimeter; top to bottom
+    z_gap = [
+      z_metric[@ns[0], @ns[1]],
+      z_metric[@ns[1], @ns[2]],
+      z_metric[@ns[2], @ns[0]]
+    ].max
+    @priority = [ # not 1x1; maximize gradient; minimize perimeter; top to bottom
       (@es[0].dot(@es[0]) < 3 && @es[1].dot(@es[1]) < 3 && @es[2].dot(@es[2]) < 3) ? 0 : 1,
       z_gap,  
       (z_gap > 0 ? -1 : 1) * @es.map(&:norm).sum,
