@@ -362,6 +362,17 @@ def progress_bar progress, text = "", width = IO.console.winsize[1] - 1
   end
 end
 
+# https://en.m.wikipedia.org/wiki/Box%E2%80%93Muller_transform
+box_muller = Enumerator.new do |y|
+  loop do
+    u = (-2 * Math.log(rand)) ** 0.5
+    v = 2 * Math::PI * rand
+    y.yield u * Math.sin(v)
+    y.yield u * Math.cos(v)
+  end
+end
+define_method(:rand_normal){box_muller.next}
+
 def relax_rescale(grid, f: 0.1, n: :n4, s: [])
   strength = f; neighborhood = n; suppressed_modes = s.dup
   grid = grid.split(/[\n\/]/).map{|row| row.chars.map{|c|
@@ -397,7 +408,6 @@ def relax_rescale(grid, f: 0.1, n: :n4, s: [])
     "\e[32;1m%.*f\e[0m" % [precision, val&.abs]
   end
   
-  suppressed_modes << ->{1}
   suppressed_modes = suppressed_modes.map do |mode|
     case mode
     when Array then mode.map{|row| row.dup}
@@ -514,46 +524,146 @@ ensure
   print "\e[0m\e[?25h\n"
 end
 
-def foo(x, limit = nil, filter: nil, n: :n4, f: 0.1, grid: nil, hicolor: false, rgb: false, png: false)
+def relax_rescale_eigen(grid, n: :n4, interactive: true)
+  grid = grid.split(/[\n\/]/).map{|row| row.chars.map{|c|
+    {?- => -1.0, ?. => 0.0, ?+ => 1.0, ?? => rand(-1.0 .. 1.0), ?e => rand(-1e-10 .. 1e-10)}[c]
+  }} if grid.is_a? String
+  precision = IO.console.winsize[1] / grid.map(&:length).max - 1
+  precision = 16 if precision > 16
+  (puts "warning: precision = #{precision}"; precision = 1) if precision < 1
+
+  fmt = lambda do |val|
+    rval = val.abs ** 0.5 * (val > 0 ? 1 : -1) if val
+    logval = Math.log10(val.abs) / -10 if val
+    c = ->x{(255 * x).clamp(0, 255).round}
+    str = ("%.*f" % [precision, val.abs]).sub("0.", "").sub("1.0", "A") if val
+    case val
+    when nil then " " * precision
+    when -1 .. 0  then "\e[38;2;255;#{c[1+rval]};#{c[logval]}m#{str}\e[0m"
+    when  0 .. 1  then "\e[38;2;#{c[logval]};#{c[1-rval]};255m#{str}\e[0m"
+    else "\e[32;1m#{str}\e[0m"
+    end 
+  rescue
+    "\e[32;1m%.*f\e[0m" % [precision, val&.abs]
+  end
+
+  neighborhood = case n
+    when :n4 then [[-1, 0], [0, -1], [0, 1], [1, 0]]
+    when :n8 then [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]
+    when :n_knight then [[-2, -1], [-2, 1], [-1, 2], [1, 2], [2, 1], [2, -1], [1, -2], [-1, -2]]
+    else neighborhood
+  end
+
+  ix_count = 0
+  ix_map = grid.map{|row| row.map{|c| (ix_count += 1; ix_count - 1) unless c.nil?}}
+  in_vec = Vector[*grid.flatten.compact]
+
+  matrix = Matrix.zero ix_count
+  grid.length.times do |r|
+    grid[r].length.times do |c|
+      unless grid[r][c].nil?
+        neighborhood.each do |dr, dc|
+          if dr >= -r && dc >= -c && grid[r + dr] && grid[r + dr][c + dc]
+            ix1 = ix_map[r][c]
+            ix2 = ix_map[r + dr][c + dc]
+            matrix[ix2, ix2] += 1
+            matrix[ix1, ix2] -= 1
+          end
+        end
+      end
+    end
+  end
+
+  es = matrix.eigensystem
+
+  Enumerator.new do |y|
+    es.eigenvectors.zip(es.eigenvalues, 1..)
+      .slice_when{|(_, v1, _), (_, v2, _)| v2 - v1 > 1e-10}
+      .each do |modes|
+      aligned_evs = [modes.map{|ev, _, _| ev * ev.dot(in_vec)}.reduce(&:+).normalize] rescue []
+      (modes.count - aligned_evs.count).times do |i|
+        new_mode = modes.map{|ev, _, _| ev * rand_normal}.reduce(&:+)
+        aligned_evs.each{|ev| new_mode -= ev * ev.dot(new_mode)}
+        aligned_evs << new_mode.normalize
+      end
+      aligned_evs.map!{|ev| ev / ev.map(&:abs).max}
+
+      if interactive
+        if modes.count == 1
+          puts "#mode #{modes[0][2]}/#{ix_count} eigenvalue #{modes[0][1]}"
+          ix_map.each{|row| puts row.map{|ix| fmt[ix && aligned_evs[0][ix]]}.join(" ").rstrip}
+        else
+          puts "#modes #{modes[0][2]}..#{modes[-1][2]}/#{ix_count} eigenvalue #{modes[0][1]}"
+          g = aligned_evs[0]
+          r = aligned_evs[1]
+          b = aligned_evs[2] || aligned_evs[1]
+          ix_map.each do |row|
+            puts row.map{|ix|
+              ix.nil? ? "><" : "\e[48;2;%d;%d;%dm  \e[0m" % [r[ix], g[ix], b[ix]].map{|c| (256 * (c + 1)/2).clamp(0..255)} 
+            }.join
+          end
+        end
+      end
+      aligned_evs.each do |ev|
+        y.yield mode: ix_map.map{|row| row.map{|ix| ix && ev[ix]}}, delta_1: modes[0][1]
+      end
+    end
+  end
+end
+
+def foo(x, limit = nil, filter: nil, n: :n4, f: 0.1, grid: nil, hicolor: false, rgb: false, png: false, eigen: false)
   # generate channels
   xs = x.split(/[\/\n]/)
+  mode_gen = relax_rescale_eigen(x, n: n) if eigen
   modes = []
   accepted_modes = []
-  loop do
-    modes << relax_rescale(x, n: n, s: modes.map{|x| x[:mode]}, f: f)
-    break if modes.last.nil? || limit.is_a?(Float) && modes.last[:delta_1] >= limit
+  aborted = false
+  loop.with_index do |_, t|
+    modes << (eigen ? mode_gen.next : relax_rescale(x, n: n, s: modes.map{|x| x[:mode]}, f: f))
+
+    break if modes[t].nil? || limit.is_a?(Float) && modes[t][:delta_1] >= limit
 
     if xs.any?{|cs| cs[/\?/]} 
-      dot = modes.last[:mode].flatten.compact.map{|m| m*m}.sum
+      dot = modes[t][:mode].flatten.compact.map{|m| m*m}.sum
       abs_dot = 1
     else
-      dot = xs.zip(modes.last[:mode]).map do |cs, ms|
+      dot = xs.zip(modes[t][:mode]).map do |cs, ms|
         cs.chars.zip(ms).map{|c, m|m.nil? ? 0 : m * {"-" => -1, "+" => 1, "." => 0, "?" => rand(-1.0 .. 1.0), "e" => 0}.fetch(c, c)}
       end.flatten.sum
-      abs_dot = xs.zip(modes.last[:mode]).map do |cs, ms|
+      abs_dot = xs.zip(modes[t][:mode]).map do |cs, ms|
         cs.chars.zip(ms).map{|c, m|m.nil? ? 0 : m.abs * {"-" => 1, "+" => 1, "." => 0, "?" => rand(-1 .. 1), "e" => 0}.fetch(c, c)}
       end.flatten.sum
     end
-    if dot.abs > 1e-7
-      puts "mode #{modes.size} strength = #{dot} / #{abs_dot} = #{dot / abs_dot}", "---"
-      accepted_modes << [dot / abs_dot, modes.size, modes.last[:mode]]
-    else
-      puts "rejected mode #{modes.size}: dot product = #{dot}"
+    if dot < 0
+      modes[t][:mode].each{|ms| ms.map!{|m| -m if m}}
+      dot = -dot
     end
-    puts "strongest modes: #{accepted_modes.sort.reverse.map{|_, ix, _| ix}}" if limit
-    #sleep [dot / len * 2, 1].max
-    gets
-    break if limit.nil? && accepted_modes.size == 3 || limit.is_a?(Integer) && modes.size >= limit || limit.is_a?(Array) && modes.size >= limit.max
+    if dot > 1e-7 && modes[t][:delta_1] > 1e-7
+      puts "mode #{t + 1} strength = #{dot} / #{abs_dot} = #{dot / abs_dot}"
+      accepted_modes << [dot / abs_dot, t + 1, modes[t][:mode]]
+    elsif dot <= 1e-7
+      puts "rejected mode #{t + 1}: dot product = #{dot}"
+    else
+      puts "rejected mode #{t + 1}: delta_1 = #{modes[t][:delta_1]}"
+    end
+    if t == modes.count - 1
+      puts "strongest modes: #{accepted_modes.sort.reverse.map{|_, ix, _| ix}}" if limit
+      gets unless aborted
+    end
+    break if limit.nil? && accepted_modes.size == 3 ||
+             limit.is_a?(Integer) && t + 1 >= limit ||
+             limit.is_a?(Array) && t + 1 >= limit.max
   rescue Interrupt, IRB::Abort
     puts "user abort"
-    break
+    aborted = true
+    break unless eigen
   end
 
   # transpose into pixels
   g, r, b = case limit
             when nil then accepted_modes
-            when Integer then accepted_modes.reverse.each{|strength, ix, _| p [strength, ix]}.max(3)
-            when Array then limit.map{|i| accepted_modes[i-1]}
+            when Numeric then accepted_modes.reverse.each{|strength, ix, _| p [strength, ix]}.max(3)
+            when Array then limit.map{|i| [modes[i-1][:mode]]}
             end.map(&:last)
   return unless g
   b = r = g unless r
