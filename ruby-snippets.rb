@@ -347,12 +347,19 @@ end
 
 def progress_bar progress, text = "", width = IO.console.winsize[1] - 1
   on_cells = ((width - 2) * progress.clamp(0 .. 1))
-  bg = (on_cells % 1 * 256).floor
-  fg = bg > 127 ? 30 : 97
-  (text.ljust(width - 2) + "]")
-    .insert(on_cells.floor + 1, "\e[0m")
-    .insert(on_cells.floor, "\e[48;2;#{bg};#{bg};#{bg};#{fg}m")
-    .insert(0, "[\e[107;30m")
+  if on_cells > text.length
+    text = text.ljust(width - 2)
+    text[on_cells.floor] = (0x2590 - on_cells % 1 * 8).floor.chr(Encoding::UTF_8) if on_cells % 1 != 0
+    (text + "]").insert(on_cells.floor, "\e[0m")
+                .insert(0, "[\e[107;30m")
+  else
+    bg = (on_cells % 1 * 256).floor
+    fg = bg > 127 ? 30 : 97
+    (text.ljust(width - 2) + "]")
+      .insert(on_cells.floor + 1, "\e[0m")
+      .insert(on_cells.floor, "\e[48;2;#{bg};#{bg};#{bg};#{fg}m")
+      .insert(0, "[\e[107;30m")
+  end
 end
 
 def relax_rescale(grid, f: 0.1, n: :n4, s: [])
@@ -489,7 +496,7 @@ def relax_rescale(grid, f: 0.1, n: :n4, s: [])
       # \e[A moves cursor up; \e[?25l hides it; \e[?25h shows it again
       cout << progress_bar(
         Math.log(max_delta || 1) / Math.log(Float::EPSILON),
-        "elapsed: #{fmt_secs[Time.now - time_start]} | remaining: #{fmt_secs[smooth_time_est]}"
+        "#{fmt_secs[Time.now - time_start]} / #{"> " if smooth_speed > 0}#{fmt_secs[Time.now - time_start + smooth_time_est]}"
       )
       print "\e[#{cout.size - 1}A\e[?25l" if prev_frame_t
       print cout.join("\n")
