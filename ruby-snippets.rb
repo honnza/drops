@@ -2,6 +2,8 @@ require "io/console"
 require "matrix"
 def gc x; (255 * x ** (1/2.2)).round; end
 
+class Array; include Comparable; end
+
 def find_collatz(x, triple_even = true)
   paths_to = {x => [""]}
   search_queue = [x]
@@ -1027,6 +1029,7 @@ class Triangle
 
   def pts; @pts.zip(@ns).map{|pt, n| [pt[0], pt[1], n]}; end
   def reject; @priority[0] = 0; end
+  def rejected?; @priority[0] == 0]; end
   def z_gap; @priority[1]; end
   attr_reader :priority
 
@@ -1093,6 +1096,7 @@ def voronoi_subdivide(xs, ys, reflexive = false, z_metric: -> a, b {(a - b).abs}
   loop do
     print "\npop "
     t = triangles.max_by(&:priority)
+    return if t.rejected?
     x, y = nil
     if lines_by_z_gap.empty? || t.z_gap > lines_by_z_gap.keys.max
       p t
