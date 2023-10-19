@@ -315,6 +315,108 @@ def grid_sampler(h, w, torus: false, neighbor_count: 8, show: true)
   end
 end
 
+def evolve_pair_sample(grid_size, pop_size = grid_size, iter_limit = nil)
+  new_gene = lambda do
+    gene = Array.new grid_size
+    while gene.include? nil
+      x = rand gene.size
+      x = rand gene.size until gene[x].nil?
+      y = rand gene.size
+      y = rand gene.size until gene[y].nil?
+      gene[x] = y
+      gene[y] = x
+    end
+    gene
+  end
+
+  cross = lambda do |g1, g2|
+    gene = Array.new grid_size
+    while gene.include? nil
+      loop_start = rand gene.size
+      gene_sel, gene_unsel = rand < 0.5 ? [g1, g2] : [g2, g1]
+      x = loop_start
+      loop do
+        y = gene_sel[x]
+        gene[x] = y
+        gene[y] = x
+        x = gene_unsel[y]
+        break if x == loop_start
+      end
+    end
+    gene
+  end
+
+  mutate = lambda do |gene_in|
+    gene = gene_in.dup
+    x = rand gene.size
+    y = rand gene.size
+    y = rand gene.size while y == x
+    gene[x], gene[y] = gene[y], gene[x]
+    gene[x] = x if gene[x] == y && gene[y] != x
+    gene[y] = y if gene[y] == x && gene[x] != y
+    gene[gene[x]] = x
+    gene[gene[y]] = y
+    raise "bug: \n#{gene_in} => \n#{gene}" if gene.sort != [*0...gene.size]
+    gene
+  end
+
+  fitness = lambda do |gene|
+    gene.map do |i1|
+      i2 = gene[i1]
+      gene.map do |j1|
+        j2 = gene[j1]
+        (i1 - j1) ** 2 + (i2 - j2) ** 2
+      end.reject{_1 == 0}.min
+    end.sort
+  end
+
+  compress = lambda do |text|
+    text.gsub(/((.+?)(?:, \2)+)/){"#{($1.length + 2) / ($2.length + 2)}x#{$2}"}
+  end
+
+  gf_pair = Struct.new :gene, :fitness
+  pop = []
+  best_fitness = nil
+  loop.with_index do |_, t|
+    gene = nil
+    if pop.size < pop_size
+      gene = new_gene[]
+      gene_ix = pop.size
+    else
+      x = rand pop_size
+      y = rand pop_size
+      y = rand pop_size while y == x
+      z = rand pop_size
+      z = rand pop_size while z == x || z == y
+      if pop[x].fitness < pop[y].fitness && pop[x].fitness < pop[z].fitness
+        gene = cross[pop[y].gene, pop[z].gene]
+        gene = mutate[gene] if gene == pop[y].gene || gene == pop[z].gene
+        gene_ix = x
+      elsif pop[y].fitness < pop[z].fitness
+        gene = cross[pop[x].gene, pop[z].gene]
+        gene = mutate[gene] if gene == pop[x].gene || gene == pop[z].gene
+        gene_ix = y
+      else
+        gene = cross[pop[x].gene, pop[y].gene]
+        gene = mutate[gene] if gene == pop[x].gene || gene == pop[y].gene
+        gene_ix = z
+      end
+    end
+
+    gene_fitness = fitness[gene]
+    pop[gene_ix] = gf_pair.new gene, gene_fitness
+    if best_fitness.nil? || best_fitness < gene_fitness
+      best_fitness = gene_fitness
+      puts "@#{t} new best gene: #{gene}\nscore: #{compress[gene_fitness.to_s]}"
+    end
+    if rand < 0.01
+      str = "@#{t} testing #{gene}"[0..IO.console.winsize[1] - 1]
+      print "#{str}\e[#{str.length}D"
+    end
+    break if iter_limit && t >= iter_limit
+  end
+end
+
 def outercalate(str, scale = 1)
   outercalate_line = ->x{" #{x.join} ".gsub(/(.)(?=(.))/){$1 * scale + (($1 + $2) == "  " ? " " : ".")}[1...-1].chars}
   ary = str.split(%r[[\n\/]]).map(&:chars)
