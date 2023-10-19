@@ -696,9 +696,10 @@ def relax_rescale_eigen(grid, n: :n4, interactive: true)
           ix_map.each{|row| puts row.map{|ix| fmt[ix && aligned_evs[0][ix]]}.join(" ").rstrip}
         else
           puts "#modes #{modes[0][2]}..#{modes[-1][2]}/#{ix_count} eigenvalue #{modes[0][1]}"
-          g = aligned_evs[0]
-          r = aligned_evs[1]
-          b = aligned_evs[2] || aligned_evs[1]
+          offset = modes[0][2] == 1 && modes.count > 3 ? 1 : 0
+          g = aligned_evs[0 + offset]
+          r = aligned_evs[1 + offset]
+          b = aligned_evs[2 + offset] || aligned_evs[1 + offset]
           ix_map.each do |row|
             puts row.map{|ix|
               ix.nil? ? "><" : "\e[48;2;%d;%d;%dm  \e[0m" % [r[ix], g[ix], b[ix]].map{|c| (256 * (c + 1)/2).clamp(0..255)} 
@@ -764,7 +765,7 @@ def foo(x, limit = nil, filter: nil, n: :n4, f: 0.1, grid: nil, hicolor: false, 
   # transpose into pixels
   g, r, b = case limit
             when nil then accepted_modes
-            when Numeric then accepted_modes.reverse.each{|strength, ix, _| p [strength, ix]}.max(3)
+            when Numeric then accepted_modes.sort.reverse.each{|strength, ix, _| p [strength, ix]}.take(3)
             when Array then limit.map{|i| [modes[i-1][:mode]]}
             end.map(&:last)
   return unless g
