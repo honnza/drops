@@ -11,15 +11,17 @@ Tile = Struct.new(:name, :ascii, :rotated, :mirrored) do
 end
 
 Ruleset = Struct.new(
-  :symmetry, #characterized by the rotation order (1 = no symmetry / 2 / 4), and at most one mirror line (-, /, |, \)
-  :tileset,  #list of tiles that can appear in the world
+  :symmetry,  # characterized by the rotation order (1 = no symmetry / 2 / 4), and at most one mirror line (-, /, |, \)
+  :tile_symm, # list of tile permutations that generate the ruleset tile symmetries, each stored as a list of cycles
+  :tileset,   # list of tiles that can appear in the world
   :rules) do
 
   def to_json
     tile_map = Hash[tileset.map.with_index{|t, i| [t, i]}]
     rule_id_map = Hash[rules.map.with_index{|r, i| [r.id, i]}]
     JSON.generate({
-      s: symmetry.to_s,
+      s: symmetry,
+      ts: tile_symm.map{|p| p.map{|c| c.map{|t| tile_map[t]}}},
       t: tileset.map do |t|
         {
           n: t.name,
@@ -44,6 +46,7 @@ def Ruleset.from_json str
   tiles.each{|t| t.rotated = tiles[t.rotated.to_i]; t.mirrored = tiles[t.mirrored.to_i]}
   ruleset = Ruleset.new(
     json[:s],
+    (json[:ts] || []).map{|p| p.map{|c| c.map{|t| tiles[t.to_i]}}},
     tiles,
     nil
   )
@@ -73,12 +76,14 @@ Rule = Struct.new(
     @sparse ||= tiles.flat_map.with_index do |row, dy|
       row.map.with_index{|tile, dx| [dx, dy, tile]}
     end.select{|_, _, tile| tile != ruleset.tileset}
+       .map{|x, y, tile| [x, y, ruleset.tileset - tile]}
+       .sort_by{|_, _, tile| tile.length}
 
     r = nil
     @sparse.each do |dx, dy, tile|
-      unless haystack[y + dy][x + dx].all?{tile.include? _1}
-        if r.nil? && haystack[y + dy][x + dx].any?{tile.include? _1} 
-          r = [x + dx, y + dy, haystack[y + dy][x + dx] & tile]
+      unless tile.all?{!haystack[y + dy][x + dx].include?(_1)}
+        if r.nil? && haystack[y + dy][x + dx].any?{!tile.include?(_1)} 
+          r = [x + dx, y + dy, haystack[y + dy][x + dx] - tile]
         else
           return nil
         end
@@ -108,7 +113,22 @@ Rule = Struct.new(
     when "|"  then bitmaps += bitmaps.map{|bmp| bmp.transpose.reverse.transpose.map{|row| row.map{|tile| tile.map(&:mirrored)}}}
     when "/"  then bitmaps += bitmaps.map{|bmp| bmp.reverse.transpose.reverse.map{|row| row.map{|tile| tile.map(&:mirrored)}}}
     end
-    [self] + bitmaps.uniq[1..].map.with_index(1){|bmp, i| Rule.new(ruleset, id + i, [:symm, id], bmp)}
+
+    bitmaps.each{|bitmap| bitmap.each{|row| row.each{|cell| cell.replace ruleset.tileset & cell}}}
+    bitmaps.uniq!
+    bitmaps.each do |bitmap|
+      ruleset.tile_symm.each do |permutation|
+        perm_as_hash = Hash.new{|h, k| h[k] = k}
+        permutation.each do |cycle|
+          cycle.each_cons(2){|x, y| perm_as_hash[x] = y}
+          perm_as_hash[cycle.last] = cycle.first
+        end
+        new_bitmap = bitmap.map{|row| row.map{|cell| ruleset.tileset & cell.map{|tile| perm_as_hash[tile]}}}
+        bitmaps << new_bitmap unless bitmaps.include? new_bitmap
+      end
+    end
+
+    [self] + bitmaps[1..].map.with_index(1){|bmp, i| Rule.new(ruleset, id + i, [:symm, id], bmp)}
   end
 
   def to_s
@@ -287,12 +307,11 @@ def prompt_tiles(ruleset, name)
   i0 = p prompt_tile(name, symm_r, symm_m)
   tile_by_name[i0.name] = i0
   tile_by_mirror[i0.mirrored] = i0.name
-  p tile_by_mirror
   if i0.rotated.is_a? String
     i0.rotated = tile_by_name[i0.rotated] ||
       prompt_tile(i0.rotated, symm_r == :"2" ? i0 : symm_r, tile_by_mirror[i0.rotated] || symm_m)
   end
-  i1 = p i0.rotated
+  i1 = i0.rotated
   tile_by_name[i1.name] = i1
   tile_by_mirror[i1.mirrored] = i1.name
   if i1.rotated.is_a? String
@@ -300,14 +319,14 @@ def prompt_tiles(ruleset, name)
       prompt_tile(i1.rotated, symm_r, tile_by_mirror[i1.rotated] || symm_m)
     raise "rotating different tiles shouldn't give the same tile" if i1.rotated == i1
   end
-  i2 = p i1.rotated
+  i2 = i1.rotated
   tile_by_name[i2.name] = i2
   tile_by_mirror[i2.mirrored] = i2.name
   if i2.rotated.is_a? String
     raise "rotating three times shouldn't result in a previous state" if tile_by_name[i2.rotated]
     i2.rotated = prompt_tile(i2.rotated, i0, tile_by_mirror[i2.rotated] || symm_m)
   end
-  i3 = p i2.rotated
+  i3 = i2.rotated
   tile_by_name[i3.name] = i3
   tile_by_mirror[i3.mirrored] = i3.name
 
@@ -422,9 +441,13 @@ if $0 == __FILE__
   loop do
     case gets.chomp
     when /^new ruleset ([124][\\\/\-\|]?)$/
-      ruleset = Ruleset.new $1, [], []
+      ruleset = Ruleset.new $1, [], [], []
       puts "ok"
     when /^add tile (\S+)$/
+      if !ruleset
+        puts "ruleset must be defined before tiles"
+        next
+      end
       if !ruleset.rules.empty?
         puts "tiles must be defined before rules"
         next
@@ -436,6 +459,29 @@ if $0 == __FILE__
         puts "ok"
       else
         puts "#{error.inspect} already defined, discarding #{tiles.count} tiles"
+      end
+    when /^add symmetry (.+)$/
+      begin
+        new_symm = $1.split(" ").map do |cycle_str|
+          cycle = cycle_str.split("/").map do |tile_str|
+            tile = ruleset.tileset.find{_1.name == tile_str} 
+            raise "#{tile_str} not found in current ruleset" unless tile
+            tile
+          end
+          if cycle.length == 1
+            raise "length-1 cycles don't need to be included in symmetry description. Did you forget a /?" 
+          end
+          cycle
+        end
+        flat_symm = new_symm.flatten
+        if flat_symm.length != flat_symm.uniq.length
+          raise "each tile should appear at most once in any tile permutation" 
+        end
+        ruleset.tile_symm << new_symm
+        puts "ok"
+      rescue
+        p $!
+        p $@
       end
     when /^add rule$/
       begin
@@ -466,8 +512,9 @@ if $0 == __FILE__
           end
         end
         rule = Rule.new(ruleset, (ruleset.rules.map(&:id).max || -1) + 1, [:axiom], rule_tiles)
-        ruleset.rules += rule.all_syms
-        puts "ok"
+        new_rules = rule.all_syms
+        ruleset.rules += new_rules
+        puts "ok; #{new_rules.count} new rules added"
       rescue
         p $!
         p $@
@@ -505,7 +552,11 @@ if $0 == __FILE__
 available commands:
 new ruleset [124][/-\\|]? - reset all rules and tiles and set the rotation symmetry order and mirror plane for all rules.
 add tile (name) - create a tile with a given name. If rules have symmetry, asks for the transformed versions of the tile.
+add symmetry (permutation) - define a set of tile substitutions that leave the rules unchanged. Separate tiles within a cycle with /. Separate cycles in a set by spaces.
 add rule - define a pattern that may not appear in the generated pattern. Follow by a list of tile names. Separate multiple tiles an the same position with /. Type / followed by a list to include all tiles except the ones listed. Type only / to include all tiles at that position.
+
+Ruleset must be defined before tiles, tiles must be defined before tile symmetries that use them, symmetries must be defined before rules.
+
 show rules - list all rules in the ruleset
 
 generate (seeded)? (drizzle|rain|pour) (wxh)? - generates a pattern using the ruleset or finds and adds a rule non-trivially implied by existing rules. Uses the screen size if unspecified. If seeded is set, it attemts to generate the board again with the same RNG if unsuccessful.
