@@ -33,7 +33,7 @@ Ruleset = Struct.new(
       r: rules.map do |r|
         {
           s: [r.source[0]] + r.source[1..].map{|s| rule_id_map[s]},
-          t: r.tiles.map{|tss| tss.map{|ts| ts.map{|t| tile_map[t]}}}
+          t: r.compressed_tiles
         }
       end
     })
@@ -51,12 +51,14 @@ def Ruleset.from_json str
     nil
   )
   ruleset.rules = json[:r].map.with_index do |r, i|
-    Rule.new(
+    rule = Rule.new(
       ruleset,
       i,
       [r[:s][0].to_sym] + r[:s][1..],
-      r[:t].map{|tss| tss.map{|ts| ts.map{|t| tiles[t.to_i]}}}
+      r[:t]
     )
+    rule.decompress_tiles
+    rule
   end
   ruleset
 end
@@ -129,6 +131,32 @@ Rule = Struct.new(
     end
 
     [self] + bitmaps[1..].map.with_index(1){|bmp, i| Rule.new(ruleset, id + i, [:symm, id], bmp)}
+  end
+
+  B64E = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+  B64D = Hash[B64E.chars.each_with_index.to_a]
+
+  def compressed_tiles
+    tiles.map do |row|
+      row.map do |cell|
+        ruleset.tileset.map{|tile| cell.include?(tile) ? 1 : 0}
+               .each_slice(6).map{|slice| B64E[slice.join.ljust(6, "0").to_i(2)]}.join
+      end.join
+    end.join "/"
+  end
+
+  def decompress_tiles
+    if tiles.is_a? String
+      self.tiles = tiles.split("/").map do |row|
+        row.chars.each_slice((ruleset.tileset.count - 1) / 6 + 1).map do |cell|
+          cell.map{|char| B64D[char].to_s(2).rjust(6, "0")}.join
+              .chars.map.with_index{|bit, ix| bit == "1" ? ruleset.tileset[ix] : nil}
+              .compact
+        end
+      end
+    else
+      self.tiles = tiles.map{|tss| tss.map{|ts| ts.map{|t| ruleset.tileset[t.to_i]}}}
+    end
   end
 
   def to_s
