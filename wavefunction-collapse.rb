@@ -5,7 +5,7 @@ require 'io/console'
 Tile = Struct.new(:name, :ascii, :rotated, :mirrored) do
   def inspect;
     "<Tile name = #{name.inspect} ascii = #{ascii.inspect} " +
-      "rotated = #{rotated.is_a?(Tile) ? "Tile #{rotated.name}" : rotated.inspect} " + 
+      "rotated = #{rotated.is_a?(Tile) ? "Tile #{rotated.name}" : rotated.inspect} " +
       "mirrored = #{mirrored.is_a?(Tile) ? "Tile #{mirrored.name}" : mirrored.inspect}"
   end
 end
@@ -68,7 +68,7 @@ Rule = Struct.new(
               #        [:symm, id]       - different orientation of another rule,
               #        [#conflict, id..] - impossible configuration proven by some other rules. Must refer to conflict or axiom rules
   :tiles) do # 2d grid of tile sets matching each cell. Any option need to match for the rule to match.
-  
+
   # returns [x, y, c] if the pattern matches at [dx, dy], meaning no c can occur at x, y, or nil if the rule doesn't apply there.
   # # A rule is considered matching if its pattern occurs fully within the haystack, except for up to one cell.
   # If all cells match, any of them is returned.
@@ -77,12 +77,12 @@ Rule = Struct.new(
       row.map.with_index{|tile, dx| [dx, dy, tile]}
     end.select{|_, _, tile| tile != ruleset.tileset}
        .map{|x, y, tile| [x, y, ruleset.tileset - tile]}
-       .sort_by{|_, _, tile| tile.length}
+       .sort_by{|_, _, tile| - tile.length}
 
     r = nil
     @sparse.each do |dx, dy, tile|
       unless tile.all?{!haystack[y + dy][x + dx].include?(_1)}
-        if r.nil? && haystack[y + dy][x + dx].any?{!tile.include?(_1)} 
+        if r.nil? && haystack[y + dy][x + dx].any?{!tile.include?(_1)}
           r = [x + dx, y + dy, haystack[y + dy][x + dx] - tile]
         else
           return nil
@@ -107,7 +107,7 @@ Rule = Struct.new(
     when "2"
       bitmaps << bitmaps.last.reverse.map{|row| row.reverse.map{|tile| tile.map(&:rotated)}}
     end
-    case ruleset.symmetry[1] 
+    case ruleset.symmetry[1]
     when "-"  then bitmaps += bitmaps.map{|bmp| bmp.reverse.map{|row| row.map{|tile| tile.map(&:mirrored)}}}
     when "\\" then bitmaps += bitmaps.map{|bmp| bmp.transpose.map{|row| row.map{|tile| tile.map(&:mirrored)}}}
     when "|"  then bitmaps += bitmaps.map{|bmp| bmp.transpose.reverse.transpose.map{|row| row.map{|tile| tile.map(&:mirrored)}}}
@@ -149,7 +149,7 @@ Rule = Struct.new(
   end
 end
 
-# happy path: Applies all rules to the given point on the board and any consequent changes 
+# happy path: Applies all rules to the given point on the board and any consequent changes
 # until no change happens and modifies the stats. If a conflict is detected, returns the new
 # rule. Otherwise, returns nothing. If conflict check mode is set, returns true if conflict
 # has occured, and doesn't generate a new rule
@@ -229,7 +229,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
         end
       end
     end
-    rule_bitmap[y][x] = ruleset.tileset & rule_bitmap[y][x] # sort bitmap entries by the global tile order 
+    rule_bitmap[y][x] = ruleset.tileset & rule_bitmap[y][x] # sort bitmap entries by the global tile order
   end
 
   rule_bitmap.shift while rule_bitmap.first.all? {|tile| tile.length == ruleset.tileset.length}
@@ -295,7 +295,7 @@ def prompt_tiles(ruleset, name)
       print "tile flipped along rising diagonal: "
       mirrored = gets.chomp
     end
-    Tile.new name, ascii, rotated, mirrored 
+    Tile.new name, ascii, rotated, mirrored
   end
 
   tile_by_name = {}
@@ -303,7 +303,7 @@ def prompt_tiles(ruleset, name)
 
   symm_r = ruleset.symmetry[0].to_sym
   symm_m = ruleset.symmetry[1]&.to_sym
-  
+
   i0 = p prompt_tile(name, symm_r, symm_m)
   tile_by_name[i0.name] = i0
   tile_by_mirror[i0.mirrored] = i0.name
@@ -335,7 +335,7 @@ def prompt_tiles(ruleset, name)
   if [i0, i1, i2, i3].map{tile_by_name.include? _1.mirrored}.uniq.count != 1
     raise "all mirrored tiles should map to new tiles, or none should"
   end
-  
+
   i0.mirrored = tile_by_name[i0.mirrored] || prompt_tile(i0.mirrored, nil, i0) if i0.mirrored.is_a? String
   tile_by_name[i0.mirrored.name] = i0.mirrored
   i1.mirrored = tile_by_name[i1.mirrored] || prompt_tile(i1.mirrored, i0.mirrored, i1) if i1.mirrored.is_a? String
@@ -356,7 +356,7 @@ def vwrap tbl
     tbl.each_slice((tbl.length - 1) / n_cols + 1).map do |slice|
       n_subcols = slice.map{|row| row.is_a?(Array) ? row.length : 1}.max
       (0 ... n_subcols).map do |ix_subcol|
-        slice.map do |row| 
+        slice.map do |row|
           (row.is_a?(Array) ? row[ix_subcol] : ix_subcol == 0 ? row : nil).to_s.length
         end.max
       end
@@ -464,18 +464,18 @@ if $0 == __FILE__
       begin
         new_symm = $1.split(" ").map do |cycle_str|
           cycle = cycle_str.split("/").map do |tile_str|
-            tile = ruleset.tileset.find{_1.name == tile_str} 
+            tile = ruleset.tileset.find{_1.name == tile_str}
             raise "#{tile_str} not found in current ruleset" unless tile
             tile
           end
           if cycle.length == 1
-            raise "length-1 cycles don't need to be included in symmetry description. Did you forget a /?" 
+            raise "length-1 cycles don't need to be included in symmetry description. Did you forget a /?"
           end
           cycle
         end
         flat_symm = new_symm.flatten
         if flat_symm.length != flat_symm.uniq.length
-          raise "each tile should appear at most once in any tile permutation" 
+          raise "each tile should appear at most once in any tile permutation"
         end
         ruleset.tile_symm << new_symm
         puts "ok"
