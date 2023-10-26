@@ -430,8 +430,14 @@ def generate ruleset, method, w, h, seeded = false
     loop do
       coord_iter.next while (x, y = coord_iter.peek; board[y][x].count == 1)
       x, y, sample = loop do
-        x, y = method == :pour ? coord_iter.peek : [rand(w), rand(h)]
-        sample = if method == :drizzle 
+        x, y = case method
+               when :pour then coord_iter.peek
+               when :rain, :drizzle then [rand(w), rand(h)]
+               when :wfc
+                 count = coord_iter.lazy.map{|x, y| board[y][x].count}.select{_1 > 1}.min
+                 coord_iter.filter{|x, y| board[y][x].count == count}.sample
+               end
+        sample = if method == :drizzle
                    ruleset.tileset.sample
                  else
                    ruleset.tileset.dup.shuffle.find{board[y][x].include? _1}
@@ -553,7 +559,7 @@ if $0 == __FILE__
           puts rule
         end
       end
-    when /^generate (seeded )?(drizzle|rain|pour)( (\d+)x(\d+))?$/
+    when /^generate (seeded )?(drizzle|rain|pour|wfc)(?: (\d+)x(\d+))?$/
       if ruleset.tileset.empty?
         puts "at least one tile required"
         next
@@ -587,10 +593,11 @@ Ruleset must be defined before tiles, tiles must be defined before tile symmetri
 
 show rules - list all rules in the ruleset
 
-generate (seeded)? (drizzle|rain|pour) (wxh)? - generates a pattern using the ruleset or finds and adds a rule non-trivially implied by existing rules. Uses the screen size if unspecified. If seeded is set, it attemts to generate the board again with the same RNG if unsuccessful.
+generate (seeded)? (drizzle|rain|pour|wfc) (wxh)? - generates a pattern using the ruleset or finds and adds a rule non-trivially implied by existing rules. Uses the screen size if unspecified. If seeded is set, it attemts to generate the board again with the same RNG if unsuccessful.
   drizzle - at each step, select a random position and remove one possible tile from it
   rain - at each step, select a random position and select one tile for that position
   pour - at each step, sulect an unresolved position closest to the middle and select one tile for that position
+  wfc - wavefunction collapse classic. At each step, randomly choose a tile with the fewest possibilities and resolve it.
 
 save as (filename) - save the ruleset to a file
 load from (filename) - restore a ruleset from the file
