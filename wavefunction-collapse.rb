@@ -553,6 +553,29 @@ if $0 == __FILE__
         p $!
         p $@
       end
+    when /^delete (cascade )?rule (\d+)$/
+      delete_stack = [$2.to_i]
+      until delete_stack.empty?
+        referrer = ruleset.rules.find do |rule|
+          rule.source[0] == :conflict && rule.source[1..].include?(delete_stack.last)
+        end
+        if referrer
+          puts "rule #{delete_stack.last} is referred to by rule #{referrer.id}"
+          if $1.nil?
+            puts "deleting nothing"
+            break
+          else
+            delete_stack << referrer.id
+          end
+        else
+          puts "deleting rule #{delete_stack.last}"
+          ruleset.rules.reject! do |rule|
+            rule.id == delete_stack.last || rule.source == [:symm, delete_stack.last]
+          end
+          delete_stack.pop
+        end
+      end
+      puts "ok; #{ruleset.rules.count} rules remain"
     when /^show rules$/
       ruleset.rules.each do |rule|
         unless rule.source[0] == :symm
@@ -591,6 +614,7 @@ add rule - define a pattern that may not appear in the generated pattern. Follow
 
 Ruleset must be defined before tiles, tiles must be defined before tile symmetries that use them, symmetries must be defined before rules.
 
+delete (cascade)? rule (id) - delete a rule. Must not be referenced by other rules. If cascade is set, delete refererrers instead.
 show rules - list all rules in the ruleset
 
 generate (seeded)? (drizzle|rain|pour|wfc) (wxh)? - generates a pattern using the ruleset or finds and adds a rule non-trivially implied by existing rules. Uses the screen size if unspecified. If seeded is set, it attemts to generate the board again with the same RNG if unsuccessful.
