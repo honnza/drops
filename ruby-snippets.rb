@@ -745,7 +745,7 @@ def foo(x, limit = nil, filter: nil, n: :n4, f: 0.1, grid: nil, hicolor: false, 
     end
     if dot > 1e-7 && modes[t][:delta_1] > 1e-7
       puts "mode #{t + 1} strength = #{dot} / #{abs_dot} = #{dot / abs_dot}"
-      accepted_modes << [dot / abs_dot, t + 1, modes[t][:mode]]
+      accepted_modes << [dot, t + 1, modes[t][:mode]]
     elsif dot <= 1e-7
       puts "rejected mode #{t + 1}: dot product = #{dot}"
     else

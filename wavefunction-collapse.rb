@@ -218,7 +218,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
         end
       end
       break if conflict
-      (done = false; break) if diff > 0
+      done = false if diff > 0
     end
     break if done || conflict
   end
@@ -230,21 +230,38 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   IO.console.clear_screen
   conflict_stats = rule_stats
   renderer.call rule_bitmap
+  nf_min_y = origin_y - new_rule_min_y; nf_max_y = nf_min_y
+  nf_min_x = origin_x - new_rule_min_x; nf_max_x = nf_min_x
   coord_iter = [*0 ... rule_bitmap.length].product([*0 ... rule_bitmap[0].length]).sort_by do |y, x|
-    (origin_x - new_rule_min_x - x) ** 2 + (origin_y - new_rule_min_y - y) ** 2
-  end.reverse
-  coord_iter.each do |y, x|
+    (nf_min_x - x) ** 2 + (nf_min_y - y) ** 2
+  end.reverse.each
+  loop do
+    y, x = coord_iter.next
+    next if rule_bitmap[y][x].count == ruleset.tileset.count
     new_bitmap = rule_bitmap.map{|row| row.map{|tile| tile.dup}}
-    next if new_bitmap[y][x] == ruleset.tileset
     new_bitmap[y][x] = ruleset.tileset
     new_stats = Hash.new(0)
     if apply_ruleset(ruleset, new_bitmap, new_stats, origin_x - new_rule_min_x, origin_y - new_rule_min_y, true) {}
       rule_bitmap[y][x] = ruleset.tileset
       renderer.call rule_bitmap
       conflict_stats = new_stats
+    elsif x < nf_min_x || x > nf_max_x || y < nf_min_y || y > nf_max_y
+      nf_min_y = y if nf_min_y > y; nf_max_y = y if nf_max_y < y
+      nf_min_x = x if nf_min_x > x; nf_max_x = x if nf_max_x < x
+      coords_left = []
+      loop{coords_left << coord_iter.next}
+      coords_left.sort_by! do |y, x|
+        (nf_min_x + nf_max_x - 2 * x) ** 2 + (nf_min_y + nf_max_y - 2 * y) ** 2
+      end
+      coords_left.reverse!
+      coord_iter = coords_left.each
     end
   end
+  coord_iter = [*nf_min_y .. nf_max_y].product([*nf_min_x .. nf_max_x]).sort_by do |y, x|
+    (nf_min_x + nf_max_x - 2 * x) ** 2 + (nf_min_y + nf_max_y - y) ** 2
+  end.reverse.each
   coord_iter.each do |y, x|
+    next if ruleset.tileset.count - rule_bitmap[y][x].count <= 1
     ruleset.tileset.each do |tile|
       unless rule_bitmap[y][x].include? tile
         new_bitmap = rule_bitmap.map{|row| row.map{|tile| tile.dup}}
@@ -426,7 +443,9 @@ def generate ruleset, method, w, h, seeded = false
     board = Array.new(h){Array.new(w){ruleset.tileset.dup}}
     new_rule = nil
     stats = Hash[ruleset.rules.select{_1.source[0] != :symm}.map{[_1.id, 0]}]
-    coord_iter = [*0 ... w].product([*0 ... h]).sort_by{|x, y| (2 * x - w) ** 2 + (2 * y - h) ** 2}.each
+    stats[:g] = 0
+    coord_iter = [*0 ... w].product([*0 ... h]).sort_by{|x, y| (2 * x - w + 1) ** 2 + (2 * y - h + 1) ** 2}.each
+    IO.console.clear_screen
     loop do
       coord_iter.next while (x, y = coord_iter.peek; board[y][x].count == 1)
       x, y, sample = loop do
@@ -444,6 +463,7 @@ def generate ruleset, method, w, h, seeded = false
                  end
         break x, y, sample if board[y][x].count > 1 && board[y][x].include?(sample)
       end
+      stats[:g] += method == :drizzle ? 1 : board[y][x].count - 1
       board[y][x] = method == :drizzle ? board[y][x] - [sample] : [sample]
 
       render[board]
