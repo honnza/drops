@@ -179,8 +179,8 @@ end
 
 # happy path: Applies all rules to the given point on the board and any consequent changes
 # until no change happens and modifies the stats. If a conflict is detected, returns the new
-# rule. Otherwise, returns nothing. If conflict check mode is set, returns true if conflict
-# has occured, and doesn't generate a new rule
+# rule and the board is left unchanged. Otherwise, returns nothing. If conflict check mode is set,
+# returns true if conflict has occured, and doesn't generate a new rule
 def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check_only = false, &renderer)
   min_y = origin_y || 0; max_y = origin_y || board.length
   min_x = origin_x || 0; max_x = origin_x || board[0].length
@@ -201,7 +201,6 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
         (min_rule_x .. max_rule_x).each do |rule_x|
           diff_x, diff_y, diff_c = rule.apply_at board, rule_x, rule_y
           next unless diff_x
-          undo_log << [diff_x, diff_y, diff_c]
           min_x = [min_x, diff_x].min; max_x = [max_x, diff_x].max
           min_y = [min_y, diff_y].min; max_y = [max_y, diff_y].max
           new_rule_min_x = [new_rule_min_x, rule_x].min
@@ -214,6 +213,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
           rules_used |= [rule]
           rule_stats[stat_rule] += diff_c.count
           conflict = board[diff_y][diff_x].empty?
+          undo_log << [diff_x, diff_y, diff_c, stat_rule]
           renderer.call board
         end
       end
@@ -225,7 +225,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   return conflict if conflict_check_only
   return unless conflict
 
-  undo_log.each{|x, y, cs| board[y][x] |= cs}
+  undo_log.each{|x, y, cs, rule| board[y][x] |= cs; rule_stats[rule] -= cs.count}
   rule_bitmap = board[new_rule_min_y .. new_rule_max_y].map{_1[new_rule_min_x .. new_rule_max_x]}
   IO.console.clear_screen
   conflict_stats = rule_stats
@@ -349,7 +349,7 @@ def prompt_tiles(ruleset, name)
   symm_r = ruleset.symmetry[0].to_sym
   symm_m = ruleset.symmetry[1]&.to_sym
 
-  i0 = p prompt_tile(name, symm_r, symm_m)
+  i0 = prompt_tile(name, symm_r, symm_m)
   tile_by_name[i0.name] = i0
   tile_by_mirror[i0.mirrored] = i0.name
   if i0.rotated.is_a? String
@@ -448,7 +448,7 @@ def generate ruleset, method, w, h, seeded = false
     IO.console.clear_screen
     loop do
       coord_iter.next while (x, y = coord_iter.peek; board[y][x].count == 1)
-      x, y, sample = loop do
+      x, y, samples = loop do
         x, y = case method
                when :pour then coord_iter.peek
                when :rain, :drizzle then [rand(w), rand(h)]
@@ -456,25 +456,47 @@ def generate ruleset, method, w, h, seeded = false
                  count = coord_iter.lazy.map{|x, y| board[y][x].count}.select{_1 > 1}.min
                  coord_iter.filter{|x, y| board[y][x].count == count}.sample
                end
-        sample = if method == :drizzle
-                   ruleset.tileset.sample
-                 else
-                   ruleset.tileset.dup.shuffle.find{board[y][x].include? _1}
-                 end
-        break x, y, sample if board[y][x].count > 1 && board[y][x].include?(sample)
+        samples = if method == :drizzle
+                    [ruleset.tileset.sample]
+                  else
+                    ruleset.tileset.shuffle
+                  end.select{board[y][x].include? _1}
+        break x, y, samples if board[y][x].count > 1 && !samples.empty?
       end
       stats[:g] += method == :drizzle ? 1 : board[y][x].count - 1
-      board[y][x] = method == :drizzle ? board[y][x] - [sample] : [sample]
+      prev_board_yx = board[y][x]
+      board[y][x] = method == :drizzle ? board[y][x] - [samples[0]] : [samples[0]]
 
       render[board]
       new_rule = apply_ruleset ruleset, board, stats, x, y, &render
+      while new_rule
+        return unless seeded
+        ruleset.rules += new_rule.all_syms
+        puts "new rule found; rule id #{new_rule.id}; now at #{ruleset.rules.count} rules"
+        puts new_rule
+        puts "rule stats:"
+        puts vwrap stats.to_a
+        puts "#{stats.values.sum} total"
+        ruleset.rules.sort_by!.with_index do |rule, ix|
+          [(rule.source[0] == :symm ? -stats[rule.source[1]] : -stats[rule.id] rescue 0), rule.source[0], ix]
+        end
+        stats[new_rule.id] = 0
+        puts "press enter to retry"
+        gets
+
+        board[y][x] = prev_board_yx
+        new_rule = apply_ruleset ruleset, board, stats, nil, nil, true, &render
+        break if new_rule
+        samples.select!{board[y][x].include? _1}
+        break if samples.empty?
+        prev_board_yx = board[y][x]
+        board[y][x] = [samples[0]]
+      end
       break if new_rule
     end
 
     if new_rule
-      ruleset.rules += new_rule.all_syms
-      puts "new rule found; rule id #{new_rule.id}; now at #{ruleset.rules.count} rules"
-      puts new_rule
+      puts "conflict during recovery; rewinding"
     else
       puts "success"
     end
@@ -484,7 +506,7 @@ def generate ruleset, method, w, h, seeded = false
     ruleset.rules.sort_by!.with_index do |rule, ix|
       [(rule.source[0] == :symm ? -stats[rule.source[1]] : -stats[rule.id] rescue 0), rule.source[0], ix]
     end
-    break if !new_rule || !seeded
+    break unless new_rule
     puts "press enter to retry"
     gets
   end
@@ -613,7 +635,8 @@ if $0 == __FILE__
       begin
         generate ruleset, $2.to_sym, w, h, !$1.nil?
       rescue Interrupt
-        puts "\e#{h};1Huser abort"
+        p $!
+        p $@
       end
     when /^save as (.*)$/
       json = ruleset.to_json
