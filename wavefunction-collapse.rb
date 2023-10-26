@@ -418,7 +418,7 @@ def vwrap tbl
   end.join "\n"
 end
 
-def generate ruleset, method, w, h, seeded = false
+def generate ruleset, method, w, h, seeded, tile = nil
   render = proc do |board|
     print "\e[H\e[?25l"
     tw = board.flatten.compact[0].ascii[0].display_length
@@ -461,6 +461,7 @@ def generate ruleset, method, w, h, seeded = false
                   else
                     ruleset.tileset.shuffle
                   end.select{board[y][x].include? _1}
+        samples = [tile] + (samples - [tile]) if tile
         break x, y, samples if board[y][x].count > 1 && !samples.empty?
       end
       stats[:g] += method == :drizzle ? 1 : board[y][x].count - 1
@@ -624,7 +625,7 @@ if $0 == __FILE__
           puts rule
         end
       end
-    when /^generate (seeded )?(drizzle|rain|pour|wfc)(?: (\d+)x(\d+))?$/
+    when /^generate (seeded )?(drizzle|rain|pour|wfc)(?: (\d+)x(\d+))?(?: (\S+))?$/
       if ruleset.tileset.empty?
         puts "at least one tile required"
         next
@@ -632,8 +633,13 @@ if $0 == __FILE__
       normalize_tiles ruleset.tileset
       h = $3&.to_i || (IO.console.winsize[0] - 1) / ruleset.tileset[0].ascii.length
       w = $4&.to_i || IO.console.winsize[1] / ruleset.tileset[0].ascii[0].display_length
+      tile = ruleset.tileset.find{_1.name == $5}
+      if $5 && !tile
+        puts "couldn't find tile #{$5}"
+        next
+      end
       begin
-        generate ruleset, $2.to_sym, w, h, !$1.nil?
+        generate ruleset, $2.to_sym, w, h, !$1.nil?, tile
       rescue Interrupt
         p $!
         p $@
@@ -660,7 +666,7 @@ Ruleset must be defined before tiles, tiles must be defined before tile symmetri
 delete (cascade)? rule (id) - delete a rule. Must not be referenced by other rules. If cascade is set, delete refererrers instead.
 show rules - list all rules in the ruleset
 
-generate (seeded)? (drizzle|rain|pour|wfc) (wxh)? - generates a pattern using the ruleset or finds and adds a rule non-trivially implied by existing rules. Uses the screen size if unspecified. If seeded is set, it attemts to generate the board again with the same RNG if unsuccessful.
+generate (seeded)? (drizzle|rain|pour|wfc) (wxh)? (tile)? - generates a pattern using the ruleset or finds and adds a rule non-trivially implied by existing rules. Uses the screen size if unspecified. If seeded is set, it attemts to generate the board again with the same RNG if unsuccessful. If tile is specified, it tries to place that tile in the selected position.
   drizzle - at each step, select a random position and remove one possible tile from it
   rain - at each step, select a random position and select one tile for that position
   pour - at each step, sulect an unresolved position closest to the middle and select one tile for that position
