@@ -973,6 +973,54 @@ def foo(x, limit = nil, filter: nil, n: :n4, f: 0.1, grid: nil, hicolor: false, 
   end
 end
 
+def generate_palette n_colors
+  # using redmean from https://en.m.wikipedia.org/wiki/Color_difference#sRGB
+  # caused unstability. Switched to constant weights instead.
+  c = n_colors.times.map{[rand - 0.5, rand - 0.5, rand - 0.5]}
+  (1 .. 8092).each do |t|
+    deltas = c.map{[0, 0, 0]}
+    (0 ... n_colors - 1).each do |i|
+      (i + 2 ... n_colors).each do |j|
+        r = (c[i][0] + c[j][0] + 2) / 4
+        sq_dist = (c[i][0] - c[j][0]) ** 2 +
+                  1.6 * (c[i][1] - c[j][1]) ** 2 +
+                  (c[i][2] - c[j][2]) ** 2
+        deltas[i][0] += (c[i][0] - c[j][0])/sq_dist
+        deltas[i][1] += (c[i][1] - c[j][1])/sq_dist
+        deltas[i][2] += (c[i][2] - c[j][2])/sq_dist
+        deltas[j][0] += (c[j][0] - c[i][0])/sq_dist
+        deltas[j][1] += (c[j][1] - c[i][1])/sq_dist
+        deltas[j][2] += (c[j][2] - c[i][2])/sq_dist
+      end
+    end
+    max_c = 0
+    (0 ... n_colors).each do |i|
+      c[i][0] += deltas[i][0]
+      c[i][1] += deltas[i][1]
+      c[i][2] += deltas[i][2]
+    end
+    min_c, max_c = [-1, 1, *c.map{_1[0]}].minmax
+    mid_c = (min_c + max_c) / 2
+    c.each{_1[0] = (_1[0] - mid_c) / (max_c - mid_c)}
+    min_c, max_c = [-1, 1, *c.map{_1[1]}].minmax
+    mid_c = (min_c + max_c) / 2
+    c.each{_1[1] = (_1[1] - mid_c) / (max_c - mid_c)}
+    min_c, max_c = [-1, 1, *c.map{_1[2]}].minmax
+    mid_c = (min_c + max_c) / 2
+    c.each{_1[2] = (_1[2] - mid_c) / (max_c - mid_c)}
+    c.each{print "\e[48;2;%d;%d;%dm  \e[0m" % _1.map{|x| (127.5 * (x + 1)).round}}
+    print "\n\e[A"
+    puts if t & t - 1 == 0
+  end
+  puts
+  c.each{print "#%02x%02x%02x;" % _1.map{|x| (127.5 * (x + 1)).round}}
+  nil
+rescue Interrupt, IRB::Abort
+  puts
+  c.each{print "#%02x%02x%02x;" % _1.map{|x| (127.5 * (x + 1)).round}}
+  nil
+end
+
 class Numeric
   def round_toward(other); round(half: (self > other) ^ (self < 0) ? :down : :up); end
   def round_away(other); round(half: (self < other) ^ (self < 0) ? :down : :up); end
@@ -1029,7 +1077,7 @@ class Triangle
 
   def pts; @pts.zip(@ns).map{|pt, n| [pt[0], pt[1], n]}; end
   def reject; @priority[0] = 0; end
-  def rejected?; @priority[0] == 0]; end
+  def rejected?; @priority[0] == 0; end
   def z_gap; @priority[1]; end
   attr_reader :priority
 
