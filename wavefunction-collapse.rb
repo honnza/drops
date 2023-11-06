@@ -71,21 +71,23 @@ Rule = Struct.new(
               #        [#conflict, id..] - impossible configuration proven by some other rules. Must refer to conflict or axiom rules
   :tiles) do # 2d grid of tile sets matching each cell. Any option need to match for the rule to match.
 
-  # returns [x, y, c] if the pattern matches at [dx, dy], meaning no c can occur at x, y, or nil if the rule doesn't apply there.
-  # # A rule is considered matching if its pattern occurs fully within the haystack, except for up to one cell.
-  # If all cells match, any of them is returned.
-  def apply_at(haystack, x, y)
+  def sparse
     @sparse ||= tiles.flat_map.with_index do |row, dy|
       row.map.with_index{|tile, dx| [dx, dy, tile]}
     end.select{|_, _, tile| tile != ruleset.tileset}
        .map{|x, y, tile| [x, y, ruleset.tileset - tile]}
        .sort_by{|_, _, tile| - tile.length}
+  end
 
+  # returns [x, y, c] if the pattern matches at [dx, dy], meaning no c can occur at x, y, or nil if the rule doesn't apply there.
+  # # A rule is considered matching if its pattern occurs fully within the board, except for up to one cell.
+  # If all cells match, any of them is returned.
+  def apply_at(board, x, y)
     r = nil
-    @sparse.each do |dx, dy, tile|
-      unless tile.all?{!haystack[y + dy][x + dx].include?(_1)}
-        if r.nil? && haystack[y + dy][x + dx].any?{!tile.include?(_1)}
-          r = [x + dx, y + dy, haystack[y + dy][x + dx] - tile]
+    sparse.each do |dx, dy, tile|
+      unless tile.all?{!board[y + dy][x + dx].include?(_1)}
+        if r.nil? && board[y + dy][x + dx].any?{!tile.include?(_1)}
+          r = [x + dx, y + dy, board[y + dy][x + dx] - tile]
         else
           return nil
         end
@@ -93,7 +95,7 @@ Rule = Struct.new(
     end
 
     if r.nil?
-      [x, y, haystack[y][x]]
+      [x, y, board[y][x]]
     else
       r
     end
@@ -133,7 +135,7 @@ Rule = Struct.new(
     [self] + bitmaps[1..].map.with_index(1){|bmp, i| Rule.new(ruleset, id + i, [:symm, id], bmp)}
   end
 
-  B64E = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+  B64E = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789[]"
   B64D = Hash[B64E.chars.each_with_index.to_a]
 
   def compressed_tiles
@@ -177,15 +179,20 @@ Rule = Struct.new(
   end
 end
 
-# happy path: Applies all rules to the given point on the board and any consequent changes
+# Applies all rules to the given point on the board and any consequent changes
 # until no change happens and modifies the stats. If a conflict is detected, returns the new
-# rule and the board is left unchanged. Otherwise, returns nothing. If conflict check mode is set,
-# returns true if conflict has occured, and doesn't generate a new rule
-def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check_only = false, &renderer)
-  min_y = origin_y || 0; max_y = origin_y || board.length
-  min_x = origin_x || 0; max_x = origin_x || board[0].length
-  new_rule_min_y = origin_y || 0; new_rule_max_y = origin_y || board.length
-  new_rule_min_x = origin_x || 0; new_rule_max_x = origin_x || board[0].length
+# rule.
+# ruleset - never modified by this function
+# board, rule_stats - On happy path, all rules are applied. If a conflict is detected, left unchanged.
+# origin_x, origin_y - if set, assumes all rules disjoint with that position have already been applied.
+#                      required unless conflict_check_only is set.
+# conflict_check_only - if set, rule generation is skipped. Returns true or false indicating whether a conflict was found.
+# stop_at - x, y, tiles triple. If set and the given position reached thu given set of possibilities, assumes a conflict.
+# renderer - called after each successful rule application on the happy path, and after each successful
+#            generalisation while generating a r ule.
+def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check_only = false, stop_at = nil, &renderer)
+  min_y = origin_y || 0; max_y = origin_y || board.length - 1
+  min_x = origin_x || 0; max_x = origin_x || board[0].length - 1
   conflict = false
   rules_used = []
   undo_log = []
@@ -203,75 +210,112 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
           next unless diff_x
           min_x = [min_x, diff_x].min; max_x = [max_x, diff_x].max
           min_y = [min_y, diff_y].min; max_y = [max_y, diff_y].max
-          new_rule_min_x = [new_rule_min_x, rule_x].min
-          new_rule_min_y = [new_rule_min_y, rule_y].min
-          new_rule_max_x = [new_rule_max_x, rule_x + rule.tiles[0].length - 1].max
-          new_rule_max_y = [new_rule_max_y, rule_y + rule.tiles.length - 1].max
           board[diff_y][diff_x] -= diff_c
           diff += diff_c.count
           stat_rule = rule.source[0] == :symm ? rule.source[1] : rule.id
           rules_used |= [rule]
           rule_stats[stat_rule] += diff_c.count
-          conflict = board[diff_y][diff_x].empty?
-          undo_log << [diff_x, diff_y, diff_c, stat_rule]
-          renderer.call board
+          conflict = board[diff_y][diff_x].empty? ||
+            stop_at && stop_at[0] == diff_x && stop_at[1] == diff_y && board[diff_y][diff_x].all?{stop_at[2].include? _1}
+          undo_log << [diff_x, diff_y, diff_c, rule_x, rule_y, rule]
+          renderer.call board, rule_stats.values.sum, board.length * board[0].length * (ruleset.tileset.length - 1)
+          break if conflict
         end
+        break if conflict
       end
       break if conflict
       done = false if diff > 0
     end
     break if done || conflict
   end
-  return conflict if conflict_check_only
+
+  # rule reconstruction: The last rule in the undo log is the one that has detected a conflict and
+  # is always relevant. When a rule application is relevant, we note all of its triggers as relevant,
+  # where trigger is a location in worldspace along with a list of tiles that must be excluded from
+  # that location. Rules prior to the last are relevant iff they contributed to the trigger.
+
   return unless conflict
 
-  undo_log.each{|x, y, cs, rule| board[y][x] |= cs; rule_stats[rule] -= cs.count}
-  rule_bitmap = board[new_rule_min_y .. new_rule_max_y].map{_1[new_rule_min_x .. new_rule_max_x]}
+  new_rule_tiles = []
+  undo_log.reverse.each do |diff_x, diff_y, diff_c, rule_x, rule_y, rule|
+    board[diff_y][diff_x] |= diff_c
+    next if !new_rule_tiles.empty? && !new_rule_tiles.any? do |x, y, c|
+      diff_x == x && diff_y == y && diff_c.include?(c)
+    end
+    diff_x = diff_y = nil if new_rule_tiles.empty?
+    rule.sparse.each do |x, y, c|
+      next if diff_x == rule_x + x && diff_y == rule_y + y
+      c.each{new_rule_tiles |= [[rule_x + x, rule_y + y, _1]]}
+    end
+  end
+
+  return conflict if conflict_check_only
+
+  if !new_rule_tiles.any?{|x, y, c| x == origin_x && y == origin_y}
+    puts "error: tracing the undo log didnn't point back to the origin"
+    puts "origin: " + [origin_x, origin_y].inspect
+    undo_log.each do |diff_x, diff_y, diff_c, rule_x, rule_y, rule|
+      puts "rule #{rule.id} at #{[rule_x, rule_y]} removed #{diff_c.map(&:name).join("/")} from #{[diff_x, diff_y]}"
+      puts "triggers: " + rule.sparse.reject{|x, y, _| x == diff_x && y == diff_y}.map{|x, y, cs|
+        "#{cs.map(&:name).join("/")} at #{[x + rule_x, y + rule_y]}"
+      }.join(", ")
+    end
+    gets
+  end
+  
+  new_rule_min_x, new_rule_max_x = new_rule_tiles.map{|x, _, _| x}.minmax
+  new_rule_min_y, new_rule_max_y = new_rule_tiles.map{|_, y, _| y}.minmax
+  rule_bitmap = [*new_rule_min_y .. new_rule_max_y].map{[*new_rule_min_x .. new_rule_max_x].map{ruleset.tileset.dup}}
+  new_rule_tiles.each{|x, y, c| rule_bitmap[y - new_rule_min_y][x - new_rule_min_x] = board[y][x]}
   IO.console.clear_screen
   conflict_stats = rule_stats
-  renderer.call rule_bitmap
+  renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length
   nf_min_y = origin_y - new_rule_min_y; nf_max_y = nf_min_y
   nf_min_x = origin_x - new_rule_min_x; nf_max_x = nf_min_x
   coord_iter = [*0 ... rule_bitmap.length].product([*0 ... rule_bitmap[0].length]).sort_by do |y, x|
     (nf_min_x - x) ** 2 + (nf_min_y - y) ** 2
-  end.reverse.each
+  end.reverse.each.with_index(1)
   loop do
-    y, x = coord_iter.next
+    (y, x), ix = coord_iter.next
     next if rule_bitmap[y][x].count == ruleset.tileset.count
     new_bitmap = rule_bitmap.map{|row| row.map{|tile| tile.dup}}
     new_bitmap[y][x] = ruleset.tileset
     new_stats = Hash.new(0)
     if apply_ruleset(ruleset, new_bitmap, new_stats, origin_x - new_rule_min_x, origin_y - new_rule_min_y, true) {}
       rule_bitmap[y][x] = ruleset.tileset
-      renderer.call rule_bitmap
       conflict_stats = new_stats
     elsif x < nf_min_x || x > nf_max_x || y < nf_min_y || y > nf_max_y
       nf_min_y = y if nf_min_y > y; nf_max_y = y if nf_max_y < y
       nf_min_x = x if nf_min_x > x; nf_max_x = x if nf_max_x < x
       coords_left = []
-      loop{coords_left << coord_iter.next}
+      loop{coords_left << coord_iter.next.first}
       coords_left.sort_by! do |y, x|
         (nf_min_x + nf_max_x - 2 * x) ** 2 + (nf_min_y + nf_max_y - 2 * y) ** 2
       end
       coords_left.reverse!
-      coord_iter = coords_left.each
+      coord_iter = coords_left.each.with_index(ix + 1)
     end
+    renderer.call rule_bitmap, ix, rule_bitmap.length * rule_bitmap[0].length
   end
   coord_iter = [*nf_min_y .. nf_max_y].product([*nf_min_x .. nf_max_x]).sort_by do |y, x|
-    (nf_min_x + nf_max_x - 2 * x) ** 2 + (nf_min_y + nf_max_y - y) ** 2
+    (nf_min_x + nf_max_x - 2 * x) ** 2 + (nf_min_y + nf_max_y - 2 * y) ** 2
   end.reverse.each
-  coord_iter.each do |y, x|
-    next if ruleset.tileset.count - rule_bitmap[y][x].count <= 1
-    ruleset.tileset.each do |tile|
+  coord_iter.each.with_index do |(y, x), ix|
+    next if ruleset.tileset.count - rule_bitmap[y][x].count <= 1 rescue (p [nf_min_x, origin_x, nf_max_x, nf_min_y, y, nf_max_y]; raise)
+    ruleset.tileset.each.with_index do |tile, ix2|
       unless rule_bitmap[y][x].include? tile
         new_bitmap = rule_bitmap.map{|row| row.map{|tile| tile.dup}}
-        new_bitmap[y][x] << tile
+        new_bitmap[y][x] += [tile]
         new_stats = Hash.new(0)
-        if apply_ruleset(ruleset, new_bitmap, new_stats, origin_x - new_rule_min_x, origin_y - new_rule_min_y, true) {}
-          rule_bitmap[y][x] << tile
-          renderer.call rule_bitmap
+        if apply_ruleset(ruleset, new_bitmap, new_stats,
+                          origin_x - new_rule_min_x, origin_y - new_rule_min_y,
+                          true, [x, y, rule_bitmap[y][x]]
+                        ) {}
+          rule_bitmap[y][x] += [tile]
           conflict_stats = new_stats
         end
+        nf_box_size = (nf_max_x - nf_min_x + 1) * (nf_max_y - nf_min_y + 1)
+        renderer.call rule_bitmap, ix * ruleset.tileset.length + ix2, nf_box_size * ruleset.tileset.length
       end
     end
     rule_bitmap[y][x] = ruleset.tileset & rule_bitmap[y][x] # sort bitmap entries by the global tile order
@@ -418,8 +462,25 @@ def vwrap tbl
   end.join "\n"
 end
 
+def progress_bar progress, text = "", width 
+  on_cells = ((width - 2) * progress.clamp(0 .. 1))
+  if on_cells > text.length
+    text = text.ljust(width - 2)
+    text[on_cells.floor] = (0x2590 - on_cells % 1 * 8).floor.chr(Encoding::UTF_8) if on_cells % 1 != 0
+    (text + "]").insert(on_cells.floor, "\e[0m")
+                .insert(0, "[\e[107;30m")
+  else
+    bg = (on_cells % 1 * 256).floor
+    fg = bg > 127 ? 30 : 97
+    (text.ljust(width - 2) + "]")
+      .insert(on_cells.floor + 1, "\e[0m")
+      .insert(on_cells.floor, "\e[48;2;#{bg};#{bg};#{bg};#{fg}m")
+      .insert(0, "[\e[107;30m")
+  end
+end
+
 def generate ruleset, method, w, h, seeded, tile = nil
-  render = proc do |board|
+  render = proc do |board, n, d|
     print "\e[H\e[?25l"
     tw = board.flatten.compact[0].ascii[0].display_length
     should_puts = tw * w <= IO.console.winsize[1]
@@ -427,13 +488,13 @@ def generate ruleset, method, w, h, seeded, tile = nil
     board.each do |br|
       (0 ... br.flatten.compact[0].ascii.length).each do |tri|
         br.each do |bc|
-          str << (bc.count == 1 ? bc[0].ascii[tri] : [bc.count, 9].min.to_s * tw)
+          str << (bc.count == 1 ? bc[0].ascii[tri] : [bc.count, 10 ** tw - 1].min.to_s.rjust(tw, "0"))
         end
         str << "\n" if should_puts
       end
     end
     print str
-    sleep 0.02
+    print progress_bar(n.fdiv(d), "#{n} / #{d}", IO.console.winsize[1] - 1)
     print "\e[?25h"
   end
 
@@ -468,10 +529,9 @@ def generate ruleset, method, w, h, seeded, tile = nil
       prev_board_yx = board[y][x]
       board[y][x] = method == :drizzle ? board[y][x] - [samples[0]] : [samples[0]]
 
-      render[board]
+      render.call board, stats.values.sum, board.length * board[0].length * (ruleset.tileset.length - 1)
       new_rule = apply_ruleset ruleset, board, stats, x, y, &render
       while new_rule
-        return unless seeded
         ruleset.rules += new_rule.all_syms
         puts "new rule found; rule id #{new_rule.id}; now at #{ruleset.rules.count} rules"
         puts new_rule
@@ -489,7 +549,7 @@ def generate ruleset, method, w, h, seeded, tile = nil
         new_rule = apply_ruleset ruleset, board, stats, nil, nil, true, &render
         break if new_rule
         samples.select!{board[y][x].include? _1}
-        break if samples.empty?
+        (stats[:g] -= 1; break) if board[y][x].count == 1
         prev_board_yx = board[y][x]
         board[y][x] = [samples[0]]
       end
@@ -498,6 +558,7 @@ def generate ruleset, method, w, h, seeded, tile = nil
 
     if new_rule
       puts "conflict during recovery; rewinding"
+        return unless seeded
     else
       puts "success"
     end
@@ -619,9 +680,9 @@ if $0 == __FILE__
         end
       end
       puts "ok; #{ruleset.rules.count} rules remain"
-    when /^show rules$/
+    when /^show (all )?rules$/
       ruleset.rules.each do |rule|
-        unless rule.source[0] == :symm
+        if $1 || rule.source[0] != :symm
           puts rule
         end
       end
@@ -664,7 +725,7 @@ add rule - define a pattern that may not appear in the generated pattern. Follow
 Ruleset must be defined before tiles, tiles must be defined before tile symmetries that use them, symmetries must be defined before rules.
 
 delete (cascade)? rule (id) - delete a rule. Must not be referenced by other rules. If cascade is set, delete refererrers instead.
-show rules - list all rules in the ruleset
+show (all)? rules - list all rules in the ruleset. Omits symmetric images of other rules unless specified.
 
 generate (seeded)? (drizzle|rain|pour|wfc) (wxh)? (tile)? - generates a pattern using the ruleset or finds and adds a rule non-trivially implied by existing rules. Uses the screen size if unspecified. If seeded is set, it attemts to generate the board again with the same RNG if unsuccessful. If tile is specified, it tries to place that tile in the selected position.
   drizzle - at each step, select a random position and remove one possible tile from it
