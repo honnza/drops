@@ -63,6 +63,26 @@ def Ruleset.from_json str
   ruleset
 end
 
+# bounding box sliding window - manages a queue of bounding boxes, with a method to expand the last
+# bounding box, and a method to add a new empty bounding box and return the union of the last n
+# bounding boxes. The latter returns nil if all of the last n boxes have all been empty
+class BBSliw
+  def initialize(init_box, n_boxes)
+    @q = [init_box] * n_boxes
+  end
+  def grow(box)
+    @q[-1] ||= box
+    @q[-1] = [[@q[-1][0], box[0]].min, [@q[-1][1], box[1]].max, [@q[-1][2], box[2]].min, [@q[-1][3], box[3]].max]
+  end
+  def shift
+    @q << nil
+    cq = @q.compact
+    return nil if cq.empty?
+    @q.shift
+    [cq.map{_1[0]}.min, cq.map{_1[1]}.max, cq.map{_1[2]}.min, cq.map{_1[3]}.max]
+  end
+end
+
 Rule = Struct.new(
   :ruleset,
   :id,        # unchanging integer identifier within the ruleset
@@ -191,25 +211,27 @@ end
 # renderer - called after each successful rule application on the happy path, and after each successful
 #            generalisation while generating a r ule.
 def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check_only = false, stop_at = nil, &renderer)
+  return if ruleset.rules.empty?
   min_y = origin_y || 0; max_y = origin_y || board.length - 1
   min_x = origin_x || 0; max_x = origin_x || board[0].length - 1
+  bb_sliw = BBSliw.new [min_x, max_x, min_y, max_y], ruleset.rules.count
   conflict = false
   rules_used = []
   undo_log = []
   loop do
-    done = true
     ruleset.rules.each do |rule|
       diff = 0
-      min_rule_y = [min_y - rule.tiles.length + 1, 0].max
-      max_rule_y = [max_y, board.length - rule.tiles.length].min
+      min_x, max_x, min_y, max_y = bb_sliw.shift
+      return if min_x.nil?
       min_rule_x = [min_x - rule.tiles[0].length + 1, 0].max
       max_rule_x = [max_x, board[0].length - rule.tiles[0].length].min
+      min_rule_y = [min_y - rule.tiles.length + 1, 0].max
+      max_rule_y = [max_y, board.length - rule.tiles.length].min
       (min_rule_y .. max_rule_y).each do |rule_y|
         (min_rule_x .. max_rule_x).each do |rule_x|
           diff_x, diff_y, diff_c = rule.apply_at board, rule_x, rule_y
           next unless diff_x
-          min_x = [min_x, diff_x].min; max_x = [max_x, diff_x].max
-          min_y = [min_y, diff_y].min; max_y = [max_y, diff_y].max
+          bb_sliw.grow [diff_x, diff_x, diff_y, diff_y]
           board[diff_y][diff_x] -= diff_c
           diff += diff_c.count
           stat_rule = rule.source[0] == :symm ? rule.source[1] : rule.id
@@ -224,9 +246,8 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
         break if conflict
       end
       break if conflict
-      done = false if diff > 0
     end
-    break if done || conflict
+    break if conflict
   end
 
   # rule reconstruction: The last rule in the undo log is the one that has detected a conflict and
@@ -237,12 +258,17 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   return unless conflict
 
   new_rule_tiles = []
-  undo_log.reverse.each do |diff_x, diff_y, diff_c, rule_x, rule_y, rule|
+  conflict_stats = rule_stats.transform_values{0}
+  undo_log.reverse.each do |entry|
+    diff_x, diff_y, diff_c, rule_x, rule_y, rule = entry
     board[diff_y][diff_x] |= diff_c
     next if !new_rule_tiles.empty? && !new_rule_tiles.any? do |x, y, c|
       diff_x == x && diff_y == y && diff_c.include?(c)
     end
     diff_x = diff_y = nil if new_rule_tiles.empty?
+    entry << :x
+    stat_rule = rule.source[0] == :symm ? rule.source[1] : rule.id
+    conflict_stats[stat_rule] += diff_c.length
     rule.sparse.each do |x, y, c|
       next if diff_x == rule_x + x && diff_y == rule_y + y
       c.each{new_rule_tiles |= [[rule_x + x, rule_y + y, _1]]}
@@ -251,25 +277,26 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
 
   return conflict if conflict_check_only
 
+  new_rule_min_x, new_rule_max_x = new_rule_tiles.map{|x, _, _| x}.minmax
+  new_rule_min_y, new_rule_max_y = new_rule_tiles.map{|_, y, _| y}.minmax
+  rule_bitmap = [*new_rule_min_y .. new_rule_max_y].map{[*new_rule_min_x .. new_rule_max_x].map{ruleset.tileset.dup}}
+  new_rule_tiles.each{|x, y, c| rule_bitmap[y - new_rule_min_y][x - new_rule_min_x] = board[y][x]}
+  IO.console.clear_screen
+  renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length
+
   if !new_rule_tiles.any?{|x, y, c| x == origin_x && y == origin_y}
-    puts "error: tracing the undo log didnn't point back to the origin"
+    puts "x = #{new_rule_min_x} .. #{new_rule_max_x} y = #{new_rule_min_y} .. #{new_rule_max_y}"
+    puts "error: tracing the undo log didn't point back to the origin"
     puts "origin: " + [origin_x, origin_y].inspect
-    undo_log.each do |diff_x, diff_y, diff_c, rule_x, rule_y, rule|
-      puts "rule #{rule.id} at #{[rule_x, rule_y]} removed #{diff_c.map(&:name).join("/")} from #{[diff_x, diff_y]}"
+    undo_log.each do |diff_x, diff_y, diff_c, rule_x, rule_y, rule, matched|
+      puts "#{matched} rule #{rule.id} at #{[rule_x, rule_y]} removed #{diff_c.map(&:name).join("/")} from #{[diff_x, diff_y]}"
       puts "triggers: " + rule.sparse.reject{|x, y, _| x == diff_x && y == diff_y}.map{|x, y, cs|
         "#{cs.map(&:name).join("/")} at #{[x + rule_x, y + rule_y]}"
       }.join(", ")
     end
     gets
   end
-  
-  new_rule_min_x, new_rule_max_x = new_rule_tiles.map{|x, _, _| x}.minmax
-  new_rule_min_y, new_rule_max_y = new_rule_tiles.map{|_, y, _| y}.minmax
-  rule_bitmap = [*new_rule_min_y .. new_rule_max_y].map{[*new_rule_min_x .. new_rule_max_x].map{ruleset.tileset.dup}}
-  new_rule_tiles.each{|x, y, c| rule_bitmap[y - new_rule_min_y][x - new_rule_min_x] = board[y][x]}
-  IO.console.clear_screen
-  conflict_stats = rule_stats
-  renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length
+
   nf_min_y = origin_y - new_rule_min_y; nf_max_y = nf_min_y
   nf_min_x = origin_x - new_rule_min_x; nf_max_x = nf_min_x
   coord_iter = [*0 ... rule_bitmap.length].product([*0 ... rule_bitmap[0].length]).sort_by do |y, x|
