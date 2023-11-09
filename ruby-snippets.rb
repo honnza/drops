@@ -973,14 +973,14 @@ def foo(x, limit = nil, filter: nil, n: :n4, f: 0.1, grid: nil, hicolor: false, 
   end
 end
 
-def generate_palette n_colors
+def generate_palette n_colors, adjacencies
   # using redmean from https://en.m.wikipedia.org/wiki/Color_difference#sRGB
   # caused unstability. Switched to constant weights instead.
   c = n_colors.times.map{[rand - 0.5, rand - 0.5, rand - 0.5]}
   (1 .. 8092).each do |t|
     deltas = c.map{[0, 0, 0]}
     (0 ... n_colors - 1).each do |i|
-      (i + 2 ... n_colors).each do |j|
+      (i + 1 ... n_colors).each do |j|
         r = (c[i][0] + c[j][0] + 2) / 4
         sq_dist = (c[i][0] - c[j][0]) ** 2 +
                   1.6 * (c[i][1] - c[j][1]) ** 2 +
@@ -992,6 +992,11 @@ def generate_palette n_colors
         deltas[j][1] += (c[j][1] - c[i][1])/sq_dist
         deltas[j][2] += (c[j][2] - c[i][2])/sq_dist
       end
+    end
+    adjacencies.each do |i, j|
+      diff_c = c[i][0] - c[j][0]; deltas[i][0] -= diff_c / 2; deltas[j][0] += diff_c / 2
+      diff_c = c[i][1] - c[j][1]; deltas[i][1] -= diff_c / 2; deltas[j][1] += diff_c / 2
+      diff_c = c[i][2] - c[j][2]; deltas[i][2] -= diff_c / 2; deltas[j][2] += diff_c / 2
     end
     max_c = 0
     (0 ... n_colors).each do |i|
