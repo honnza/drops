@@ -521,7 +521,7 @@ def generate ruleset, method, w, h, seeded, tile = nil
 
   srand
   loop do
-    srand Random.seed
+    srand Random.seed if seeded == :seeded
     board = Array.new(h){Array.new(w){ruleset.tileset.dup}}
     new_rule = nil
     stats = Hash[ruleset.rules.select{_1.source[0] != :symm}.map{[_1.id, 0]}]
@@ -707,7 +707,7 @@ if $0 == __FILE__
           puts rule
         end
       end
-    when /^generate (seeded )?(drizzle|rain|pour|wfc)(?: (\d+)x(\d+))?(?: (\S+))?$/
+    when /^gen(?:erate)? ((?:un)seeded )?(drizzle|rain|pour|wfc)(?: (\d+)x(\d+))?(?: (\S+))?$/
       if ruleset.tileset.empty?
         puts "at least one tile required"
         next
@@ -721,7 +721,7 @@ if $0 == __FILE__
         next
       end
       begin
-        generate ruleset, $2.to_sym, w, h, !$1.nil?, tile
+        generate ruleset, $2.to_sym, w, h, $1&.to_sym, tile
       rescue Interrupt
         p $!
         p $@
@@ -748,7 +748,7 @@ Ruleset must be defined before tiles, tiles must be defined before tile symmetri
 delete (cascade)? rule (id) - delete a rule. Must not be referenced by other rules. If cascade is set, delete refererrers instead.
 show (all)? rules - list all rules in the ruleset. Omits symmetric images of other rules unless specified.
 
-generate (seeded)? (drizzle|rain|pour|wfc) (wxh)? (tile)? - generates a pattern using the ruleset or finds and adds a rule non-trivially implied by existing rules. Uses the screen size if unspecified. If seeded is set, it attemts to generate the board again with the same RNG if unsuccessful. If tile is specified, it tries to place that tile in the selected position.
+(gen|generate) (seeded|unseeded)? (drizzle|rain|pour|wfc) (wxh)? (tile)? - generates a pattern using the ruleset or finds and adds a rule non-trivially implied by existing rules. Uses the screen size if unspecified. If seeded is set, it attemts to generate the board again with the same RNG if unsuccessful. If unseededd is set, it retries with a different RNG. If neither is set, aborts after one attempt. If tile is specified, it tries to place that tile in the selected position.
   drizzle - at each step, select a random position and remove one possible tile from it
   rain - at each step, select a random position and select one tile for that position
   pour - at each step, sulect an unresolved position closest to the middle and select one tile for that position
