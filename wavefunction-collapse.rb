@@ -240,7 +240,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
           conflict = board[diff_y][diff_x].empty? ||
             stop_at && stop_at[0] == diff_x && stop_at[1] == diff_y && board[diff_y][diff_x].all?{stop_at[2].include? _1}
           undo_log << [diff_x, diff_y, diff_c, rule_x, rule_y, rule]
-          renderer.call board, rule_stats.values.sum, board.length * board[0].length * (ruleset.tileset.length - 1)
+          renderer.call board, rule_stats.values.sum, board.length * board[0].length * (ruleset.tileset.length - 1), [diff_x, diff_x, diff_y, diff_y]
           break if conflict
         end
         break if conflict
@@ -507,20 +507,19 @@ def progress_bar progress, text = "", width
 end
 
 def generate ruleset, method, w, h, seeded, tile = nil
-  render = proc do |board, n, d|
+  render = proc do |board, n, d, diff = [0, board[0].length - 1, 0, board.length - 1]|
     print "\e[H\e[?25l"
-    tw = board.flatten.compact[0].ascii[0].display_length
-    should_puts = tw * w <= IO.console.winsize[1]
-    str = ""
-    board.each do |br|
-      (0 ... br.flatten.compact[0].ascii.length).each do |tri|
-        br.each do |bc|
-          str << (bc.count == 1 ? bc[0].ascii[tri] : [bc.count, 10 ** tw - 1].min.to_s.rjust(tw, "0"))
-        end
-        str << "\n" if should_puts
+    tw = board[0].flatten.compact[0].ascii[0].display_length
+    th = board[0].flatten.compact[0].ascii.length
+    (diff[2] .. diff[3]).each do |y|
+      (0 ... th).each do |ty|
+        print "\e[#{th * y + ty + 1};#{diff[0] * tw + 1}H"
+        print (diff[0] .. diff[1]).map{|x|
+          (board[y][x].count == 1 ? board[y][x][0].ascii[ty] : [board[y][x].count, 10 ** tw - 1].min.to_s.rjust(tw))
+        }.join
       end
     end
-    print str
+    print "\e[#{board.length * th + 1};1H"
     print progress_bar(n.fdiv(d), "#{n} / #{d}", IO.console.winsize[1] - 1)
     print "\e[?25h"
   end
