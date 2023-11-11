@@ -299,52 +299,47 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
 
   nf_min_y = origin_y - new_rule_min_y; nf_max_y = nf_min_y
   nf_min_x = origin_x - new_rule_min_x; nf_max_x = nf_min_x
-  coord_iter = [*0 ... rule_bitmap.length].product([*0 ... rule_bitmap[0].length]).sort_by do |y, x|
-    (nf_min_x - x) ** 2 + (nf_min_y - y) ** 2
-  end.reverse.each.with_index(1)
-  loop do
-    (y, x), ix = coord_iter.next
-    next if rule_bitmap[y][x].count == ruleset.tileset.count
+  coord_iter = [*0 ... rule_bitmap.length].product([*0 ... rule_bitmap[0].length])
+    .select{|y, x| rule_bitmap[y][x].count < ruleset.tileset.count}
+    .sort_by{|y, x| (nf_min_x - x) ** 2 + (nf_min_y - y) ** 2}.reverse
+
+  (0 ... coord_iter.length).each do |ix|
+    y, x = coord_iter[ix]
     new_bitmap = rule_bitmap.map{|row| row.map{|tile| tile.dup}}
     new_bitmap[y][x] = ruleset.tileset
     new_stats = Hash.new(0)
-    if apply_ruleset(ruleset, new_bitmap, new_stats, origin_x - new_rule_min_x, origin_y - new_rule_min_y, true) {}
+    if apply_ruleset(ruleset, new_bitmap, new_stats,
+        origin_x - new_rule_min_x, origin_y - new_rule_min_y,
+        true, [x, y, rule_bitmap[y][x]]) {}
       rule_bitmap[y][x] = ruleset.tileset
       conflict_stats = new_stats
     elsif x < nf_min_x || x > nf_max_x || y < nf_min_y || y > nf_max_y
       nf_min_y = y if nf_min_y > y; nf_max_y = y if nf_max_y < y
       nf_min_x = x if nf_min_x > x; nf_max_x = x if nf_max_x < x
-      coords_left = []
-      loop{coords_left << coord_iter.next.first}
-      coords_left.sort_by! do |y, x|
-        (nf_min_x + nf_max_x - 2 * x) ** 2 + (nf_min_y + nf_max_y - 2 * y) ** 2
+      coord_iter.sort_by!.with_index do |(y, x), i|
+        [i <= ix ? 0 : 1, - (nf_min_x + nf_max_x - 2 * x) ** 2 - (nf_min_y + nf_max_y - 2 * y) ** 2]
       end
-      coords_left.reverse!
-      coord_iter = coords_left.each.with_index(ix + 1)
     end
-    renderer.call rule_bitmap, ix, rule_bitmap.length * rule_bitmap[0].length
+    renderer.call rule_bitmap, ix + 1, coord_iter.length
   end
-  coord_iter = [*nf_min_y .. nf_max_y].product([*nf_min_x .. nf_max_x]).sort_by do |y, x|
-    (nf_min_x + nf_max_x - 2 * x) ** 2 + (nf_min_y + nf_max_y - 2 * y) ** 2
-  end.reverse.each
-  coord_iter.each.with_index do |(y, x), ix|
-    next if ruleset.tileset.count - rule_bitmap[y][x].count <= 1 rescue (p [nf_min_x, origin_x, nf_max_x, nf_min_y, y, nf_max_y]; raise)
-    ruleset.tileset.each.with_index do |tile, ix2|
-      unless rule_bitmap[y][x].include? tile
-        new_bitmap = rule_bitmap.map{|row| row.map{|tile| tile.dup}}
-        new_bitmap[y][x] += [tile]
-        new_stats = Hash.new(0)
-        if apply_ruleset(ruleset, new_bitmap, new_stats,
-                          origin_x - new_rule_min_x, origin_y - new_rule_min_y,
-                          true, [x, y, rule_bitmap[y][x]]
-                        ) {}
-          rule_bitmap[y][x] += [tile]
-          conflict_stats = new_stats
-        end
-        nf_box_size = (nf_max_x - nf_min_x + 1) * (nf_max_y - nf_min_y + 1)
-        renderer.call rule_bitmap, ix * ruleset.tileset.length + ix2, nf_box_size * ruleset.tileset.length
-      end
+
+  coord_iter = [*nf_min_y .. nf_max_y].product([*nf_min_x .. nf_max_x], ruleset.tileset)
+    .reject{|y, x, tile| rule_bitmap[y][x].include? tile}
+    .sort_by{|y, x| (nf_min_x + nf_max_x - 2 * x) ** 2 + (nf_min_y + nf_max_y - 2 * y) ** 2}.reverse
+
+  coord_iter.each.with_index do |(y, x, tile), ix|
+    new_bitmap = rule_bitmap.map{|row| row.map{|tile| tile.dup}}
+    new_bitmap[y][x] += [tile]
+    new_stats = Hash.new(0)
+    if apply_ruleset(ruleset, new_bitmap, new_stats,
+        origin_x - new_rule_min_x, origin_y - new_rule_min_y,
+        true, [x, y, rule_bitmap[y][x]]
+                    ) {}
+      rule_bitmap[y][x] += [tile]
+      conflict_stats = new_stats
     end
+    nf_box_size = (nf_max_x - nf_min_x + 1) * (nf_max_y - nf_min_y + 1)
+    renderer.call rule_bitmap, ix + 1, coord_iter.length
     rule_bitmap[y][x] = ruleset.tileset & rule_bitmap[y][x] # sort bitmap entries by the global tile order
   end
 
