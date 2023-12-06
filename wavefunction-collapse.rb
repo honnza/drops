@@ -279,8 +279,8 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
 
   new_rule_min_x, new_rule_max_x = new_rule_tiles.map{|x, _, _| x}.minmax
   new_rule_min_y, new_rule_max_y = new_rule_tiles.map{|_, y, _| y}.minmax
-  rule_bitmap = [*new_rule_min_y .. new_rule_max_y].map{[*new_rule_min_x .. new_rule_max_x].map{ruleset.tileset.dup}}
-  new_rule_tiles.each{|x, y, c| rule_bitmap[y - new_rule_min_y][x - new_rule_min_x] = board[y][x]}
+  rule_bitmap = [*new_rule_min_y .. new_rule_max_y].map{[*new_rule_min_x .. new_rule_max_x].map{ruleset.tileset}}
+  new_rule_tiles.each{|x, y, c| rule_bitmap[y - new_rule_min_y][x - new_rule_min_x] -= ([c] - board[y][x])}
   IO.console.clear_screen
   renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length
 
