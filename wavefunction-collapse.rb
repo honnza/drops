@@ -1,6 +1,7 @@
 require 'zlib'
 require 'json'
 require 'io/console'
+require 'stackprof'
 
 Tile = Struct.new(:name, :ascii, :rotated, :mirrored) do
   def inspect;
@@ -725,12 +726,14 @@ if $0 == __FILE__
         puts "couldn't find tile #{$5}"
         next
       end
+      StackProf.start(mode: :cpu)
       begin
         generate ruleset, $2.to_sym, w, h, $1&.strip&.to_sym, tile
       rescue Interrupt
         p $!
         p $@
       end
+      StackProf.stop
     when /^save as (.*)$/
       json = ruleset.to_json
       Zlib::GzipWriter.open($1, level = 9){_1.write json}
@@ -739,6 +742,8 @@ if $0 == __FILE__
       Zlib::GzipReader.open($1){ruleset = Ruleset.from_json _1.read}
       puts "ok; #{ruleset.tileset.count} tiles and #{ruleset.rules.count} rules loaded"
     when /^quit$/
+      StackProf.results("stackprof-output.dump")
+      puts "profiling data saved to stackprof-output.dump"
       exit
     else
       puts <<END
