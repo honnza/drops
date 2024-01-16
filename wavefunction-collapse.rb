@@ -18,17 +18,16 @@ Ruleset = Struct.new(
   :rules) do
 
   def to_json
-    tile_map = Hash[tileset.map.with_index{|t, i| [t, i]}]
     rule_id_map = Hash[rules.map.with_index{|r, i| [r.id, i]}]
     JSON.generate({
       s: symmetry,
-      ts: tile_symm.map{|p| p.map{|c| c.map{|t| tile_map[t]}}},
+      ts: tile_symm,
       t: tileset.map do |t|
         {
           n: t.name,
           a: t.ascii,
-          r: tile_map[t.rotated],
-          m: tile_map[t.mirrored]
+          r: t.rotated,
+          m: t.mirrored
         }
       end,
       r: rules.map do |r|
@@ -44,10 +43,9 @@ end
 def Ruleset.from_json str
   json = JSON.parse str, symbolize_names: true
   tiles = json[:t].map{|t| Tile.new(t[:n], t[:a], t[:r], t[:m])}
-  tiles.each{|t| t.rotated = tiles[t.rotated.to_i]; t.mirrored = tiles[t.mirrored.to_i]}
   ruleset = Ruleset.new(
     json[:s],
-    (json[:ts] || []).map{|p| p.map{|c| c.map{|t| tiles[t.to_i]}}},
+    json[:ts] || [],
     tiles,
     nil
   )
@@ -75,8 +73,8 @@ Rule = Struct.new(
   def sparse
     @sparse ||= tiles.flat_map.with_index do |row, dy|
       row.map.with_index{|tile, dx| [dx, dy, tile]}
-    end.select{|_, _, tile| tile != ruleset.tileset}
-       .map{|x, y, tile| [x, y, ruleset.tileset - tile]}
+    end.select{|_, _, tile| tile.length != ruleset.tileset.length}
+      .map{|x, y, tile| [x, y, (0 ... ruleset.tileset.length).to_a - tile]}
        .sort_by{|_, _, tile| - tile.length}
   end
 
@@ -120,19 +118,19 @@ Rule = Struct.new(
     case ruleset.symmetry[0]
     when "4"
       3.times do
-        bitmaps << bitmaps.last.transpose.map{|row| row.reverse.map{|tile| tile.map(&:rotated)}}
+        bitmaps << bitmaps.last.transpose.map{|row| row.reverse.map{|tile| tile.map{ruleset.tileset[_1].rotated}}}
       end
     when "2"
-      bitmaps << bitmaps.last.reverse.map{|row| row.reverse.map{|tile| tile.map(&:rotated)}}
+      bitmaps << bitmaps.last.reverse.map{|row| row.reverse.map{|tile| tile.map{ruleset.tileset[_1].rotated}}}
     end
     case ruleset.symmetry[1]
-    when "-"  then bitmaps += bitmaps.map{|bmp| bmp.reverse.map{|row| row.map{|tile| tile.map(&:mirrored)}}}
-    when "\\" then bitmaps += bitmaps.map{|bmp| bmp.transpose.map{|row| row.map{|tile| tile.map(&:mirrored)}}}
-    when "|"  then bitmaps += bitmaps.map{|bmp| bmp.transpose.reverse.transpose.map{|row| row.map{|tile| tile.map(&:mirrored)}}}
-    when "/"  then bitmaps += bitmaps.map{|bmp| bmp.reverse.transpose.reverse.map{|row| row.map{|tile| tile.map(&:mirrored)}}}
+    when "-"  then bitmaps += bitmaps.map{|bmp| bmp.reverse.map{|row| row.map{|tile| tile.map{ruleset.tileset[_1].mirrored}}}}
+    when "\\" then bitmaps += bitmaps.map{|bmp| bmp.transpose.map{|row| row.map{|tile| tile.map{ruleset.tileset[_1].mirrored}}}}
+    when "|"  then bitmaps += bitmaps.map{|bmp| bmp.transpose.reverse.transpose.map{|row| row.map{|tile| tile.map{ruleset.tileset[_1].mirrored}}}}
+    when "/"  then bitmaps += bitmaps.map{|bmp| bmp.reverse.transpose.reverse.map{|row| row.map{|tile| tile.map{ruleset.tileset[_1].mirrored}}}}
     end
 
-    bitmaps.each{|bitmap| bitmap.each{|row| row.each{|cell| cell.replace ruleset.tileset & cell}}}
+    bitmaps.each{|bitmap| bitmap.each{|row| row.each{|cell| cell.sort!}}}
     bitmaps.uniq!
     bitmaps.each do |bitmap|
       ruleset.tile_symm.each do |permutation|
@@ -141,7 +139,7 @@ Rule = Struct.new(
           cycle.each_cons(2){|x, y| perm_as_hash[x] = y}
           perm_as_hash[cycle.last] = cycle.first
         end
-        new_bitmap = bitmap.map{|row| row.map{|cell| ruleset.tileset & cell.map{|tile| perm_as_hash[tile]}}}
+        new_bitmap = bitmap.map{|row| row.map{|cell| cell.map{|tile| perm_as_hash[tile]}.sort}}
         bitmaps << new_bitmap unless bitmaps.include? new_bitmap
       end
     end
@@ -155,7 +153,7 @@ Rule = Struct.new(
   def compressed_tiles
     tiles.map do |row|
       row.map do |cell|
-        ruleset.tileset.map{|tile| cell.include?(tile) ? 1 : 0}
+        (0 ... ruleset.tileset.length).map{|tile| cell.include?(tile) ? 1 : 0}
                .each_slice(6).map{|slice| B64E[slice.join.ljust(6, "0").to_i(2)]}.join
       end.join
     end.join "/"
@@ -166,12 +164,12 @@ Rule = Struct.new(
       self.tiles = tiles.split("/").map do |row|
         row.chars.each_slice((ruleset.tileset.count - 1) / 6 + 1).map do |cell|
           cell.map{|char| B64D[char].to_s(2).rjust(6, "0")}.join
-              .chars.map.with_index{|bit, ix| bit == "1" ? ruleset.tileset[ix] : nil}
+              .chars.map.with_index{|bit, ix| bit == "1" ? ix : nil}
               .compact
         end
       end
     else
-      self.tiles = tiles.map{|tss| tss.map{|ts| ts.map{|t| ruleset.tileset[t.to_i]}}}
+      self.tiles = tiles.map{|tss| tss.map{|ts| ts.map &:to_i}}
     end
   end
 
@@ -183,8 +181,8 @@ Rule = Struct.new(
                           end
     d = tiles.map do |row|
       row.map do |tiles|
-        pos = tiles.map(&:name).join("/")
-        neg = "/" + (ruleset.tileset - tiles).map(&:name).join("/")
+        pos = tiles.map{ruleset.tileset[_1].name}.join("/")
+        neg = "/" + ((0 ... ruleset.tileset.length).to_a - tiles).map{ruleset.tileset[_1].name}.join("/")
         pos.length > neg.length ? neg : pos
       end.join " "
     end.join "\n"
@@ -280,7 +278,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
 
   new_rule_min_x, new_rule_max_x = new_rule_tiles.map{|x, _, _| x}.minmax
   new_rule_min_y, new_rule_max_y = new_rule_tiles.map{|_, y, _| y}.minmax
-  rule_bitmap = [*new_rule_min_y .. new_rule_max_y].map{[*new_rule_min_x .. new_rule_max_x].map{ruleset.tileset}}
+  rule_bitmap = [*new_rule_min_y .. new_rule_max_y].map{[*new_rule_min_x .. new_rule_max_x].map{(0 ... ruleset.tileset.length).to_a}}
   new_rule_tiles.each{|x, y, c| rule_bitmap[y - new_rule_min_y][x - new_rule_min_x] -= ([c] - board[y][x])}
   IO.console.clear_screen
   renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length
@@ -290,9 +288,9 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
     puts "error: tracing the undo log didn't point back to the origin"
     puts "origin: " + [origin_x, origin_y].inspect
     undo_log.each do |diff_x, diff_y, diff_c, rule_x, rule_y, rule, matched|
-      puts "#{matched} rule #{rule.id} at #{[rule_x, rule_y]} removed #{diff_c.map(&:name).join("/")} from #{[diff_x, diff_y]}"
+      puts "#{matched} rule #{rule.id} at #{[rule_x, rule_y]} removed #{diff_c.map{ruleset.tileset[_1].name}.join("/")} from #{[diff_x, diff_y]}"
       puts "triggers: " + rule.sparse.reject{|x, y, _| x == diff_x && y == diff_y}.map{|x, y, cs|
-        "#{cs.map(&:name).join("/")} at #{[x + rule_x, y + rule_y]}"
+        "#{cs.map{ruleset.tileset[_1].name}.join("/")} at #{[x + rule_x, y + rule_y]}"
       }.join(", ")
     end
     gets
@@ -307,11 +305,11 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   (0 ... coord_iter.length).each do |ix|
     y, x = coord_iter[ix]
     new_bitmap = rule_bitmap.map{|row| row.map{|tile| tile.dup}}
-    new_bitmap[y][x] = ruleset.tileset
+    new_bitmap[y][x] = (0 ... ruleset.tileset.length).to_a
     if apply_ruleset(ruleset, new_bitmap, Hash.new(0),
         origin_x - new_rule_min_x, origin_y - new_rule_min_y,
         true, [x, y, rule_bitmap[y][x]]) {}
-      rule_bitmap[y][x] = ruleset.tileset
+      rule_bitmap[y][x] = (0 ... ruleset.tileset.length).to_a
     elsif x < nf_min_x || x > nf_max_x || y < nf_min_y || y > nf_max_y
       nf_min_y = y if nf_min_y > y; nf_max_y = y if nf_max_y < y
       nf_min_x = x if nf_min_x > x; nf_max_x = x if nf_max_x < x
@@ -326,7 +324,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
     renderer.call rule_bitmap, ix + 1, coord_iter.length
   end
 
-  coord_iter = [*nf_min_y .. nf_max_y].product([*nf_min_x .. nf_max_x], ruleset.tileset)
+  coord_iter = [*nf_min_y .. nf_max_y].product([*nf_min_x .. nf_max_x], (0 ... ruleset.tileset.length).to_a)
     .reject{|y, x, tile| rule_bitmap[y][x].include? tile}
     .sort_by{|y, x| (nf_min_x + nf_max_x - 2 * x) ** 2 + (nf_min_y + nf_max_y - 2 * y) ** 2}.reverse
 
@@ -341,7 +339,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
     end
     nf_box_size = (nf_max_x - nf_min_x + 1) * (nf_max_y - nf_min_y + 1)
     renderer.call rule_bitmap, ix + 1, coord_iter.length
-    rule_bitmap[y][x] = ruleset.tileset & rule_bitmap[y][x] # sort bitmap entries by the global tile order
+    rule_bitmap[y][x].sort!
   end
 
   #we do one last run to collect conflict stats because the previous run may have taken a shortcut
@@ -446,7 +444,9 @@ def prompt_tiles(ruleset, name)
   tile_by_name[i3.name] = i3
   tile_by_mirror[i3.mirrored] = i3.name
 
-  return p [i0, i1, i2, i3].uniq if symm_m.nil?
+  if symm_m.nil?
+    return [i0, i1, i2, i3].uniq 
+  end
 
   if [i0, i1, i2, i3].map{tile_by_name.include? _1.mirrored}.uniq.count != 1
     raise "all mirrored tiles should map to new tiles, or none should"
@@ -462,7 +462,7 @@ def prompt_tiles(ruleset, name)
   tile_by_name[i3.mirrored.name] = i3.mirrored
   i0.mirrored.rotated = i3.mirrored
 
-  p [i0, i1, i2, i3, i0.mirrored, i1.mirrored, i2.mirrored, i3.mirrored].uniq
+  [i0, i1, i2, i3, i0.mirrored, i1.mirrored, i2.mirrored, i3.mirrored].uniq
 end
 
 # formats a table using vertical wrapping. If given an array of arrays, aligns cells with each other vertically.
@@ -509,13 +509,13 @@ end
 def generate ruleset, method, w, h, seeded, tile = nil
   render = proc do |board, n, d, diff = [0, board[0].length - 1, 0, board.length - 1]|
     print "\e[H\e[?25l"
-    tw = board[0].flatten.compact[0].ascii[0].display_length
-    th = board[0].flatten.compact[0].ascii.length
+    tw = ruleset.tileset[0].ascii[0].display_length
+    th = ruleset.tileset[0].ascii.length
     (diff[2] .. diff[3]).each do |y|
       (0 ... th).each do |ty|
         print "\e[#{th * y + ty + 1};#{diff[0] * tw + 1}H"
         print (diff[0] .. diff[1]).map{|x|
-          (board[y][x].count == 1 ? board[y][x][0].ascii[ty] : [board[y][x].count, 10 ** tw - 1].min.to_s.rjust(tw))
+          (board[y][x].count == 1 ? ruleset.tileset[board[y][x][0]].ascii[ty] : [board[y][x].count, 10 ** tw - 1].min.to_s.rjust(tw))
         }.join
       end
     end
@@ -525,9 +525,11 @@ def generate ruleset, method, w, h, seeded, tile = nil
   end
 
   srand
+  tile = ruleset.tileset.find_index tile
   loop do
     srand Random.seed if seeded == :seeded
-    board = Array.new(h){Array.new(w){ruleset.tileset.dup}}
+    tile_ixs = (0 ... ruleset.tileset.length).to_a
+    board = Array.new(h){Array.new(w){tile_ixs}}
     new_rule = nil
     stats = Hash[ruleset.rules.select{_1.source[0] != :symm}.map{[_1.id, 0]}]
     stats[:g] = 0
@@ -544,9 +546,9 @@ def generate ruleset, method, w, h, seeded, tile = nil
                  coord_iter.filter{|x, y| board[y][x].count == count}.sample
                end
         samples = if method == :drizzle
-                    [ruleset.tileset.sample]
+                    [rand(ruleset.tileset.length)]
                   else
-                    ruleset.tileset.shuffle
+                    (0 ... ruleset.tileset.length).to_a.shuffle
                   end.select{board[y][x].include? _1}
         samples = [tile] + (samples - [tile]) if tile
         break x, y, samples if board[y][x].count > 1 && !samples.empty?
@@ -621,6 +623,10 @@ if $0 == __FILE__
       error = tiles.map(&:name) & ruleset.tileset.map(&:name)
       if error.empty?
         ruleset.tileset += tiles
+        tiles.each do |tile|
+          tile.rotated = ruleset.tileset.find_index tile.rotated
+          tile.mirrored = ruleset.tileset.find_index tile.mirrored
+        end
         puts "ok"
       else
         puts "#{error.inspect} already defined, discarding #{tiles.count} tiles"
@@ -629,7 +635,7 @@ if $0 == __FILE__
       begin
         new_symm = $1.split(" ").map do |cycle_str|
           cycle = cycle_str.split("/").map do |tile_str|
-            tile = ruleset.tileset.find{_1.name == tile_str}
+            tile = ruleset.tileset.find_index{_1.name == tile_str}
             raise "#{tile_str} not found in current ruleset" unless tile
             tile
           end
@@ -656,17 +662,17 @@ if $0 == __FILE__
           row_str.split(" ").map do |tile_str|
             names = tile_str.split("/", -1)
             if names == ["", ""]
-              ruleset.tileset
+              (0 ... ruleset.tileset.length).to_a
             elsif names[0] == ""
-              tiles = ruleset.tileset.select{names.include? _1.name}
+              tiles = (0 ... ruleset.tileset.length).select{names.include? ruleset.tileset[_1].name}
               if tiles.count != names.count - 1
                 error = names.select{|name| !ruleset.tileset.any? {_1.name == name}}
                 puts "#{error} aren't tiles in this ruleset"
                 raise
               end
-              ruleset.tileset - tiles
+              (0 ... ruleset.tileset.length).to_a - tiles
             else
-              tiles = ruleset.tileset.select{names.include? _1.name}
+              tiles = (0 ... ruleset.tileset.length).select{names.include? ruleset.tileset[_1].name}
               if tiles.count != names.count
                 error = names.select{|name| !ruleset.tileset.any? {_1.name == name}}
                 puts "#{error} aren't tiles in this ruleset"
