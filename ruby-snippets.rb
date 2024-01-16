@@ -716,6 +716,12 @@ def relax_rescale_eigen(grid, n: :n4, interactive: true)
   end
 end
 
+def cryptogram_hash(str)
+  tally = str.chars.tally
+  letter_map = p tally.to_a.select{|k, v| v >= 2}.map{|k, _| k}.zip("a"..).to_h
+  str.chars.map{|c| letter_map[c] || "_"}.join.gsub(/__+/){$&.length}
+end
+
 def foo(x, limit = nil, filter: nil, n: :n4, f: 0.1, grid: nil, hicolor: false, rgb: false, png: false, eigen: false)
   # generate channels
   xs = x.split(/[\/\n]/)
