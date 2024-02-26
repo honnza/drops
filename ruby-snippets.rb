@@ -718,8 +718,69 @@ end
 
 def cryptogram_hash(str)
   tally = str.chars.tally
-  letter_map = p tally.to_a.select{|k, v| v >= 2}.map{|k, _| k}.zip("a"..).to_h
-  str.chars.map{|c| letter_map[c] || "_"}.join.gsub(/__+/){$&.length}
+  letter_map = tally.to_a.select{|k, v| k[/[a-z]/] && v >= 2}.map{|k, _| k}.zip("a"..).to_h
+  str.chars.map{|c| letter_map[c] || ("_" if c[/[a-z]/]) || c}.join.gsub(/__+/){$&.length}
+end
+
+def compressed_ch(str, debug: false)
+  bits = ""
+
+  sym_count_max = str.length / 2 + 1
+  sym_count_bits_long = Math::log2(sym_count_max).ceil
+  sym_counts_short = 2 ** sym_count_bits_long - sym_count_max
+  
+  tally = str.chars.tally
+  letter_map = tally.to_a.select{|k, v| k[/[a-z]/] && v >= 2}.map{|k, _| k}.zip(1..).to_h
+  sym_count = letter_map.size + 1
+  if sym_count_max > 0
+    if sym_count <= sym_counts_short
+      bits << (sym_count - 1).to_s(2).rjust(sym_count_bits_long - 1, "0")
+    else
+      bits << (sym_count + sym_counts_short - 1).to_s(2).rjust(sym_count_bits_long, "0")
+    end
+    puts bits if debug
+  end
+
+  if sym_count > 1
+    sym_bits_long = Math::log2(sym_count).ceil
+    syms_short = 2 ** sym_bits_long - sym_count
+    str.chars.each do |char|
+      sym = letter_map[char] || 0
+      if sym < syms_short
+        bits << sym.to_s(2).rjust(sym_bits_long - 1, "0")
+      else
+        bits << (sym + syms_short).to_s(2).rjust(sym_bits_long, "0")
+      end
+      puts bits if debug
+    end
+  end
+
+  result = str.length.to_s(35)
+  result.prepend("Z" * (result.length - 1))
+  bits.scan(/.{1,5}/).each{|bits| result << bits.ljust(5, "0").to_i(2).to_s(32)}
+  result
+end
+
+def cryptogram_hashes(strs)
+  strs = strs.map{|str| [compressed_ch(str), cryptogram_hash(str), str]}
+  strs.group_by{_1[0][0]}.sort.each do |len, strs|
+    strs = strs.group_by{_1[1]}
+    strs[len.to_s] ||= []
+    strs.sort do |(h1, _), (h2, _)|
+      h1 = h1.downcase; h2 = h2.downcase
+      (h1 = h1[1..] ; h2 = h2[1..]) while h1[0] == h2[0] && h1 != ""
+      case
+      when h1[0] =~ /[a-z]/ && h2[0] =~ /[a-z]/ then h2[0] <=> h1[0]
+      when h1[0] =~ /[a-z]/ || h2[0] =~ /[a-z]/ then h1[0] <=> h2[0]
+      else
+        h1 = h1[/^\d*/].to_i; h2 = h2[/^\d*/].to_i
+        h2 <=> h1
+      end
+    end.each do |hash, strs|
+      puts "#{strs.map{_1[0]}.uniq.join " "} #{hash} => #{strs.map{_1[2]}.sort.join(" ")}"
+    end
+    puts
+  end
 end
 
 def foo(x, limit = nil, filter: nil, n: :n4, f: 0.1, grid: nil, hicolor: false, rgb: false, png: false, eigen: false)
