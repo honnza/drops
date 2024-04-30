@@ -1088,6 +1088,13 @@ def foo(x, limit = nil, filter: nil, n: :n4, f: 0.1, grid: nil, hicolor: false, 
   end
 end
 
+def bar(x, n: :n4, f: 0.1)
+  r = relax_rescale_eigen(x, n:)
+  r.lazy.select{_1[:delta_1] > 1e-10}.take(4).each_cons(2).map do |r1, r2|
+    (r1[:delta_1] / r2[:delta_1] * 256).floor.clamp(0..255).to_s.rjust(3, "0") rescue "000"
+  end.to_a.join(" ")
+end
+
 def generate_palette n_colors, adjacencies
   # using redmean from https://en.m.wikipedia.org/wiki/Color_difference#sRGB
   # caused unstability. Switched to constant weights instead.
