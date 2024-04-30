@@ -483,6 +483,7 @@ def relax_rescale(grid, f: 0.1, n: :n4, s: [])
     {?- => -1.0, ?. => 0.0, ?+ => 1.0, ?? => rand(-1.0 .. 1.0), ?e => rand(-1e-10 .. 1e-10)}[c]
   }} if grid.is_a? String
   precision = IO.console.winsize[1] / grid.map(&:length).max - 1
+  dense_out = precision < 1
   precision = 16 if precision > 16
   (puts "warning: precision = #{precision}"; precision = 1) if precision < 1
 
@@ -592,16 +593,7 @@ def relax_rescale(grid, f: 0.1, n: :n4, s: [])
       else time_est end
 
       cout = [""]
-      grid.each.with_index{|row, i| cout << row.map.with_index{|val, j| fmt[i, j, val]}.join(" ").rstrip}
-      cout << ""
-      cout << "@#{t}"
-      cout << "energy = %.16f" % [energy]
-      smooth_time_est = if smooth_time_est.finite?
-        (smooth_time_est - t_delta).clamp(0..) * 0.9 + time_est * 0.1
-      else time_est end
-
-      cout = [""]
-      grid.each.with_index{|row, i| cout << row.map.with_index{|val, j| fmt[i, j, val]}.join(" ").rstrip}
+      grid.each.with_index{|row, i| cout << row.map.with_index{|val, j| fmt[i, j, val]}.join(dense_out ? "" : " ").rstrip}
       cout << ""
       cout << "@#{t}"
       cout << "energy = %.16f" % [energy]
@@ -634,6 +626,7 @@ def relax_rescale_eigen(grid, n: :n4, interactive: true)
   }} if grid.is_a? String
   precision = IO.console.winsize[1] / grid.map(&:length).max - 1
   precision = 16 if precision > 16
+  dense_out = precision < 1
   (puts "warning: precision = #{precision}"; precision = 1) if precision < 1
 
   fmt = lambda do |val|
@@ -695,7 +688,7 @@ def relax_rescale_eigen(grid, n: :n4, interactive: true)
       if interactive
         if modes.count == 1
           puts "#mode #{modes[0][2]}/#{ix_count} eigenvalue #{modes[0][1]}"
-          ix_map.each{|row| puts row.map{|ix| fmt[ix && aligned_evs[0][ix]]}.join(" ").rstrip}
+          ix_map.each{|row| puts row.map{|ix| fmt[ix && aligned_evs[0][ix]]}.join(dense_out ? "" : " ").rstrip}
         else
           puts "#modes #{modes[0][2]}..#{modes[-1][2]}/#{ix_count} eigenvalue #{modes[0][1]}"
           offset = modes[0][2] == 1 && modes.count > 3 ? 1 : 0
