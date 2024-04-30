@@ -754,26 +754,81 @@ def compressed_ch(str, debug: false)
   result
 end
 
-def cryptogram_hashes(strs)
+def cryptogram_hashes(strs, dictionary = nil)
+  add_atom = lambda do |str|
+    r = capitalize_periodic str
+    r5 = r.select{_1.scan(/[A-Z]/).count == 5}
+    if r5.length > 0 then r5[0] + "🧪"
+    elsif r.length > 0 then r[0]
+    else str
+    end
+  end
+
+  def chunk_up strs, join
+    return [strs.join(join)] if strs.join(join).bytes.count <= IO.console.winsize[1]
+    return strs if strs.uniq.count == 1
+    plx = 0
+    plx += 1 while strs.map{_1[..plx ]}.uniq.count == 1
+    chunks = strs.group_by{_1[..plx ]}.values.map{chunk_up _1, join}
+    r = []
+    while chunks.count > 1
+      if chunks[0].count > 1 || chunks[1].count > 1
+        r << chunks.shift
+      elsif (chunks[0][0] + join + chunks[1][0]).bytes.count > IO.console.winsize[1]
+        r << chunks.shift
+      else
+        chunks[0 .. 1] = [[chunks[0][0] + join + chunks[1][0]]]
+      end
+    end
+    r + chunks
+  end
+
+  dict_words = File.read(dictionary).split(/\s+/) if dictionary
+
   strs = strs.map{|str| [compressed_ch(str), cryptogram_hash(str), str]}
   strs.group_by{_1[0][0]}.sort.each do |len, strs|
-    strs = strs.group_by{_1[1]}
-    strs[len.to_s] ||= []
-    strs.sort do |(h1, _), (h2, _)|
-      h1 = h1.downcase; h2 = h2.downcase
-      (h1 = h1[1..] ; h2 = h2[1..]) while h1[0] == h2[0] && h1 != ""
-      case
-      when h1[0] =~ /[a-z]/ && h2[0] =~ /[a-z]/ then h2[0] <=> h1[0]
-      when h1[0] =~ /[a-z]/ || h2[0] =~ /[a-z]/ then h1[0] <=> h2[0]
+    chunks = strs.group_by{_1[0]}.sort.map do |hash, strs|
+      atomed_strs = strs.map{_1[2]}.uniq.sort.map(&add_atom)
+      atomed_strs -= dict_words if dict_words
+      chunks = chunk_up atomed_strs, " "
+      key_str = "#{hash} #{strs.map{_1[1]}.uniq.join ""} =>"
+      if chunks == [""] 
+        nil
+      elsif chunks.length == 1 && (key_str + chunks[0]).bytes.count < IO.console.winsize[1]
+        [key_str, *chunks].join " "
       else
-        h1 = h1[/^\d*/].to_i; h2 = h2[/^\d*/].to_i
-        h2 <=> h1
+        [key_str, *chunks].join "\n"
       end
-    end.each do |hash, strs|
-      puts "#{strs.map{_1[0]}.uniq.join " "} #{hash} => #{strs.map{_1[2]}.sort.join(" ")}"
     end
+    puts chunk_up chunks.compact, " | "
     puts
   end
+  nil
+end
+
+def capitalize_periodic str
+  elements = Set.new %w{
+    h                                                    he
+    li be                                 b  c  n  o  f  ne
+    na mg                                 al si p  s  cl ar
+    k  ca   sc ti v  cr mn fe co ni cu zn ga ge as se br kr
+    rb sr   y  zr nb mo tc ru rh pd ag cd in sn sb te i  xe
+    cs ba   lu hf ta w  re os ir pt au hg tl pb bi po at rn
+    fr ra   lr rf db sg bh hs mt ds rg cn nh fl mc lv ts og
+
+            la ce pr nd pm sm eu gd tb dy ho er tm yb
+            ac th pa u  np pu am cm bk cf es fm md no
+  }
+
+  recurse = lambda do |str|
+    return [""] if str == ""
+    r = []
+    r += recurse[str[1...]].map{str[...1].capitalize + _1} if str.length >= 1 && elements.include?(str[...1])
+    r += recurse[str[2...]].map{str[...2].capitalize + _1} if str.length >= 2 && elements.include?(str[...2])
+    r
+  end
+
+  recurse[str.downcase]
 end
 
 def foo(x, limit = nil, filter: nil, n: :n4, f: 0.1, grid: nil, hicolor: false, rgb: false, png: false, eigen: false)
