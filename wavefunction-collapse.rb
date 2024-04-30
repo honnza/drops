@@ -17,6 +17,17 @@ Ruleset = Struct.new(
   :tileset,   # list of tiles that can appear in the world
   :rules) do
 
+  def all_tiles; 2 ** tileset.size - 1; end
+
+  # converts the packed representation of a set of tiles into an array of tile objects
+  def pack_tiles tiles; end #TODO
+
+  # converts an array of tile objects into its packed representation
+  def unpack_tiles tiles; end #TODO
+
+  # unpacks set of tiles, applies a block to each of them and repacks the set
+  def map_tiles tiles, &key; pack_tiles unpack_tiles(tiles).map(&key); end
+
   def to_json
     rule_id_map = Hash[rules.map.with_index{|r, i| [r.id, i]}]
     JSON.generate({
@@ -73,9 +84,9 @@ Rule = Struct.new(
   def sparse
     @sparse ||= tiles.flat_map.with_index do |row, dy|
       row.map.with_index{|tile, dx| [dx, dy, tile]}
-    end.select{|_, _, tile| tile.length != ruleset.tileset.length}
-      .map{|x, y, tile| [x, y, (0 ... ruleset.tileset.length).to_a - tile]}
-       .sort_by{|_, _, tile| - tile.length}
+    end.select{|_, _, tile| tile != ruleset.all_tiles}
+      .map{|x, y, tile| [x, y, (0 ... ruleset.all_tiles & !tile]}
+      .sort_by{|_, _, tile| -tile.digits(2).count(1)}
   end
 
   # returns [x, y, c] if the pattern matches at [dx, dy], meaning no c can occur at x, y, or nil if the rule doesn't apply there.
@@ -84,9 +95,9 @@ Rule = Struct.new(
   def apply_at(board, x, y)
     r = nil
     sparse.each do |dx, dy, tile|
-      unless tile.all?{!board[y + dy][x + dx].include?(_1)}
-        if r.nil? && board[y + dy][x + dx].any?{!tile.include?(_1)}
-          r = [x + dx, y + dy, board[y + dy][x + dx] - tile]
+      if board[y + dy][x + dx] & tile == 0
+        if r.nil? && board[y + dy][x + dx] & !tile != 0
+          r = [x + dx, y + dy, board[y + dy][x + dx] & !tile]
         else
           return nil
         end
@@ -118,19 +129,18 @@ Rule = Struct.new(
     case ruleset.symmetry[0]
     when "4"
       3.times do
-        bitmaps << bitmaps.last.transpose.map{|row| row.reverse.map{|tile| tile.map{ruleset.tileset[_1].rotated}}}
+        bitmaps << bitmaps.last.transpose.map{|row| row.reverse.map{|tile| ruleset.map_tiles(tile, &:rotated)}}
       end
     when "2"
-      bitmaps << bitmaps.last.reverse.map{|row| row.reverse.map{|tile| tile.map{ruleset.tileset[_1].rotated}}}
+      bitmaps << bitmaps.last.reverse.map{|row| row.reverse.map{|tile| ruleset.map_tiles(tile, &:rotated)}}
     end
     case ruleset.symmetry[1]
-    when "-"  then bitmaps += bitmaps.map{|bmp| bmp.reverse.map{|row| row.map{|tile| tile.map{ruleset.tileset[_1].mirrored}}}}
-    when "\\" then bitmaps += bitmaps.map{|bmp| bmp.transpose.map{|row| row.map{|tile| tile.map{ruleset.tileset[_1].mirrored}}}}
-    when "|"  then bitmaps += bitmaps.map{|bmp| bmp.transpose.reverse.transpose.map{|row| row.map{|tile| tile.map{ruleset.tileset[_1].mirrored}}}}
-    when "/"  then bitmaps += bitmaps.map{|bmp| bmp.reverse.transpose.reverse.map{|row| row.map{|tile| tile.map{ruleset.tileset[_1].mirrored}}}}
+    when "-"  then bitmaps += bitmaps.map{|bmp| bmp.reverse.map{|row| row.map{|tile| ruleset.map_tiles(tile, &:mirrored)}}}
+    when "\\" then bitmaps += bitmaps.map{|bmp| bmp.transpose.map{|row| row.map{|tile| ruleset.map_tiles(tile, &:mirrored)}}}
+    when "|"  then bitmaps += bitmaps.map{|bmp| bmp.transpose.reverse.transpose.map{|row| row.map{|tile| ruleset.map_tiles(tile, &:mirrored)}}}
+    when "/"  then bitmaps += bitmaps.map{|bmp| bmp.reverse.transpose.reverse.map{|row| row.map{|tile| ruleset.map_tiles(tile, &:mirrored)}}}
     end
 
-    bitmaps.each{|bitmap| bitmap.each{|row| row.each{|cell| cell.sort!}}}
     bitmaps.uniq!
     bitmaps.each do |bitmap|
       ruleset.tile_symm.each do |permutation|
@@ -139,7 +149,7 @@ Rule = Struct.new(
           cycle.each_cons(2){|x, y| perm_as_hash[x] = y}
           perm_as_hash[cycle.last] = cycle.first
         end
-        new_bitmap = bitmap.map{|row| row.map{|cell| cell.map{|tile| perm_as_hash[tile]}.sort}}
+        new_bitmap = bitmap.map{|row| row.map{|tile| ruleset.map_tiles(tile, perm_as_hash)}}
         bitmaps << new_bitmap unless bitmaps.include? new_bitmap
       end
     end
@@ -152,24 +162,18 @@ Rule = Struct.new(
 
   def compressed_tiles
     tiles.map do |row|
-      row.map do |cell|
-        (0 ... ruleset.tileset.length).map{|tile| cell.include?(tile) ? 1 : 0}
-               .each_slice(6).map{|slice| B64E[slice.join.ljust(6, "0").to_i(2)]}.join
+      row.map do |tile|
+        bits = tile.to_s(2).rjust(ruleset.tileset.length, "0").reverse
+          .gsub(/.{1,6}/){|slice| B64E[slice.join.ljust(6, "0").to_i(2)]}
       end.join
     end.join "/"
   end
 
   def decompress_tiles
-    if tiles.is_a? String
-      self.tiles = tiles.split("/").map do |row|
-        row.chars.each_slice((ruleset.tileset.count - 1) / 6 + 1).map do |cell|
-          cell.map{|char| B64D[char].to_s(2).rjust(6, "0")}.join
-              .chars.map.with_index{|bit, ix| bit == "1" ? ix : nil}
-              .compact
-        end
+    self.tiles = tiles.split("/").map do |row|
+      row.chars.each_slice((ruleset.tileset.count - 1) / 6 + 1).map do |tile|
+        tile.map{|char| B64D[char].to_s(2).rjust(6, "0")}.join.reverse.to_i(2)
       end
-    else
-      self.tiles = tiles.map{|tss| tss.map{|ts| ts.map &:to_i}}
     end
   end
 
@@ -181,8 +185,8 @@ Rule = Struct.new(
                           end
     d = tiles.map do |row|
       row.map do |tiles|
-        pos = tiles.map{ruleset.tileset[_1].name}.join("/")
-        neg = "/" + ((0 ... ruleset.tileset.length).to_a - tiles).map{ruleset.tileset[_1].name}.join("/")
+        pos = ruleset.unpack_tiles(tiles).map(&:name).join("/")
+        neg = "/" + ruleset.unspack_tiles(ruleset.all_tiles & !tiles).map(&:name).join("/")
         pos.length > neg.length ? neg : pos
       end.join " "
     end.join "\n"
@@ -557,7 +561,6 @@ def generate ruleset, method, w, h, seeded, tile = nil
       prev_board_yx = board[y][x]
       board[y][x] = method == :drizzle ? board[y][x] - [samples[0]] : [samples[0]]
 
-      render.call board, stats.values.sum, board.length * board[0].length * (ruleset.tileset.length - 1)
       new_rule = apply_ruleset ruleset, board, stats, x, y, &render
       while new_rule
         new_rule_syms = new_rule.all_syms
