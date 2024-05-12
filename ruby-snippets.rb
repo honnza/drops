@@ -768,8 +768,8 @@ def cryptogram_hashes(strs, dictionary = nil)
     return [strs.join(join)] if strs.join(join).bytes.count <= IO.console.winsize[1]
     return strs if strs.uniq.count == 1
     plx = 0
-    plx += 1 while strs.map{_1[..plx ]}.uniq.count == 1
-    chunks = strs.group_by{_1[..plx ]}.values.map{chunk_up _1, join}
+    plx += 1 while strs.map{_1[..plx].downcase}.uniq.count == 1
+    chunks = strs.group_by{_1[..plx].downcase}.values.map{chunk_up _1, join}
     r = []
     while chunks.count > 1
       if chunks[0].count > 1 || chunks[1].count > 1
@@ -1089,10 +1089,34 @@ def foo(x, limit = nil, filter: nil, n: :n4, f: 0.1, grid: nil, hicolor: false, 
 end
 
 def bar(x, n: :n4, f: 0.1)
-  r = relax_rescale_eigen(x, n:)
-  r.lazy.select{_1[:delta_1] > 1e-10}.take(4).each_cons(2).map do |r1, r2|
+  r = relax_rescale_eigen(x, n:).lazy.select{_1[:delta_1] > 1e-10}.take(4).to_a
+  puts "ratio color = " + r.each_cons(2).map{|r1, r2|
     (r1[:delta_1] / r2[:delta_1] * 256).floor.clamp(0..255).to_s.rjust(3, "0") rescue "000"
-  end.to_a.join(" ")
+  }.to_a.join(" ")
+
+  sa = Hash[[0, 1, 2, 3].combination(2).map do |i, j|
+    saij = r[i][:mode].flatten.compact.zip(r[j][:mode].flatten.compact).any? do |ei, ej|
+      ei.abs > 1e-10 && ej.abs > 1e-10
+    end
+    [[i, j], saij]
+  end]
+  r0lone = !sa[[0, 1]] && !sa[[0, 2]] && !sa[[0, 3]]
+  r1lone = !sa[[0, 1]] && !sa[[1, 2]] && !sa[[1, 3]]
+  r2lone = !sa[[0, 2]] && !sa[[1, 2]] && !sa[[2, 3]]
+  r3lone = !sa[[0, 3]] && !sa[[1, 3]] && !sa[[2, 3]]
+  sag = case
+        when r0lone && r1lone && r2lone && r3lone then 14
+        when r0lone || r1lone || r2lone || r3lone
+          (r0lone ? 1 : 0) + (r1lone ? 2 : 0) + (r2lone ? 4 : 0) + (r3lone ? 8 : 0)
+        when !sa[[0, 2]] && !sa[[0, 3]] && !sa[[1, 2]] && !sa[[1, 3]] then 13
+        when !sa[[0, 1]] && !sa[[0, 3]] && !sa[[1, 2]] && !sa[[2, 3]] then 11
+        when !sa[[0, 1]] && !sa[[0, 2]] && !sa[[1, 3]] && !sa[[2, 3]] then 7
+        else 0
+        end
+
+  sag_id = [0, 4, 3, 13, 2, 11, 12, 5, 1, 10, 9, 6, 8, 7, 14]
+  sag_name = %w{aaaa aaa_ aa_a aa__ a_aa a_a_ a__a abba _aaa _aa_ _a_a baba __aa bbaa ____}
+  puts "same area group id #{sag_id[sag]} = #{sag_name[sag]}"
 end
 
 def generate_palette n_colors, adjacencies
