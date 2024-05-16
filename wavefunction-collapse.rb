@@ -19,11 +19,15 @@ Ruleset = Struct.new(
 
   def all_tiles; 2 ** tileset.size - 1; end
 
-  # converts the packed representation of a set of tiles into an array of tile objects
-  def pack_tiles tiles; end #TODO
+  # converts an array of tile objects or indices into its packed representation
+  def pack_tiles tiles
+    tileset.map.with_index{|t, i| tiles.include?(t) || tiles.include?(i) ? 2 ** i : 0}.sum
+  end
 
-  # converts an array of tile objects into its packed representation
-  def unpack_tiles tiles; end #TODO
+  # converts the packed representation of a set of tiles into an array of tile objects
+  def unpack_tiles tiles
+    tileset.select.with_index{|t, i| tiles[i] == 1}
+  end
 
   # unpacks set of tiles, applies a block to each of them and repacks the set
   def map_tiles tiles, &key; pack_tiles unpack_tiles(tiles).map(&key); end
@@ -85,7 +89,7 @@ Rule = Struct.new(
     @sparse ||= tiles.flat_map.with_index do |row, dy|
       row.map.with_index{|tile, dx| [dx, dy, tile]}
     end.select{|_, _, tile| tile != ruleset.all_tiles}
-      .map{|x, y, tile| [x, y, 0 ... ruleset.all_tiles & !tile]}
+      .map{|x, y, tile| [x, y, ruleset.all_tiles & ~tile]}
       .sort_by{|_, _, tile| -tile.digits(2).count(1)}
   end
 
@@ -96,8 +100,8 @@ Rule = Struct.new(
     r = nil
     sparse.each do |dx, dy, tile|
       if board[y + dy][x + dx] & tile == 0
-        if r.nil? && board[y + dy][x + dx] & !tile != 0
-          r = [x + dx, y + dy, board[y + dy][x + dx] & !tile]
+        if r.nil? && board[y + dy][x + dx] & ~tile != 0
+          r = [x + dx, y + dy, board[y + dy][x + dx] & ~tile]
         else
           return nil
         end
@@ -186,7 +190,7 @@ Rule = Struct.new(
     d = tiles.map do |row|
       row.map do |tiles|
         pos = ruleset.unpack_tiles(tiles).map(&:name).join("/")
-        neg = "/" + ruleset.unspack_tiles(ruleset.all_tiles & !tiles).map(&:name).join("/")
+        neg = "/" + ruleset.unpack_tiles(ruleset.all_tiles & ~tiles).map(&:name).join("/")
         pos.length > neg.length ? neg : pos
       end.join " "
     end.join "\n"
@@ -243,9 +247,9 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
         diff_x, diff_y, diff_c, rule_x, rule_y, _ = new_diff
         board[diff_y][diff_x] -= diff_c
         stat_rule = rule.source[0] == :symm ? rule.source[1] : rule.id
-        rule_stats[stat_rule] += diff_c.count
-        conflict = board[diff_y][diff_x].empty? ||
-          stop_at && stop_at[0] == diff_x && stop_at[1] == diff_y && board[diff_y][diff_x].all?{stop_at[2].include? _1}
+        rule_stats[stat_rule] += diff_c.digits(2).count(1)
+        conflict = board[diff_y][diff_x] == 0 ||
+          stop_at && stop_at[0] == diff_x && stop_at[1] == diff_y && stop_at[2] & ~board[diff_y][diff_x] == 0
         undo_log << new_diff
         diff_queue[[diff_x, diff_y]] = nil
         renderer.call board, rule_stats.values.sum, board.length * board[0].length * (ruleset.tileset.length - 1), [diff_x, diff_x, diff_y, diff_y]
@@ -304,8 +308,8 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   nf_min_y = origin_y - new_rule_min_y; nf_max_y = nf_min_y
   nf_min_x = origin_x - new_rule_min_x; nf_max_x = nf_min_x
   coord_iter = [*0 ... rule_bitmap.length].product([*0 ... rule_bitmap[0].length])
-    .select{|y, x| rule_bitmap[y][x].count < ruleset.tileset.count}
-    .sort_by{|y, x| [rule_bitmap[y][x].count, (nf_min_x - x) ** 2 + (nf_min_y - y) ** 2]}.reverse
+    .select{|y, x| rule_bitmap[y][x].digits(2).count(1) < ruleset.tileset.count}
+    .sort_by{|y, x| [rule_bitmap[y][x].digits(2).count(1), (nf_min_x - x) ** 2 + (nf_min_y - y) ** 2]}.reverse
 
   (0 ... coord_iter.length).each do |ix|
     y, x = coord_iter[ix]
@@ -330,7 +334,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   end
 
   coord_iter = [*nf_min_y .. nf_max_y].product([*nf_min_x .. nf_max_x], (0 ... ruleset.tileset.length).to_a)
-    .reject{|y, x, tile| rule_bitmap[y][x].include? tile}
+    .reject{|y, x, tile| rule_bitmap[y][x] & 2 ** tile != 0}
     .sort_by{|y, x| (nf_min_x + nf_max_x - 2 * x) ** 2 + (nf_min_y + nf_max_y - 2 * y) ** 2}.reverse
 
   coord_iter.each.with_index do |(y, x, tile), ix|
@@ -670,21 +674,21 @@ if $0 == __FILE__
             if names == ["", ""]
               (0 ... ruleset.tileset.length).to_a
             elsif names[0] == ""
-              tiles = (0 ... ruleset.tileset.length).select{names.include? ruleset.tileset[_1].name}
+              tiles = ruleset.tileset.select{names.include? _1.name}
               if tiles.count != names.count - 1
                 error = names.select{|name| !ruleset.tileset.any? {_1.name == name}}
                 puts "#{error} aren't tiles in this ruleset"
                 raise
               end
-              (0 ... ruleset.tileset.length).to_a - tiles
+              ruleset.pack_tiles((0 ... ruleset.tileset.length).to_a - tiles)
             else
-              tiles = (0 ... ruleset.tileset.length).select{names.include? ruleset.tileset[_1].name}
+              tiles = ruleset.tileset.select{names.include? _1.name}
               if tiles.count != names.count
                 error = names.select{|name| !ruleset.tileset.any? {_1.name == name}}
                 puts "#{error} aren't tiles in this ruleset"
                 raise
               end
-              tiles
+              ruleset.pack_tiles(tiles)
             end
           end
         end
