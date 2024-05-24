@@ -99,7 +99,7 @@ Rule = Struct.new(
   def apply_at(board, x, y)
     r = nil
     sparse.each do |dx, dy, tile|
-      if board[y + dy][x + dx] & tile == 0
+      if board[y + dy][x + dx] & tile != 0
         if r.nil? && board[y + dy][x + dx] & ~tile != 0
           r = [x + dx, y + dy, board[y + dy][x + dx] & ~tile]
         else
@@ -168,15 +168,19 @@ Rule = Struct.new(
     tiles.map do |row|
       row.map do |tile|
         bits = tile.to_s(2).rjust(ruleset.tileset.length, "0").reverse
-          .gsub(/.{1,6}/){|slice| B64E[slice.join.ljust(6, "0").to_i(2)]}
+          .gsub(/.{1,6}/){|slice| B64E[slice.ljust(6, "0").to_i(2)]}
       end.join
     end.join "/"
   end
 
   def decompress_tiles
-    self.tiles = tiles.split("/").map do |row|
-      row.chars.each_slice((ruleset.tileset.count - 1) / 6 + 1).map do |tile|
-        tile.map{|char| B64D[char].to_s(2).rjust(6, "0")}.join.reverse.to_i(2)
+    if tiles.is_a? Array
+      self.tiles = tiles.map{|row| row.map{|cell| ruleset.pack_tiles cell}}
+    else
+      self.tiles = tiles.split("/").map do |row|
+        row.chars.each_slice((ruleset.tileset.count - 1) / 6 + 1).map do |tile|
+          tile.map{|char| B64D[char].to_s(2).rjust(6, "0")}.join.reverse.to_i(2)
+        end
       end
     end
   end
@@ -225,9 +229,9 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
           next unless diff_x
           board[diff_y][diff_x] -= diff_c
           stat_rule = rule.source[0] == :symm ? rule.source[1] : rule.id
-          rule_stats[stat_rule] += diff_c.count
-          conflict = board[diff_y][diff_x].empty? ||
-            stop_at && stop_at[0] == diff_x && stop_at[1] == diff_y && board[diff_y][diff_x].all?{stop_at[2].include? _1}
+          rule_stats[stat_rule] += diff_c.digits(2).count(1)
+          conflict = board[diff_y][diff_x] == 0 ||
+            stop_at && stop_at[0] == diff_x && stop_at[1] == diff_y && board[diff_y][diff_x] & !stop_at[2] == 0
           undo_log << [diff_x, diff_y, diff_c, rule_x, rule_y, rule]
             diff_queue[[diff_x, diff_y]] = nil
           renderer.call board, rule_stats.values.sum, board.length * board[0].length * (ruleset.tileset.length - 1), [diff_x, diff_x, diff_y, diff_y]
@@ -271,14 +275,14 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
     diff_x, diff_y, diff_c, rule_x, rule_y, rule = entry
     board[diff_y][diff_x] |= diff_c
     next if !new_rule_tiles.empty? && !new_rule_tiles.any? do |x, y, c|
-      diff_x == x && diff_y == y && (diff_c & c > 0)
+      diff_x == x && diff_y == y && (diff_c & c != 0)
     end
     diff_x = diff_y = nil if new_rule_tiles.empty?
     entry << :x
     stat_rule = rule.source[0] == :symm ? rule.source[1] : rule.id
     rule.sparse.each do |x, y, c|
       next if diff_x == rule_x + x && diff_y == rule_y + y
-      (0..ruleset.tileset.count).each.each{new_rule_tiles |= [[rule_x + x, rule_y + y, 2 ** _1]] if 2 ** _1 > 0}
+      (0..ruleset.tileset.count).each{new_rule_tiles |= [[rule_x + x, rule_y + y, 2 ** _1]] if 2 ** _1 > 0}
     end
   end
 
@@ -287,7 +291,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   new_rule_min_x, new_rule_max_x = new_rule_tiles.map{|x, _, _| x}.minmax
   new_rule_min_y, new_rule_max_y = new_rule_tiles.map{|_, y, _| y}.minmax
   rule_bitmap = [*new_rule_min_y .. new_rule_max_y].map{[*new_rule_min_x .. new_rule_max_x].map{ruleset.all_tiles}}
-  new_rule_tiles.each{|x, y, c| rule_bitmap[y - new_rule_min_y][x - new_rule_min_x] &= !c || board[y][x]}
+  new_rule_tiles.each{|x, y, c| rule_bitmap[y - new_rule_min_y][x - new_rule_min_x] &= ~c | board[y][x]}
   IO.console.clear_screen
   renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length
 
@@ -339,7 +343,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
 
   coord_iter.each.with_index do |(y, x, tile), ix|
     new_bitmap = rule_bitmap.map{|row| row.dup}
-    new_bitmap[y][x] || 2 ** tile
+    new_bitmap[y][x] |= 2 ** tile
     if apply_ruleset(ruleset, new_bitmap, Hash.new(0),
                        origin_x - new_rule_min_x, origin_y - new_rule_min_y,
                        true, [x, y, rule_bitmap[y][x]]
@@ -672,7 +676,7 @@ if $0 == __FILE__
           row_str.split(" ").map do |tile_str|
             names = tile_str.split("/", -1)
             if names == ["", ""]
-              (0 ... ruleset.tileset.length).to_a
+              ruleset.all_tiles
             elsif names[0] == ""
               tiles = ruleset.tileset.select{names.include? _1.name}
               if tiles.count != names.count - 1
