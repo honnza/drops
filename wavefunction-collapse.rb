@@ -150,10 +150,10 @@ Rule = Struct.new(
       ruleset.tile_symm.each do |permutation|
         perm_as_hash = Hash.new{|h, k| h[k] = k}
         permutation.each do |cycle|
-          cycle.each_cons(2){|x, y| perm_as_hash[x] = y}
-          perm_as_hash[cycle.last] = cycle.first
+          cycle.each_cons(2){|x, y| perm_as_hash[ruleset.tileset[x]] = ruleset.tileset[y]}
+          perm_as_hash[ruleset.tileset[cycle.last]] = ruleset.tileset[cycle.first]
         end
-        new_bitmap = bitmap.map{|row| row.map{|tile| ruleset.map_tiles(tile, perm_as_hash)}}
+        new_bitmap = bitmap.map{|row| row.map{|tile| ruleset.map_tiles(tile, &perm_as_hash)}}
         bitmaps << new_bitmap unless bitmaps.include? new_bitmap
       end
     end
@@ -249,7 +249,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
     ruleset.rules.each do |rule|
       rule.apply_at_diff(board, *prev_diff).each do |new_diff|
         diff_x, diff_y, diff_c, rule_x, rule_y, _ = new_diff
-        board[diff_y][diff_x] -= diff_c
+        board[diff_y][diff_x] &= ~diff_c
         stat_rule = rule.source[0] == :symm ? rule.source[1] : rule.id
         rule_stats[stat_rule] += diff_c.digits(2).count(1)
         conflict = board[diff_y][diff_x] == 0 ||
