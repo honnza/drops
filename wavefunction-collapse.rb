@@ -684,7 +684,7 @@ if $0 == __FILE__
                 puts "#{error} aren't tiles in this ruleset"
                 raise
               end
-              ruleset.pack_tiles((0 ... ruleset.tileset.length).to_a - tiles)
+              ruleset.pack_tiles(ruleset.tileset.to_a - tiles)
             else
               tiles = ruleset.tileset.select{names.include? _1.name}
               if tiles.count != names.count
