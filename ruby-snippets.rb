@@ -1207,6 +1207,24 @@ rescue Interrupt, IRB::Abort
   nil
 end
 
+def coinflip_race(n_trials, n_racers, min_ahead, p_move)
+  result_tally = {}
+  n_trials.times do
+    positions = [0] * n_racers
+    (0 ..).each do |t|
+      positions.each_index{|i| positions[i] += 1 if rand < p_move}
+      min, max = positions.minmax
+      if max - min >= min_ahead
+        result_tally[t] ||= 0
+        result_tally[p t] += 1
+        break
+      end
+      p [min, max, max - min, t] if t % 10000 == 0
+    end
+  end
+  result_tally.to_a.sort
+end
+
 class Numeric
   def round_toward(other); round(half: (self > other) ^ (self < 0) ? :down : :up); end
   def round_away(other); round(half: (self < other) ^ (self < 0) ? :down : :up); end
