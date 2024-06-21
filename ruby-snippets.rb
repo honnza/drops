@@ -1269,6 +1269,12 @@ class Triangle
       z_metric[@ns[1], @ns[2]],
       z_metric[@ns[2], @ns[0]]
     ].max
+    @tonedown = case
+                when z_gap > z_metric[@ns[2], @ns[0]] && z_gap > z_metric[@ns[0], @ns[1]] then 0
+                when z_gap > z_metric[@ns[0], @ns[1]] && z_gap > z_metric[@ns[1], @ns[2]] then 1
+                when z_gap > z_metric[@ns[1], @ns[2]] && z_gap > z_metric[@ns[2], @ns[0]] then 2
+                else nil
+                end
     @priority = [ # not 1x1; maximize gradient; minimize perimeter; top to bottom
       (@es[0].dot(@es[0]) < 3 && @es[1].dot(@es[1]) < 3 && @es[2].dot(@es[2]) < 3) ? 0 : 1,
       z_gap,  
@@ -1324,7 +1330,11 @@ class Triangle
     [pt[0], pt[1]]
   end
 
-  def to_s; "T#{pts}"; end
+  def to_s
+    "T[#{"\e[30;1m" if @tonedown == 0}#{pts[0]}\e[0m, #{
+         "\e[30;1m" if @tonedown == 1}#{pts[1]}\e[0m, #{
+         "\e[30;1m" if @tonedown == 2}#{pts[2]}\e[0m]"
+  end
   def inspect; to_s; end
 end
 def voronoi_subdivide(xs, ys, reflexive = false, z_metric: -> a, b {(a - b).abs})
