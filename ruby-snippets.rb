@@ -754,6 +754,41 @@ def compressed_ch(str, debug: false)
   result
 end
 
+def bell_cch(str)
+  pascal = []
+  (0 .. str.length).each do |n|
+    pascal[n] = [1]
+    (1 .. n-1).each{|k| pascal[n][k] = pascal[n-1][k-1] + pascal[n-1][k]}
+    pascal[n][n] = 1
+  end
+
+  # Not _the_ Bell triangle (I couldn't figure out how to use it to index partitions) but a related one.
+  # Each bell[n][k] tells us how many ways to partition n elements
+  # such that the first element is in a partition of size at most k.
+  bell = [[1]]
+  (1 .. str.length).each do |n|
+    bell[n] = [0]
+    (1 .. n).each{|k| bell[n][k] = bell[n][k-1] + pascal[n-1][k-1] * bell[n-k].last}
+  end
+
+  index_part = lambda do |ixes|
+    return 0 if ixes == [] || ixes[0] == ixes.length - 1
+    pascal[ixes[0]][ixes.count] + index_part[ixes[1..]]
+  end
+
+  index_str = lambda do |str|
+    return 0 if p(str) == ""
+    len = str.length
+    first_part = (len - 1).downto(0).select{|ri| str[len - ri - 1] == str[0]}
+    bell[len][first_part.length - 1] +
+      index_part[first_part[1..]] * bell[len - first_part.length].last +
+      index_str[str.chars.reject{_1 == str[0]}.join] 
+  end
+
+  'z' * (str.length.to_s(32).length - 1) + str.length.to_s(32) +
+    index_str[str].to_s(32).rjust(index_str[str.gsub(/./, "a")].to_s(32).length, "0")
+end
+
 def cryptogram_hashes(strs, dictionary = nil)
   add_atom = lambda do |str|
     r = capitalize_periodic str
@@ -785,13 +820,13 @@ def cryptogram_hashes(strs, dictionary = nil)
 
   dict_words = File.read(dictionary).split(/\s+/) if dictionary
 
-  strs = strs.map{|str| [compressed_ch(str), cryptogram_hash(str), str]}
+  strs = strs.map{|str| [bell_cch(str), compressed_ch(str), cryptogram_hash(str), str]}
   strs.group_by{_1[0][0]}.sort.each do |len, strs|
-    chunks = strs.group_by{_1[0]}.sort.map do |hash, strs|
-      atomed_strs = strs.map{_1[2]}.uniq.sort.map(&add_atom)
+    chunks = strs.group_by(&:first).sort.map do |hash, strs|
+      atomed_strs = strs.map(&:last).uniq.sort.map(&add_atom)
       atomed_strs -= dict_words if dict_words
       chunks = chunk_up atomed_strs, " "
-      key_str = "#{hash} #{strs.map{_1[1]}.uniq.join ""} =>"
+      key_str = "#{hash} #{strs.map{_1[1]}.uniq.join "/"} #{strs.map{_1[2]}.uniq.join "/"} =>"
       if chunks == [""] 
         nil
       elsif chunks.length == 1 && (key_str + chunks[0]).bytes.count < IO.console.winsize[1]
