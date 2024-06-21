@@ -211,7 +211,7 @@ end
 # origin_x, origin_y - if set, assumes all rules disjoint with that position have already been applied.
 #                      required unless conflict_check_only is set.
 # conflict_check_only - if set, rule generation is skipped. Returns true or false indicating whether a conflict was found.
-# stop_at - x, y, tiles triple. If set and the given position reached thu given set of possibilities, assumes a conflict.
+# stop_at - x, y, tiles triple. If set and the given position reached thru given set of possibilities, assumes a conflict.
 # renderer - called after each successful rule application on the happy path, and after each successful
 #            generalisation while generating a r ule.
 def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check_only = false, stop_at = nil, &renderer)
@@ -231,7 +231,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
           stat_rule = rule.source[0] == :symm ? rule.source[1] : rule.id
           rule_stats[stat_rule] += diff_c.digits(2).count(1)
           conflict = board[diff_y][diff_x] == 0 ||
-            stop_at && stop_at[0] == diff_x && stop_at[1] == diff_y && board[diff_y][diff_x] & !stop_at[2] == 0
+            stop_at && stop_at[0] == diff_x && stop_at[1] == diff_y && board[diff_y][diff_x] & ~stop_at[2] == 0
           undo_log << [diff_x, diff_y, diff_c, rule_x, rule_y, rule]
             diff_queue[[diff_x, diff_y]] = nil
           renderer.call board, rule_stats.values.sum, board.length * board[0].length * (ruleset.tileset.length - 1), [diff_x, diff_x, diff_y, diff_y]
@@ -253,7 +253,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
         stat_rule = rule.source[0] == :symm ? rule.source[1] : rule.id
         rule_stats[stat_rule] += diff_c.digits(2).count(1)
         conflict = board[diff_y][diff_x] == 0 ||
-          stop_at && stop_at[0] == diff_x && stop_at[1] == diff_y && stop_at[2] & ~board[diff_y][diff_x] == 0
+          stop_at && stop_at[0] == diff_x && stop_at[1] == diff_y && board[diff_y][diff_x] & ~stop_at[2] == 0
         undo_log << new_diff
         diff_queue[[diff_x, diff_y]] = nil
         renderer.call board, rule_stats.values.sum, board.length * board[0].length * (ruleset.tileset.length - 1), [diff_x, diff_x, diff_y, diff_y]
@@ -564,13 +564,13 @@ def generate ruleset, method, w, h, seeded, tile = nil
                     [rand(ruleset.tileset.length)]
                   else
                     (0 ... ruleset.tileset.length).to_a.shuffle
-                  end
-        samples = [tile] + (samples - [tile]) if tile
+                  end.select{board[y][x] & 2 ** _1 != 0}
+        samples = [tile] + (samples - [tile]) if tile && samples.include?(tile)
         break x, y, samples if board[y][x] & (board[y][x] - 1) != 0 && !samples.empty?
       end
       stats[:g] += method == :drizzle ? 1 : board[y][x].digits(2).count(1) - 1
       prev_board_yx = board[y][x]
-      board[y][x] = method == :drizzle ? board[y][x] & !(2 ** samples[0]) : 2 ** samples[0]
+      board[y][x] = method == :drizzle ? board[y][x] & ~(2 ** samples[0]) : 2 ** samples[0]
 
       new_rule = apply_ruleset ruleset, board, stats, x, y, &render
       while new_rule
