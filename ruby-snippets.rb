@@ -1125,10 +1125,10 @@ end
 
 def bar(x, n: :n4, f: 0.1)
   r = relax_rescale_eigen(x, n:).lazy.select{_1[:delta_1] > 1e-10}.take(4).to_a
-  puts "ratio color = " + r.each_cons(2).map{|r1, r2|
-    (r1[:delta_1] / r2[:delta_1] * 256).floor.clamp(0..255).to_s.rjust(3, "0") rescue "000"
-  }.to_a.join(" ")
-
+  c = r.each_cons(2).map{|r1, r2| (r1[:delta_1] / r2[:delta_1] * 256).floor.clamp(0..255) rescue 0}
+  puts "ratio color = " + c.map{_1.to_s.rjust(3, "0")}.join(" ")
+  puts "  \e[48;2;#{c.map(&:to_s).join(";")}m  \e[107;1m  \e[0m"
+  
   sa = Hash[[0, 1, 2, 3].combination(2).map do |i, j|
     saij = r[i][:mode].flatten.compact.zip(r[j][:mode].flatten.compact).any? do |ei, ej|
       ei.abs > 1e-10 && ej.abs > 1e-10
