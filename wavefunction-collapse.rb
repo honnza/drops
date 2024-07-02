@@ -608,6 +608,13 @@ def generate ruleset, method, w, h, seeded, tile = nil
     puts "rule stats:"
     puts vwrap stats.to_a
     puts "#{stats.values.sum} total"
+    rules_deleted = ruleset.rules.select{_1.source[0] == :conflict && stats[_1.id] == 0}.each do |to_delete, _|
+      ruleset.rules.select{_1.source[0] == :conflict && _1.source.include?(to_delete.id)}.each do |child_rule|
+        child_rule.source = child_rule.source - [to_delete.id] | to_delete.source[1..]
+      end
+      ruleset.rules.reject!{_1.id == to_delete.id || _1.source == [:symm, to_delete.id]}
+    end.length
+    puts "#{rules_deleted}/#{stats.length - 1} rules pruned"
     ruleset.rules.sort_by!.with_index do |rule, ix|
       [(rule.source[0] == :symm ? -stats[rule.source[1]] : -stats[rule.id] rescue - stats.values.max - 1), rule.source[0], ix]
     end
