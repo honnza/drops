@@ -268,6 +268,8 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   # where trigger is a location in worldspace along with a list of tiles that must be excluded from
   # that location. Rules prior to the last are relevant iff they contributed to the trigger.
 
+  return conflict if conflict_check_only
+
   return unless conflict
 
   new_rule_tiles = []
@@ -282,11 +284,9 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
     stat_rule = rule.source[0] == :symm ? rule.source[1] : rule.id
     rule.sparse.each do |x, y, c|
       next if diff_x == rule_x + x && diff_y == rule_y + y
-      (0..ruleset.tileset.count).each{new_rule_tiles |= [[rule_x + x, rule_y + y, 2 ** _1]] if 2 ** _1 > 0}
+      (0..ruleset.tileset.count).each{new_rule_tiles += [[rule_x + x, rule_y + y, 2 ** _1]] if 2 ** _1 > 0}
     end
   end
-
-  return conflict if conflict_check_only
 
   new_rule_min_x, new_rule_max_x = new_rule_tiles.map{|x, _, _| x}.minmax
   new_rule_min_y, new_rule_max_y = new_rule_tiles.map{|_, y, _| y}.minmax
@@ -356,7 +356,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
 
   #we do one last run to collect conflict stats because the previous run may have taken a shortcut
   conflict_stats = Hash.new(0)
-  apply_ruleset(ruleset, rule_bitmap, conflict_stats, origin_x - new_rule_min_x, origin_y - new_rule_min_y, true) {}
+  apply_ruleset(ruleset, rule_bitmap.map(&:dup), conflict_stats, origin_x - new_rule_min_x, origin_y - new_rule_min_y, true) {}
 
   rule_bitmap.shift while rule_bitmap.first.all? {|tile| tile == ruleset.all_tiles}
   rule_bitmap.pop while rule_bitmap.last.all? {|tile| tile == ruleset.all_tiles}
