@@ -201,6 +201,8 @@ Rule = Struct.new(
 
     [h, d].join "\n"
   end
+
+  def summary; "Rule ##{id} (#{sparse.length} of #{tiles.length}*#{tiles[0].length})"; end
 end
 
 # Applies all rules to the given point on the board and any consequent changes
@@ -576,7 +578,7 @@ def generate ruleset, method, w, h, seeded, tile = nil
       while new_rule
         new_rule_syms = new_rule.all_syms
         ruleset.rules += new_rule_syms
-        puts "new rule found; rule id #{new_rule.id}; now at #{ruleset.rules.count} rules"
+        puts "new rule #{new_rule.summary}; now at #{ruleset.rules.count} rules"
         puts new_rule
         puts "rule stats:"
         puts vwrap stats.to_a
@@ -612,9 +614,10 @@ def generate ruleset, method, w, h, seeded, tile = nil
       ruleset.rules.select{_1.source[0] == :conflict && _1.source.include?(to_delete.id)}.each do |child_rule|
         child_rule.source = child_rule.source - [to_delete.id] | to_delete.source[1..]
       end
+      puts "#{to_delete.summary} purged"
       ruleset.rules.reject!{_1.id == to_delete.id || _1.source == [:symm, to_delete.id]}
     end.length
-    puts "#{rules_deleted}/#{stats.length - 1} rules pruned"
+    puts "#{rules_deleted}/#{stats.length - 1} rules purged"
     ruleset.rules.sort_by!.with_index do |rule, ix|
       [(rule.source[0] == :symm ? -stats[rule.source[1]] : -stats[rule.id] rescue - stats.values.max - 1), rule.source[0], ix]
     end
