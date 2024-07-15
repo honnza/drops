@@ -1225,6 +1225,18 @@ def coinflip_race(n_trials, n_racers, min_ahead, p_move)
   result_tally.to_a.sort
 end
 
+def gen_polyomino(n_tiles)
+  tiles = [[0, 0]]
+  neigh = [[-1, 0], [0, -1], [0, 1], [1, 0]]
+  tiles |= [tiles.sample.zip(neigh.sample).map{_1+_2}] until tiles.length == n_tiles
+  bb = tiles.transpose.map(&:minmax)
+  (bb[0][0] .. bb[0][1]).map do |y|
+    (bb[1][0] .. bb[1][1]).map do |x|
+      tiles.include?([y, x]) ? "#" : " "
+    end.join(" ")
+  end.join("\n")
+end
+
 class Numeric
   def round_toward(other); round(half: (self > other) ^ (self < 0) ? :down : :up); end
   def round_away(other); round(half: (self < other) ^ (self < 0) ? :down : :up); end
