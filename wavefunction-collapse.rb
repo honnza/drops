@@ -289,7 +289,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
     stat_rule = rule.source[0] == :symm ? rule.source[1] : rule.id
     rule.sparse.each do |x, y, c|
       next if diff_x == rule_x + x && diff_y == rule_y + y
-      (0..ruleset.tileset.count).each{new_rule_tiles += [[rule_x + x, rule_y + y, 2 ** _1]] if 2 ** _1 > 0}
+      (0..ruleset.tileset.count).each{new_rule_tiles << [rule_x + x, rule_y + y, 2 ** _1] if 2 ** _1 > 0}
     end
   end
 
