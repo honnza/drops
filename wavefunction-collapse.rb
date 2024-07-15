@@ -202,7 +202,10 @@ Rule = Struct.new(
     [h, d].join "\n"
   end
 
-  def summary; "Rule ##{id} (#{sparse.length} of #{tiles.length}*#{tiles[0].length})"; end
+  def summary
+    w, h = [tiles.length, tiles[0].length].sort
+    "Rule ##{id} (#{sparse.length} of #{w}*#{h}}"
+  end
 end
 
 # Applies all rules to the given point on the board and any consequent changes
