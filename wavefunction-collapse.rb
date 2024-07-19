@@ -543,40 +543,49 @@ def generate ruleset, method, w, h, seeded, tile = nil
     print "\e[?25h"
   end
 
-  srand
   tile = ruleset.tileset.find_index tile
+  randomization = nil
   loop do
-    srand Random.seed if seeded == :seeded
+    if randomization.nil? || seeded == :unseeded
+      randomization = [*0 ... w].product([*0 ... h]).map do |x, y|
+        [x, y, [*0 ... ruleset.tileset.length].map{2 ** _1}.shuffle]
+      end
+      case method
+      when :drizzle
+        randomization = randomization.flat_map{|x, y, ts| ts.map{|t| [x, y, ruleset.all_tiles - t]}}.shuffle
+      when :rain, :wfc then randomization.shuffle!
+      when :pour then randomization.sort_by!{|x, y, _| (2 * x - w + 1) ** 2 + (2 * y - h + 1) ** 2}
+      else raise "bug: unknown generation method"
+      end
+      if method != :drizzle
+        randomization = randomization.flat_map{|x, y, ts| ts.map{|t| [x, y, t]}}
+      end
+    end
+
     board = Array.new(h){Array.new(w){ruleset.all_tiles}}
-    new_rule = nil
     stats = Hash[ruleset.rules.select{_1.source[0] != :symm}.map{[_1.id, 0]}]
     stats[:g] = 0
-    coord_iter = [*0 ... w].product([*0 ... h]).sort_by{|x, y| (2 * x - w + 1) ** 2 + (2 * y - h + 1) ** 2}.each
-    IO.console.clear_screen
+    gen_progress = 0
     loop do
-      coord_iter.next while (x, y = coord_iter.peek; board[y][x] & (board[y][x] - 1) == 0)
-      x, y, samples = loop do
-        x, y = case method
-               when :pour then coord_iter.peek
-               when :rain, :drizzle then [rand(w), rand(h)]
-               when :wfc
-                 count = coord_iter.lazy.map{|x, y| board[y][x].digits(2).count(1)}.select{_1 > 1}.min
-                 coord_iter.filter{|x, y| board[y][x].digits(2).count(1) == count}.sample
-               end
-        samples = if method == :drizzle
-                    [rand(ruleset.tileset.length)]
-                  else
-                    (0 ... ruleset.tileset.length).to_a.shuffle
-                  end.select{board[y][x] & 2 ** _1 != 0}
-        samples = [tile] + (samples - [tile]) if tile && samples.include?(tile)
-        break x, y, samples if board[y][x] & (board[y][x] - 1) != 0 && !samples.empty?
+      x, y, t = randomization[gen_progress]
+      while board[y][x] & ~t == 0 || board[y][x] & t == 0
+        gen_progress += 1
+        break if gen_progress == randomization.length
+        x, y, t = randomization[gen_progress]
       end
-      stats[:g] += method == :drizzle ? 1 : board[y][x].digits(2).count(1) - 1
-      prev_board_yx = board[y][x]
-      board[y][x] = method == :drizzle ? board[y][x] & ~(2 ** samples[0]) : 2 ** samples[0]
+      break if gen_progress == randomization.length
+      if method == :wfc
+        count = board.flat_map{|row| row.map{_1.digits(2).count(1)}}.select{_1 > 1}.min
+        x, y, t = randomization[gen_progress..].find do 
+          |x, y, t| board[y][x].digits(2).count(1) == count && board[y][x] & ~t != 0 && board[y][x] & t != 0
+        end
+      end
 
-      new_rule = apply_ruleset ruleset, board, stats, x, y, &render
-      while new_rule
+      new_stats = stats.dup
+      new_board = board.map(&:dup)
+      new_board[y][x] &= t
+      new_rule = apply_ruleset ruleset, new_board, new_stats, x, y, &render
+      if new_rule
         new_rule_syms = new_rule.all_syms
         ruleset.rules += new_rule_syms
         puts "new rule #{new_rule.summary}; now at #{ruleset.rules.count} rules"
@@ -590,27 +599,29 @@ def generate ruleset, method, w, h, seeded, tile = nil
         stats[new_rule.id] = 0
         puts "press enter to retry"
         gets
-
-        board[y][x] = prev_board_yx
-        new_rule = apply_ruleset ruleset, board, stats, new_rule_syms, nil, true, &render
-        break if new_rule
-        samples.select!{board[y][x] & 2 ** _1 != 0}
-        (stats[:g] -= 1; break) if board[y][x] & (board[y][x] - 1) != 0
-        prev_board_yx = board[y][x]
-        board[y][x] = 2 ** samples[0]
+        
+        new_rule = apply_ruleset ruleset, board, stats, nil, nil, true, &render
+        if new_rule
+          if seeded.nil?
+            puts "conflict; aborting"
+            return
+          else
+            puts "conflict; retrying"
+            break
+          end
+        end
+      else
+        board = new_board
+        stats = new_stats
       end
-      break if new_rule
-    end
-
-    if new_rule
-      puts "conflict during recovery; rewinding"
-        return unless seeded
-    else
-      puts "success"
     end
     puts "rule stats:"
     puts vwrap stats.to_a
     puts "#{stats.values.sum} total"
+    ruleset.rules.sort_by!.with_index do |rule, ix|
+      [(rule.source[0] == :symm ? -stats[rule.source[1]] : -stats[rule.id] rescue -stats.values.max - 1), rule.source[0], ix]
+    end
+
     rules_deleted = ruleset.rules.select{_1.source[0] == :conflict && stats[_1.id] == 0}.each do |to_delete, _|
       ruleset.rules.select{_1.source[0] == :conflict && _1.source.include?(to_delete.id)}.each do |child_rule|
         child_rule.source = child_rule.source - [to_delete.id] | to_delete.source[1..]
@@ -622,8 +633,10 @@ def generate ruleset, method, w, h, seeded, tile = nil
     ruleset.rules.sort_by!.with_index do |rule, ix|
       [(rule.source[0] == :symm ? -stats[rule.source[1]] : -stats[rule.id] rescue - stats.values.max - 1), rule.source[0], ix]
     end
-    break unless new_rule
-    puts "press enter to retry"
+    if gen_progress == randomization.length
+      puts "success"
+      return
+    end
     gets
   end
 end
