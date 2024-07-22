@@ -338,8 +338,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
     new_bitmap = rule_bitmap.map{|row| row.dup}
     new_bitmap[y][x] = ruleset.all_tiles
     if apply_ruleset(ruleset, new_bitmap, Hash.new(0),
-        origin_x - new_rule_min_x, origin_y - new_rule_min_y,
-        true, [x, y, rule_bitmap[y][x]]) {}
+                       nil, nil, true, [x, y, rule_bitmap[y][x]]) {}
       rule_bitmap[y][x] = ruleset.all_tiles
     end
     renderer.call rule_bitmap, ix + 1, coord_iter.length, [x, x, y, y], hl: false
@@ -357,8 +356,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
     new_bitmap = rule_bitmap.map{|row| row.dup}
     new_bitmap[y][x] |= 2 ** tile
     if apply_ruleset(ruleset, new_bitmap, Hash.new(0),
-                       origin_x - new_rule_min_x, origin_y - new_rule_min_y,
-                       true, [x, y, rule_bitmap[y][x]]
+                       nil, nil, true, [x, y, rule_bitmap[y][x]]
                     ) {}
       rule_bitmap[y][x] |= 2 ** tile
     end
