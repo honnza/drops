@@ -329,7 +329,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
     .select{|y, x| rule_bitmap[y][x].digits(2).count(1) < ruleset.tileset.count}
     .sort_by{|y, x| [
       rule_bitmap[y][x].digits(2).count(1),
-      (rule_bitmap[0].length - 1 - 2 * x) ** 2 + (rule_bitmap.length - 1 - 2 * y) ** 2
+      (origin_x - new_rule_min_x - x) ** 2 + (origin_y - new_rule_min_y - y) ** 2
     ]}.reverse
 
   (0 ... coord_iter.length).each do |ix|
@@ -348,7 +348,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   coord_iter = [*0 ... rule_bitmap.length].product([*0 ... rule_bitmap[0].length], [*0 ... ruleset.tileset.length])
     .reject{|y, x, tile| rule_bitmap[y][x] & 2 ** tile != 0}
     .sort_by{|y, x| [
-      (rule_bitmap[0].length - 1 - 2 * x) ** 2 + (rule_bitmap.length - 1 - 2 * y) ** 2,
+      (origin_x - new_rule_min_x - x) ** 2 + (origin_y - new_rule_min_y - y) ** 2,
       y, x
     ]}.reverse
 
