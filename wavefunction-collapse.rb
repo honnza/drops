@@ -572,6 +572,7 @@ def generate ruleset, method, w, h, seeded, tile = nil
         randomization = randomization.flat_map{|x, y, ts| ts.map{|t| [x, y, ruleset.all_tiles - t]}}.shuffle
       when :rain, :wfc then randomization.shuffle!
       when :pour then randomization.sort_by!{|x, y, _| (2 * x - w + 1) ** 2 + (2 * y - h + 1) ** 2}
+      when :lex then randomization.sort_by!{|x, y, _| [-y, x]}
       else raise "bug: unknown generation method"
       end
       if method != :drizzle
@@ -774,7 +775,7 @@ if $0 == __FILE__
           puts rule
         end
       end
-    when /^gen(?:erate)? ((?:un)?seeded )?(drizzle|rain|pour|wfc)(?: (\d+)x(\d+))?(?: (\S+))?$/
+    when /^gen(?:erate)? ((?:un)?seeded )?(drizzle|rain|pour|wfc|lex)(?: (\d+)x(\d+))?(?: (\S+))?$/
       if ruleset.tileset.empty?
         puts "at least one tile required"
         next
@@ -824,6 +825,7 @@ show (all)? rules - list all rules in the ruleset. Omits symmetric images of oth
   rain - at each step, select a random position and select one tile for that position
   pour - at each step, sulect an unresolved position closest to the middle and select one tile for that position
   wfc - wavefunction collapse classic. At each step, randomly choose a tile with the fewest possibilities and resolve it.
+  lex - resolve tiles from left to right, then bottom to top
 
 save as (filename) - save the ruleset to a file
 load from (filename) - restore a ruleset from the file
