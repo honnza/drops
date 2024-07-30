@@ -1226,15 +1226,36 @@ def coinflip_race(n_trials, n_racers, min_ahead, p_move)
 end
 
 def gen_polyomino(n_tiles)
-  tiles = [[0, 0]]
   neigh = [[-1, 0], [0, -1], [0, 1], [1, 0]]
-  tiles |= [tiles.sample.zip(neigh.sample).map{_1+_2}] until tiles.length == n_tiles
-  bb = tiles.transpose.map(&:minmax)
-  (bb[0][0] .. bb[0][1]).map do |y|
-    (bb[1][0] .. bb[1][1]).map do |x|
-      tiles.include?([y, x]) ? "#" : " "
-    end.join(" ")
-  end.join("\n")
+  # the simplest algorithm of start with a monomino and add random neigbors overrepresents
+  # branching and cyclic polyominos. If we instead generate for each square whether it is a tile or
+  # not, each fixed n-mino will have exactly n ways to be generated.
+  
+  (1 ..).each do |tries|
+    randomization = [:tile] * (n_tiles - 1) + [:wall] * (2 * n_tiles + 2)
+    randomization = ([:tile] + randomization.shuffle).each
+    tiles = {[0, 0] => :open}
+    loop do
+      (x, y), _ = tiles.select{|(_, _), state| state == :open}.min
+      break if x.nil?
+      case randomization.next
+      when :wall then tiles[[x, y]] = :wall
+      when :tile
+        tiles[[x, y]] = :tile
+        neigh.each{|dx, dy| tiles[[x + dx, y + dy]] ||= :open}
+      end
+    end
+    tiles = tiles.select{|_, state| state == :tile}.keys
+    next if tiles.length < n_tiles
+    bb = tiles.transpose.map(&:minmax)
+    return {tries:,
+            polyomino: (bb[0][0] .. bb[0][1]).map do |y|
+                         (bb[1][0] .. bb[1][1]).map do |x|
+                           tiles.include?([y, x]) ? "#" : " "
+                         end.join(" ")
+                       end.join("\n")
+           }
+  end
 end
 
 class Numeric
