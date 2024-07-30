@@ -307,6 +307,8 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
     [->b{[0, 0, 0, b.length - 1]}, ->b{b.map{_1[1..]}}, ->{new_rule_min_x += 1}],
     [->b{[b[0].length - 1, b[0].length - 1, 0, b.length - 1]}, ->b{b.map{_1[..-2]}}]
   ]
+  ops[0], ops[1] = ops[1], ops[0] if new_rule_min_y + new_rule_max_y > 2 * origin_y
+  ops[2], ops[3] = ops[3], ops[2] if new_rule_min_x + new_rule_max_x > 2 * origin_x
   ops = ops[2..3] + ops[0..1] if rule_bitmap.length > rule_bitmap[0].length
   ops.each do |hl_op, cond_op, then_op|
     loop do
@@ -328,11 +330,12 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   coord_iter = [*0 ... rule_bitmap.length].product([*0 ... rule_bitmap[0].length])
     .select{|y, x| rule_bitmap[y][x].digits(2).count(1) < ruleset.tileset.count}
     .sort_by{|y, x| [
+      y == origin_y - new_rule_min_y && x == origin_x - new_rule_min_x ? 1 : 0,
       rule_bitmap[y][x].digits(2).count(1),
       (origin_x - new_rule_min_x - x) ** 2 + (origin_y - new_rule_min_y - y) ** 2
     ]}.reverse
 
-  (0 ... coord_iter.length).each do |ix|
+  coord_iter.each.with_index do |(y, x), ix|
     y, x = coord_iter[ix]
     renderer.call rule_bitmap, ix + 1, coord_iter.length, [x, x, y, y], hl: true
     new_bitmap = rule_bitmap.map{|row| row.dup}
@@ -344,23 +347,31 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
     renderer.call rule_bitmap, ix + 1, coord_iter.length, [x, x, y, y], hl: false
   end
 
-  coord_iter = [*0 ... rule_bitmap.length].product([*0 ... rule_bitmap[0].length], [*0 ... ruleset.tileset.length])
-    .reject{|y, x, tile| rule_bitmap[y][x] & 2 ** tile != 0}
-    .sort_by{|y, x| [
-      (origin_x - new_rule_min_x - x) ** 2 + (origin_y - new_rule_min_y - y) ** 2,
-      y, x
-    ]}.reverse
+  coord_iter.select!{|y, x| rule_bitmap[y][x].digits(2).count(1) < ruleset.tileset.count - 1}
 
-  coord_iter.each.with_index do |(y, x, tile), ix|
-    renderer.call rule_bitmap, ix + 1, coord_iter.length, [x, x, y, y], hl: true
-    new_bitmap = rule_bitmap.map{|row| row.dup}
-    new_bitmap[y][x] |= 2 ** tile
-    if apply_ruleset(ruleset, new_bitmap, Hash.new(0),
-                       nil, nil, true, [x, y, rule_bitmap[y][x]]
-                    ) {}
-      rule_bitmap[y][x] |= 2 ** tile
+  coord_iter.each.with_index do |(y, x), ix|
+    renderer.call rule_bitmap, ix + 0.0, coord_iter.length, [x, x, y, y], hl: true
+    bitmap_without = rule_bitmap.map(&:dup)
+    bitmap_without[y][x] = ruleset.all_tiles
+    if apply_ruleset(ruleset, bitmap_without, Hash.new(0),
+                       nil, nil, true) {}
+      raise "There's a conflict if #{[x, y]} is removed. We should have noticed earlier."
     end
-    renderer.call rule_bitmap, ix + 1, coord_iter.length, [x, x, y, y], hl: false
+    rule_bitmap[y][x] |= ruleset.all_tiles & ~bitmap_without[y][x]
+    renderer.call rule_bitmap, ix + 0.5, coord_iter.length, [x, x, y, y], hl: true
+    (0 ... ruleset.tileset.count).each do |tile|
+      if rule_bitmap[y][x] & 2 ** tile == 0
+        new_bitmap = bitmap_without.map(&:dup)
+        new_bitmap[y][x] = rule_bitmap[y][x] | 2 ** tile
+        if apply_ruleset(ruleset, new_bitmap, Hash.new(0),
+            nil, nil, true, [x, y, rule_bitmap[y][x]]
+                        ) {}
+          rule_bitmap[y][x] |= 2 ** tile
+          renderer.call rule_bitmap, ix + 0.5, coord_iter.length, [x, x, y, y], hl: true
+        end
+      end
+    end
+    renderer.call rule_bitmap, ix + 1.0, coord_iter.length, [x, x, y, y], hl: false
   end
 
   #we do one last run to collect conflict stats because the previous run may have taken a shortcut
@@ -598,6 +609,7 @@ def generate ruleset, method, w, h, seeded, tile = nil
       end
 
       new_stats = stats.dup
+      new_stats[:g] += 1
       new_board = board.map(&:dup)
       new_board[y][x] &= t
       new_rule = apply_ruleset ruleset, new_board, new_stats, x, y, &render
