@@ -1263,6 +1263,19 @@ def gen_polyomino(n_tiles)
   end
 end
 
+def print_polyominos(n_tiles)
+  polyominos = []
+  loop do
+    r = gen_polyomino n_tiles
+    puts "." * r[:tries]
+    unless polyominos.include? r[:polyomino]
+      puts r[:polyomino]
+      polyominos << r[:polyomino]
+      gets
+    end
+  end
+end
+
 class Numeric
   def round_toward(other); round(half: (self > other) ^ (self < 0) ? :down : :up); end
   def round_away(other); round(half: (self < other) ^ (self < 0) ? :down : :up); end
