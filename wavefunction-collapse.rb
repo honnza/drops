@@ -278,26 +278,24 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
 
   return unless conflict
 
-  new_rule_tiles = []
+  new_rule_tiles = Set.new
   undo_log.reverse.each do |entry|
     diff_x, diff_y, diff_c, rule_x, rule_y, rule = entry
     board[diff_y][diff_x] |= diff_c
-    next if !new_rule_tiles.empty? && !new_rule_tiles.any? do |x, y, c|
-      diff_x == x && diff_y == y && (diff_c & c != 0)
-    end
+    next if !new_rule_tiles.empty? && !new_rule_tiles.include?([diff_x, diff_y])
     diff_x = diff_y = nil if new_rule_tiles.empty?
     entry << :x
     stat_rule = rule.source[0] == :symm ? rule.source[1] : rule.id
     rule.sparse.each do |x, y, c|
       next if diff_x == rule_x + x && diff_y == rule_y + y
-      (0..ruleset.tileset.count).each{new_rule_tiles << [rule_x + x, rule_y + y, 2 ** _1] if 2 ** _1 & c > 0}
+      (0..ruleset.tileset.count).each{new_rule_tiles << [rule_x + x, rule_y + y]}
     end
   end
 
-  new_rule_min_x, new_rule_max_x = new_rule_tiles.map{|x, _, _| x}.minmax
-  new_rule_min_y, new_rule_max_y = new_rule_tiles.map{|_, y, _| y}.minmax
+  new_rule_min_x, new_rule_max_x = new_rule_tiles.map{|x, _| x}.minmax
+  new_rule_min_y, new_rule_max_y = new_rule_tiles.map{|_, y| y}.minmax
   rule_bitmap = [*new_rule_min_y .. new_rule_max_y].map{[*new_rule_min_x .. new_rule_max_x].map{ruleset.all_tiles}}
-  new_rule_tiles.each{|x, y, c| rule_bitmap[y - new_rule_min_y][x - new_rule_min_x] &= ~c | board[y][x]}
+  new_rule_tiles.each{|x, y| rule_bitmap[y - new_rule_min_y][x - new_rule_min_x] &= board[y][x]}
   IO.console.clear_screen
   renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length
 
