@@ -73,7 +73,7 @@ def snake_boxing(w,h)
   end
 end
 
-def generate_hypercube(total, &op)
+def gen_hypercube(total, &op)
   r = [rand(total)]
   until r.size >= total
     gen = rand(total)
@@ -83,7 +83,7 @@ def generate_hypercube(total, &op)
   r
 end
 
-def generate_group(first, gens, &op)
+def gen_group(first, gens, &op)
   gen_at = gens.map{0}
   elems = [first]
   loop do
@@ -97,7 +97,7 @@ def generate_group(first, gens, &op)
   end
 end
 
-def generate_lattice(dims, first = nil, gens = [])
+def gen_lattice(dims, first = nil, gens = [])
   gens_at = []
   gen_stats = []
   elems = [first || dims.map{|d| rand d}]
@@ -241,12 +241,12 @@ def digitwise_sum(b)
   f = Proc.new{|x, y| (x + y) % b + (x < b && y < b ? 0 : f[x/b, y/b] * b)}
 end
 
-def generate_symmetric(dims, &orbit_f)
+def gen_symmetric(dims, &orbit_f)
   dims.map{(0 ... _1).to_a}.reduce(&:product).map(&:flatten)
       .group_by(&orbit_f).values.shuffle.map(&:shuffle).flatten(1)
 end
 
-# x = generate_group(rand(144), x=[*0..143].shuffle, &digitwise_sum(12))
+# x = gen_group(rand(144), x=[*0..143].shuffle, &digitwise_sum(12))
 
 # #x=[*0..99].shuffle; x.each_slice(20).map{|x| puts x.join " "}
 # puts x.map{|x|(x/12).to_s(12)}.join; puts x.map{|x|(x%12).to_s(12)}.join
@@ -1154,7 +1154,7 @@ def bar(x, n: :n4, f: 0.1)
   puts "same area group id #{sag_id[sag]} = #{sag_name[sag]}"
 end
 
-def generate_palette n_colors, adjacencies
+def gen_palette n_colors, adjacencies
   # using redmean from https://en.m.wikipedia.org/wiki/Color_difference#sRGB
   # caused unstability. Switched to constant weights instead.
   c = n_colors.times.map{[rand - 0.5, rand - 0.5, rand - 0.5]}
