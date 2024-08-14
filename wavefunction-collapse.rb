@@ -220,7 +220,7 @@ end
 # renderer - called after each successful rule application on the happy path, and after each successful
 #            generalisation while generating a r ule.
 def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check_only = false, stop_at = nil, &renderer)
-  return if ruleset.rules.empty? || board.empty?
+  return if board.empty? || board[0].empty?
   renderer.call board, rule_stats.values.sum, board.length * board[0].length * (ruleset.tileset.length - 1)
   renderer.call board, rule_stats.values.sum, board.length * board[0].length * (ruleset.tileset.length - 1), [origin_x, origin_x, origin_y, origin_y], hl: true if origin_x
   conflict = false
@@ -290,7 +290,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
     stat_rule = rule.source[0] == :symm ? rule.source[1] : rule.id
     rule.sparse.each do |x, y, c|
       next if diff_x == rule_x + x && diff_y == rule_y + y
-      (0..ruleset.tileset.count).each{new_rule_tiles << [rule_x + x, rule_y + y, 2 ** _1] if 2 ** _1 > 0}
+      (0..ruleset.tileset.count).each{new_rule_tiles << [rule_x + x, rule_y + y, 2 ** _1] if 2 ** _1 & c > 0}
     end
   end
 
@@ -315,6 +315,9 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
       new_bitmap = cond_op[rule_bitmap]
       renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length
       renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length, hl_op[rule_bitmap], hl: true
+      renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length,
+        [origin_x - new_rule_min_x, origin_x - new_rule_min_x,
+         origin_y - new_rule_min_y, origin_y - new_rule_min_y], hl: true
       if apply_ruleset(ruleset, new_bitmap, Hash.new(0),
           origin_x - new_rule_min_x, origin_y - new_rule_min_y,
           true) {}
@@ -330,11 +333,15 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   coord_iter = [*0 ... rule_bitmap.length].product([*0 ... rule_bitmap[0].length])
     .select{|y, x| rule_bitmap[y][x].digits(2).count(1) < ruleset.tileset.count}
     .sort_by{|y, x| [
-      y == origin_y - new_rule_min_y && x == origin_x - new_rule_min_x ? 1 : 0,
+      # y == origin_y - new_rule_min_y && x == origin_x - new_rule_min_x ? 1 : 0,
       rule_bitmap[y][x].digits(2).count(1),
-      (origin_x - new_rule_min_x - x) ** 2 + (origin_y - new_rule_min_y - y) ** 2
+      (origin_x - new_rule_min_x - x) ** 2 + (origin_y - new_rule_min_y - y) ** 2,
+      y, x
     ]}.reverse
 
+  renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length,
+    [origin_x - new_rule_min_x, origin_x - new_rule_min_x,
+     origin_y - new_rule_min_y, origin_y - new_rule_min_y], hl: true
   coord_iter.each.with_index do |(y, x), ix|
     y, x = coord_iter[ix]
     renderer.call rule_bitmap, ix + 1, coord_iter.length, [x, x, y, y], hl: true
@@ -344,7 +351,9 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
                        nil, nil, true, [x, y, rule_bitmap[y][x]]) {}
       rule_bitmap[y][x] = ruleset.all_tiles
     end
-    renderer.call rule_bitmap, ix + 1, coord_iter.length, [x, x, y, y], hl: false
+    unless x == origin_x - new_rule_min_x && y == origin_y - new_rule_min_y
+      renderer.call rule_bitmap, ix + 1, coord_iter.length, [x, x, y, y], hl: false
+    end
   end
 
   coord_iter.select!{|y, x| rule_bitmap[y][x].digits(2).count(1) < ruleset.tileset.count - 1}
@@ -358,17 +367,15 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
       raise "There's a conflict if #{[x, y]} is removed. We should have noticed earlier."
     end
     rule_bitmap[y][x] |= ruleset.all_tiles & ~bitmap_without[y][x]
-    renderer.call rule_bitmap, ix + 0.5, coord_iter.length, [x, x, y, y], hl: true
-    (0 ... ruleset.tileset.count).each do |tile|
-      if rule_bitmap[y][x] & 2 ** tile == 0
-        new_bitmap = bitmap_without.map(&:dup)
-        new_bitmap[y][x] = rule_bitmap[y][x] | 2 ** tile
-        if apply_ruleset(ruleset, new_bitmap, Hash.new(0),
-            nil, nil, true, [x, y, rule_bitmap[y][x]]
-                        ) {}
-          rule_bitmap[y][x] |= 2 ** tile
-          renderer.call rule_bitmap, ix + 0.5, coord_iter.length, [x, x, y, y], hl: true
-        end
+    tile_iter = (0 ... ruleset.tileset.count).select{|tile| rule_bitmap[y][x] & 2 ** tile == 0}
+    tile_iter.each.with_index(1) do |tile, tix|
+      renderer.call rule_bitmap, ix + tix / (tile_iter.length + 1.0), coord_iter.length, [x, x, y, y], hl: true
+      new_bitmap = bitmap_without.map(&:dup)
+      new_bitmap[y][x] = rule_bitmap[y][x] | 2 ** tile
+      if apply_ruleset(ruleset, new_bitmap, Hash.new(0),
+          nil, nil, true, [x, y, rule_bitmap[y][x]]
+                      ) {}
+        rule_bitmap[y][x] |= 2 ** tile
       end
     end
     renderer.call rule_bitmap, ix + 1.0, coord_iter.length, [x, x, y, y], hl: false
@@ -563,8 +570,9 @@ def generate ruleset, method, w, h, seeded, tile = nil
         print "\e[K" if full_draw
       end
     end
+    n_str = n.is_a?(Integer) ? n.to_s : "%.2f" % n
     print "\e[#{board.length * th + 1};1H"
-    print progress_bar(n.fdiv(d), "#{n} / #{d}", IO.console.winsize[1] - 1)
+    print progress_bar(n.fdiv(d), "%s / %d" % [n_str, d], IO.console.winsize[1] - 1)
     print "\e[J" if full_draw
     print "\e[?25h"
   end
@@ -592,6 +600,11 @@ def generate ruleset, method, w, h, seeded, tile = nil
     board = Array.new(h){Array.new(w){ruleset.all_tiles}}
     stats = Hash[ruleset.rules.select{_1.source[0] != :symm}.map{[_1.id, 0]}]
     stats[:g] = 0
+    if apply_ruleset ruleset, board, stats, nil, nil, true, &render
+      puts "no solution"
+      return
+    end
+
     gen_progress = 0
     loop do
       x, y, t = randomization[gen_progress]
@@ -609,7 +622,7 @@ def generate ruleset, method, w, h, seeded, tile = nil
       end
 
       new_stats = stats.dup
-      new_stats[:g] += 1
+      new_stats[:g] += (board[y][x] & ~t).digits(2).count(1)
       new_board = board.map(&:dup)
       new_board[y][x] &= t
       new_rule = apply_ruleset ruleset, new_board, new_stats, x, y, &render
@@ -628,8 +641,11 @@ def generate ruleset, method, w, h, seeded, tile = nil
         puts "press enter to retry"
         gets
         
-        new_rule = apply_ruleset ruleset, board, stats, nil, nil, true, &render
+        new_board = board.map(&:dup)
+        new_rule = apply_ruleset ruleset, new_board, stats, nil, nil, true, &render
         if new_rule
+          board[y][x] = 0
+          render[board, stats.values.reduce(&:+), board.length * board[0].length * (ruleset.tileset.length)]
           if seeded.nil?
             puts "conflict; aborting"
             return
@@ -637,6 +653,8 @@ def generate ruleset, method, w, h, seeded, tile = nil
             puts "conflict; retrying"
             break
           end
+        else
+          board = new_board
         end
       else
         board = new_board
@@ -785,11 +803,17 @@ if $0 == __FILE__
           puts rule
         end
       end
-    when /^gen(?:erate)? ((?:un)?seeded )?(drizzle|rain|pour|wfc|lex)(?: (\d+)x(\d+))?(?: (\S+))?$/
+    when /^(gen|genus|gense|generate(?: seeded| unseeded)?) (drizzle|rain|pour|wfc|lex)(?: (\d+)x(\d+))?(?: (\S+))?$/
       if ruleset.tileset.empty?
         puts "at least one tile required"
         next
       end
+      seeded = case $1
+               when "gen", "generate" then nil
+               when "gense", "generate seeded" then :seeded
+               when "genus", "generate unseeded" then :unseeded
+               else raise "error parsing command. This is a bug."
+               end
       normalize_tiles ruleset.tileset
       h = $3&.to_i || (IO.console.winsize[0] - 1) / ruleset.tileset[0].ascii.length
       w = $4&.to_i || IO.console.winsize[1] / ruleset.tileset[0].ascii[0].display_length
@@ -800,7 +824,7 @@ if $0 == __FILE__
       end
       StackProf.start(mode: :cpu)
       begin
-        generate ruleset, $2.to_sym, w, h, $1&.strip&.to_sym, tile
+        generate ruleset, $2.to_sym, w, h, seeded, tile
       rescue Interrupt
         p $!
         p $@
@@ -830,7 +854,7 @@ Ruleset must be defined before tiles, tiles must be defined before tile symmetri
 delete (cascade)? rule (id) - delete a rule. Must not be referenced by other rules. If cascade is set, delete refererrers instead.
 show (all)? rules - list all rules in the ruleset. Omits symmetric images of other rules unless specified.
 
-(gen|generate) (seeded|unseeded)? (drizzle|rain|pour|wfc) (wxh)? (tile)? - generates a pattern using the ruleset or finds and adds a rule non-trivially implied by existing rules. Uses the screen size if unspecified. If seeded is set, it attemts to generate the board again with the same RNG if unsuccessful. If unseededd is set, it retries with a different RNG. If neither is set, aborts after one attempt. If tile is specified, it tries to place that tile in the selected position.
+(gen|genus|gense|generate) (seeded|unseeded)? (drizzle|rain|pour|wfc) (wxh)? (tile)? - generates a pattern using the ruleset or finds and adds a rule non-trivially implied by existing rules. Uses the screen size if unspecified. If gense/seeded is set, it attemts to generate the board again with the same RNG if unsuccessful. If genus/unseeded is set, it retries with a different RNG. If neither is set, aborts after one attempt. If tile is specified, it tries to place that tile in the selected position.
   drizzle - at each step, select a random position and remove one possible tile from it
   rain - at each step, select a random position and select one tile for that position
   pour - at each step, sulect an unresolved position closest to the middle and select one tile for that position
