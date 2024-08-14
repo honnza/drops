@@ -1247,14 +1247,19 @@ def gen_polyomino(n_tiles)
     end
     tiles = tiles.select{|_, state| state == :tile}.keys
     next if tiles.length < n_tiles
-    bb = tiles.transpose.map(&:minmax)
-    return {tries:,
-            polyomino: (bb[0][0] .. bb[0][1]).map do |y|
-                         (bb[1][0] .. bb[1][1]).map do |x|
-                           tiles.include?([y, x]) ? "#" : " "
-                         end.join(" ")
-                       end.join("\n")
-           }
+    polyomino = [
+      -> ((x, y)) {[x, y]}, -> ((x, y)) {[x, -y]}, -> ((x, y)) {[-x, y]}, -> ((x, y)) {[-x, -y]},
+      -> ((x, y)) {[y, x]}, -> ((x, y)) {[y, -x]}, -> ((x, y)) {[-y, x]}, -> ((x, y)) {[-y, -x]},
+    ].map do |op|
+      ttiles = tiles.map &op
+      bb = ttiles.transpose.map(&:minmax)
+      (bb[0][0] .. bb[0][1]).map do |y|
+        (bb[1][0] .. bb[1][1]).map do |x|
+          ttiles.include?([y, x]) ? "#" : " "
+        end.join(" ")
+      end.join("\n")
+    end.min_by{[_1.count("\n"), _1]}
+    return {tries:, polyomino:}
   end
 end
 
