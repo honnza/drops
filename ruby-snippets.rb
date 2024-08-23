@@ -1399,6 +1399,13 @@ def voronoi_subdivide(xs, ys, reflexive = false, z_metric: -> a, b {(a - b).abs}
       (a - d) ** 2 + (b - e) ** 2 + (c - f) ** 2
     end
   end
+  if z_metric == :xy_oct2
+    z_metric = lambda do |x, y|
+      a, b, c, d, *_ = x.digits(10) + [0, 0, 0]
+      e, f, g, h, *_ = y.digits(10) + [0, 0, 0]
+      (a + 8 * b - e - 8 * f) ** 2 + (c + 8 * d - g - 8 * h) ** 2
+    end
+  end
 
   p [xs.first, ys.first]
   n_0_0 = gets.to_i
