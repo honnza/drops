@@ -222,7 +222,8 @@ end
 def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check_only = false, stop_at = nil, &renderer)
   return if board.empty? || board[0].empty?
   renderer.call board, rule_stats.values.sum, board.length * board[0].length * (ruleset.tileset.length - 1)
-  renderer.call board, rule_stats.values.sum, board.length * board[0].length * (ruleset.tileset.length - 1), [origin_x, origin_x, origin_y, origin_y], hl: true if origin_x
+  renderer.call(board, rule_stats.values.sum, board.length * board[0].length * (ruleset.tileset.length - 1),
+                [origin_x, origin_x, origin_y, origin_y], hl: true) if origin_x
   conflict = false
   undo_log = []
   diff_queue = {}
@@ -278,26 +279,36 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
 
   return unless conflict
 
-  new_rule_tiles = Set.new
-  undo_log.reverse.each do |entry|
-    diff_x, diff_y, diff_c, rule_x, rule_y, rule = entry
-    board[diff_y][diff_x] |= diff_c
-    next if !new_rule_tiles.empty? && !new_rule_tiles.include?([diff_x, diff_y])
-    diff_x = diff_y = nil if new_rule_tiles.empty?
-    entry << :x
-    stat_rule = rule.source[0] == :symm ? rule.source[1] : rule.id
-    rule.sparse.each do |x, y, c|
-      next if diff_x == rule_x + x && diff_y == rule_y + y
-      (0..ruleset.tileset.count).each{new_rule_tiles << [rule_x + x, rule_y + y]}
-    end
+  # To generate new rule: 
+  # - Take the rule that detected a conflict and a rule that triggered it
+  # Then the the conditions for both rules combined minus the point the earlier rule added form a conflict
+  entry_1 = undo_log.last
+  _, _, _, rule1_x, rule1_y, rule1 = entry_1
+  entry_2 = undo_log.reverse_each.find do |entry_2|
+    diff2_x, diff2_y, diff2_c, rule2_x, rule2_y, rule2 = entry_2
+    rule1.sparse.any?{|x, y, c| diff2_x == rule1_x + x && diff2_y == rule1_y + y && diff2_c & c != 0}
   end
+  diff2_x, diff2_y, diff2_c, rule2_x, rule2_y, rule2 = entry_2
+  diff1_c = rule1.sparse.find{|x, y, _| diff2_x == rule1_x + x && diff2_y == rule1_y + y}[2]
+  new_rule_tiles = rule1.sparse.map{|x, y, c| [x + rule1_x, y + rule1_y, c]} +
+                   rule2.sparse.map{|x, y, c| [x + rule2_x, y + rule2_y, c]}
+  new_rule_tiles.find{|x, y, c| x == diff2_x && y == diff2_y}.tap{|tile| tile[2] &= ~(diff1_c | diff2_c)}
 
-  new_rule_min_x, new_rule_max_x = new_rule_tiles.map{|x, _| x}.minmax
-  new_rule_min_y, new_rule_max_y = new_rule_tiles.map{|_, y| y}.minmax
+  new_rule_min_x, new_rule_max_x = new_rule_tiles.map{|x, _, _| x}.minmax
+  new_rule_min_y, new_rule_max_y = new_rule_tiles.map{|_, y, _| y}.minmax
   rule_bitmap = [*new_rule_min_y .. new_rule_max_y].map{[*new_rule_min_x .. new_rule_max_x].map{ruleset.all_tiles}}
-  new_rule_tiles.each{|x, y| rule_bitmap[y - new_rule_min_y][x - new_rule_min_x] &= board[y][x]}
+  new_rule_tiles.each{|x, y, c| rule_bitmap[y - new_rule_min_y][x - new_rule_min_x] &= ~c}
   IO.console.clear_screen
   renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length
+  p rule1.sparse.map{|x, y, c| [x + rule1_x - new_rule_min_x, y + rule1_y - new_rule_min_y, "0x" + c.to_s(16)]}
+  p rule2.sparse.map{|x, y, c| [x + rule2_x - new_rule_min_x, y + rule2_y - new_rule_min_y, "0x" + c.to_s(16)]}
+  p [diff2_x - new_rule_min_x, diff2_y - new_rule_min_y, "0x" + diff1_c.to_s(16), "0x" + diff2_c.to_s(16)]
+
+  if !apply_ruleset(ruleset, rule_bitmap.map(&:dup), Hash.new(0),
+      nil, nil, true) {}
+    raise "the new rule should conflict but doesn't"
+  end
+  gets
 
   coord_iter = [*0 ... rule_bitmap.length].product([*0 ... rule_bitmap[0].length])
     .select{|y, x| rule_bitmap[y][x].digits(2).count(1) < ruleset.tileset.count}
@@ -307,9 +318,6 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
       y, x
     ]}.reverse
 
-  renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length,
-    [origin_x - new_rule_min_x, origin_x - new_rule_min_x,
-     origin_y - new_rule_min_y, origin_y - new_rule_min_y], hl: true
   coord_iter.each.with_index do |(y, x), ix|
     y, x = coord_iter[ix]
     renderer.call rule_bitmap, ix + 1, coord_iter.length, [x, x, y, y], hl: true
@@ -318,9 +326,6 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
     if apply_ruleset(ruleset, new_bitmap, Hash.new(0),
                        nil, nil, true, [x, y, rule_bitmap[y][x]]) {}
       rule_bitmap[y][x] = ruleset.all_tiles
-    end
-    unless x == origin_x - new_rule_min_x && y == origin_y - new_rule_min_y
-      renderer.call rule_bitmap, ix + 1, coord_iter.length, [x, x, y, y], hl: false
     end
   end
 
@@ -332,9 +337,6 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
       y, x
     ]}.reverse
 
-  renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length,
-    [origin_x - new_rule_min_x, origin_x - new_rule_min_x,
-     origin_y - new_rule_min_y, origin_y - new_rule_min_y], hl: true
   coord_iter.each.with_index do |(y, x), ix|
     renderer.call rule_bitmap, ix + 0.0, coord_iter.length, [x, x, y, y], hl: true
     bitmap_without = rule_bitmap.map(&:dup)
