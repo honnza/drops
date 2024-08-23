@@ -299,39 +299,9 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   IO.console.clear_screen
   renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length
 
-  ops = [
-    [->b{[0, b[0].length - 1, 0, 0]}, ->b{b[1..].map(&:dup)}, ->{new_rule_min_y += 1}],
-    [->b{[0, b[0].length - 1, b.length - 1, b.length - 1]}, ->b{b[..-2].map(&:dup)}], 
-    [->b{[0, 0, 0, b.length - 1]}, ->b{b.map{_1[1..]}}, ->{new_rule_min_x += 1}],
-    [->b{[b[0].length - 1, b[0].length - 1, 0, b.length - 1]}, ->b{b.map{_1[..-2]}}]
-  ]
-  ops[0], ops[1] = ops[1], ops[0] if new_rule_min_y + new_rule_max_y > 2 * origin_y
-  ops[2], ops[3] = ops[3], ops[2] if new_rule_min_x + new_rule_max_x > 2 * origin_x
-  ops = ops[2..3] + ops[0..1] if rule_bitmap.length > rule_bitmap[0].length
-  ops.each do |hl_op, cond_op, then_op|
-    loop do
-      new_bitmap = cond_op[rule_bitmap]
-      renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length
-      renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length, hl_op[rule_bitmap], hl: true
-      renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length,
-        [origin_x - new_rule_min_x, origin_x - new_rule_min_x,
-         origin_y - new_rule_min_y, origin_y - new_rule_min_y], hl: true
-      if apply_ruleset(ruleset, new_bitmap, Hash.new(0),
-          origin_x - new_rule_min_x, origin_y - new_rule_min_y,
-          true) {}
-        rule_bitmap = cond_op[rule_bitmap]
-        then_op&.[]
-      else
-        break
-      end
-    end
-  end
-  renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length
-  
   coord_iter = [*0 ... rule_bitmap.length].product([*0 ... rule_bitmap[0].length])
     .select{|y, x| rule_bitmap[y][x].digits(2).count(1) < ruleset.tileset.count}
     .sort_by{|y, x| [
-      # y == origin_y - new_rule_min_y && x == origin_x - new_rule_min_x ? 1 : 0,
       rule_bitmap[y][x].digits(2).count(1),
       (origin_x - new_rule_min_x - x) ** 2 + (origin_y - new_rule_min_y - y) ** 2,
       y, x
@@ -354,8 +324,17 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
     end
   end
 
-  coord_iter.select!{|y, x| rule_bitmap[y][x].digits(2).count(1) < ruleset.tileset.count - 1}
+  coord_iter = [*0 ... rule_bitmap.length].product([*0 ... rule_bitmap[0].length])
+    .select{|y, x| rule_bitmap[y][x].digits(2).count(1) < ruleset.tileset.count - 1}
+    .sort_by{|y, x| [
+      rule_bitmap[y][x].digits(2).count(1),
+      (origin_x - new_rule_min_x - x) ** 2 + (origin_y - new_rule_min_y - y) ** 2,
+      y, x
+    ]}.reverse
 
+  renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length,
+    [origin_x - new_rule_min_x, origin_x - new_rule_min_x,
+     origin_y - new_rule_min_y, origin_y - new_rule_min_y], hl: true
   coord_iter.each.with_index do |(y, x), ix|
     renderer.call rule_bitmap, ix + 0.0, coord_iter.length, [x, x, y, y], hl: true
     bitmap_without = rule_bitmap.map(&:dup)
@@ -381,7 +360,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
 
   #we do one last run to collect conflict stats because the previous run may have taken a shortcut
   conflict_stats = Hash.new(0)
-  apply_ruleset(ruleset, rule_bitmap.map(&:dup), conflict_stats, origin_x - new_rule_min_x, origin_y - new_rule_min_y, true) {}
+  apply_ruleset(ruleset, rule_bitmap.map(&:dup), conflict_stats, nil, nil, true) {}
 
   rule_bitmap.shift while rule_bitmap.first.all? {|tile| tile == ruleset.all_tiles}
   rule_bitmap.pop while rule_bitmap.last.all? {|tile| tile == ruleset.all_tiles}
@@ -557,12 +536,17 @@ def generate ruleset, method, w, h, seeded, tile = nil
       (0 ... th).each do |ty|
         print "\e[#{th * y + ty + 1};#{diff[0] * tw + 1}H"
         print (diff[0] .. diff[1]).map{|x|
-          if board[y][x] & (board[y][x] - 1) == 0 && board[y][x] != 0
+          n_tiles = board[y][x].digits(2).count(1)
+          if n_tiles == 1
             ruleset.unpack_tiles(board[y][x])[0].ascii[ty]
-          elsif board[y][x] == ruleset.all_tiles
-            "\e[90m#{[ruleset.tileset.length, 10 ** tw - 1].min.to_s.rjust(tw)}\e[0m"
           else
-            [board[y][x].digits(2).count(1), 10 ** tw - 1].min.to_s.rjust(tw)
+            rgb = if n_tiles == ruleset.tileset.length
+                    64
+                  else
+                    (255 * (2 - n_tiles.fdiv(ruleset.tileset.length)) / 2).to_i
+                  end
+            str = [board[y][x].digits(2).count(1), 10 ** tw - 1].min.to_s.rjust(tw)
+            "\e[38;2;#{rgb};#{rgb};#{rgb}m#{str}\e[0m"
           end
         }.map{hl ? _1.highlight : _1}.join
         print "\e[K" if full_draw
