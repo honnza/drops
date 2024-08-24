@@ -672,6 +672,7 @@ end
 if $0 == __FILE__
   ruleset = nil
   loop do
+    print "WFC> "
     case gets.chomp
     when /^new ruleset ([124][\\\/\-\|]?)$/
       ruleset = Ruleset.new $1, [], [], []
@@ -725,6 +726,7 @@ if $0 == __FILE__
         strs = []
         loop{str = gets.chomp; break if str.empty?; strs << str}
         rule_tiles = strs.map do |row_str|
+          row_str.gsub!(/(\S)+\*(\d+)/){([$1] * $2.to_i).join " "}
           row_str.split(" ").map do |tile_str|
             names = tile_str.split("/", -1)
             if names == ["", ""]
@@ -740,7 +742,7 @@ if $0 == __FILE__
             else
               tiles = ruleset.tileset.select{names.include? _1.name}
               if tiles.count != names.count
-                error = names.select{|name| !ruleset.tileset.any? {_1.name == name}}
+                error = names.select{|name| !ruleset.tileset.any? {_1.name == name}} - [""]
                 puts "#{error} aren't tiles in this ruleset"
                 raise
               end
@@ -823,13 +825,13 @@ if $0 == __FILE__
       StackProf.results("stackprof-output.dump")
       puts "profiling data saved to stackprof-output.dump"
       exit
-    else
+    when /^help$/
       puts <<END
 available commands:
 new ruleset [124][/-\\|]? - reset all rules and tiles and set the rotation symmetry order and mirror plane for all rules.
 add tile (name) - create a tile with a given name. If rules have symmetry, asks for the transformed versions of the tile.
 add symmetry (permutation) - define a set of tile substitutions that leave the rules unchanged. Separate tiles within a cycle with /. Separate cycles in a set by spaces.
-add rule - define a pattern that may not appear in the generated pattern. Follow by a list of tile names. Separate multiple tiles an the same position with /. Type / followed by a list to include all tiles except the ones listed. Type only / to include all tiles at that position.
+add rule - define a pattern that may not appear in the generated pattern. Follow by a list of tile names. Separate multiple tiles an the same position with /. Type / followed by a list to include all tiles except the ones listed. Type only / to include all tiles at that position. Use (tiles)*(number) to duplicate that tile in the pattern.
 
 Ruleset must be defined before tiles, tiles must be defined before tile symmetries that use them, symmetries must be defined before rules.
 
@@ -847,6 +849,8 @@ save as (filename) - save the ruleset to a file
 load from (filename) - restore a ruleset from the file
 quit - ends the application without saving
 END
+    else
+      puts "Unknown command. Type help for the list of commands."
     end
   end
 end
