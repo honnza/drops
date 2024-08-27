@@ -196,7 +196,13 @@ Rule = Struct.new(
         pos = ruleset.unpack_tiles(tiles).map(&:name).join("/")
         neg = "/" + ruleset.unpack_tiles(ruleset.all_tiles & ~tiles).map(&:name).join("/")
         pos.length > neg.length ? neg : pos
-      end.join " "
+      end.chunk{_1}.map do |k, a|
+        if a.length == 1 || a.length == 2 && k.length == 1
+          a.join " "
+        else
+          "#{k}*#{a.length}"
+        end
+      end.join " " 
     end.join "\n"
 
     [h, d].join "\n"
@@ -753,7 +759,7 @@ if $0 == __FILE__
         rule = Rule.new(ruleset, (ruleset.rules.map(&:id).max || -1) + 1, [:axiom], rule_tiles)
         new_rules = rule.all_syms
         ruleset.rules += new_rules
-        puts "ok; #{new_rules.count} new rules added"
+        puts "ok; #{rule.summary} added"
       rescue
         p $!
         p $@
