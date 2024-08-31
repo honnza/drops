@@ -115,16 +115,23 @@ Rule = Struct.new(
     end
   end
 
+  # returns every poosition where this rule may need to be reevaluated after a change at the given coordinates.
+  def instances_by_diff(board, diff_x, diff_y)
+    max_x = board[0].length - tiles[0].length
+    max_y = board.length - tiles.length
+    sparse.map do |dx, dy, tile|
+      rx = diff_x - dx; ry = diff_y - dy
+      [rx, ry] if rx >= 0 && ry >= 0 && rx <= max_x && ry <= max_y 
+    end.compact
+  end
+
   # applies the rule at every poosition that may have been affected by a change at the given coordinates.
   # returns a list of [x, y, c, rx, ry, r] where each [x, y, c] means that no c can occur at [x, y],
   # [rx, ry] are the corresponding coordinates for apply_at and r is the rule.
   def apply_at_diff(board, diff_x, diff_y)
-    sparse.map do |dx, dy, tile|
-      rx = diff_x - dx; ry = diff_y - dy
-      if rx >= 0 && ry >= 0 && rx + tiles[0].length <= board[0].length && ry + tiles.length <= board.length 
-        diff = apply_at board, rx, ry
-        [*diff, rx, ry, self] if diff
-      end
+    instances_by_diff(board, diff_x, diff_y).map do |rx, ry|
+      diff = apply_at board, rx, ry
+      [*diff, rx, ry, self] if diff
     end.compact
   end
 
