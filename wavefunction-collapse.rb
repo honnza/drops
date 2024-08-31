@@ -203,7 +203,7 @@ Rule = Struct.new(
           "#{k}*#{a.length}"
         end
       end.join " " 
-    end.join "\n"
+    end.chunk{_1}.map{|k, a| a.length == 1 ? k : "#{k}**#{a.length}"}.join "\n"
 
     [h, d].join "\n"
   end
@@ -731,6 +731,7 @@ if $0 == __FILE__
       begin
         strs = []
         loop{str = gets.chomp; break if str.empty?; strs << str}
+        strs.flat_map{|str| str =~ /(.+)\*\*(\d+)/ ? [$1] * $2.to_i : [str]}
         rule_tiles = strs.map do |row_str|
           row_str.gsub!(/(\S)+\*(\d+)/){([$1] * $2.to_i).join " "}
           row_str.split(" ").map do |tile_str|
@@ -837,7 +838,7 @@ available commands:
 new ruleset [124][/-\\|]? - reset all rules and tiles and set the rotation symmetry order and mirror plane for all rules.
 add tile (name) - create a tile with a given name. If rules have symmetry, asks for the transformed versions of the tile.
 add symmetry (permutation) - define a set of tile substitutions that leave the rules unchanged. Separate tiles within a cycle with /. Separate cycles in a set by spaces.
-add rule - define a pattern that may not appear in the generated pattern. Follow by a list of tile names. Separate multiple tiles an the same position with /. Type / followed by a list to include all tiles except the ones listed. Type only / to include all tiles at that position. Use (tiles)*(number) to duplicate that tile in the pattern.
+add rule - define a pattern that may not appear in the generated pattern. Follow by a list of tile names. Separate multiple tiles an the same position with /. Type / followed by a list to include all tiles except the ones listed. Type only / to include all tiles at that position. Use (tiles)*(number) to duplicate that tile in the pattern. Use (row)**(number) to duplicate an entire row.
 
 Ruleset must be defined before tiles, tiles must be defined before tile symmetries that use them, symmetries must be defined before rules.
 
