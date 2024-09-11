@@ -282,16 +282,22 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
     end
   end
 
-  # rule reconstruction: The last rule in the undo log is the one that has detected a conflict and
-  # is always relevant. When a rule application is relevant, we note all of its triggers as relevant,
-  # where trigger is a location in worldspace along with a list of tiles that must be excluded from
-  # that location. Rules prior to the last are relevant iff they contributed to the trigger.
-
   return conflict if conflict_check_only
 
   return unless conflict
 
-  new_rule_tiles = Set.new
+  # rule generation:
+  # first, we quickly discard all tiles that didn't even participate in conflict detection;
+  # second, we find the last tile participating in conflict detection that by alone
+  #   causes a conflict against the board (origin)
+  # third, we disccard all tiles that are not required to detect conflict,
+  #   starting from least constrained tiles, working in toward the origin point
+  # fourth, for each remaining tile, we remove it from the new rule, apply all other rules fully,
+  #   and then find the smallest set of constraints that still generates a conflict
+  
+  # phase one: trace the undo log
+
+  new_rule_tiles = Hash.new{0}
   undo_log.reverse.each do |entry|
     diff_x, diff_y, diff_c, rule_x, rule_y, rule = entry
     board[diff_y][diff_x] |= diff_c
@@ -301,28 +307,47 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
     stat_rule = rule.source[0] == :symm ? rule.source[1] : rule.id
     rule.sparse.each do |x, y, c|
       next if diff_x == rule_x + x && diff_y == rule_y + y
-      (0..ruleset.tileset.count).each{new_rule_tiles << [rule_x + x, rule_y + y]}
+      (0..ruleset.tileset.count).each{new_rule_tiles[[rule_x + x, rule_y + y]] |= c}
     end
   end
 
-  new_rule_min_x, new_rule_max_x = new_rule_tiles.map{|x, _| x}.minmax
-  new_rule_min_y, new_rule_max_y = new_rule_tiles.map{|_, y| y}.minmax
+  new_rule_min_x, new_rule_max_x = new_rule_tiles.keys.map{|x, _| x}.minmax
+  new_rule_min_y, new_rule_max_y = new_rule_tiles.keys.map{|_, y| y}.minmax
   rule_bitmap = [*new_rule_min_y .. new_rule_max_y].map{[*new_rule_min_x .. new_rule_max_x].map{ruleset.all_tiles}}
-  new_rule_tiles.each{|x, y| rule_bitmap[y - new_rule_min_y][x - new_rule_min_x] &= board[y][x]}
-  IO.console.clear_screen
+  new_rule_tiles.keys.each{|x, y| rule_bitmap[y - new_rule_min_y][x - new_rule_min_x] &= board[y][x]}
   renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length
+
+  # phase two: find the last conflict
+
+  new_rule_tiles[[origin_x, origin_y]] = ruleset.all_tiles & ~board[origin_y][origin_x]
+  rule_bitmap[origin_y - new_rule_min_y][origin_x - new_rule_min_x] = ruleset.all_tiles
+  renderer.call board, 0, new_rule_tiles.length
+  (origin_x, origin_y), origin_c = new_rule_tiles.find.with_index do |((origin_x, origin_y), origin_c), ix|
+    renderer.call rule_bitmap, ix, new_rule_tiles.length
+    renderer.call rule_bitmap, ix, new_rule_tiles.length,
+      [origin_x - new_rule_min_x, origin_x - new_rule_min_x,
+       origin_y - new_rule_min_y, origin_y - new_rule_min_y], hl: true
+    new_bitmap = rule_bitmap.map &:dup
+    new_bitmap[origin_y - new_rule_min_y][origin_x - new_rule_min_x] &= ~origin_c
+    apply_ruleset(ruleset, new_bitmap, Hash.new(0), origin_x - new_rule_min_x, origin_y - new_rule_min_y, true) {}
+  end
+  origin_x -= new_rule_min_x
+  origin_y -= new_rule_min_y
+  rule_bitmap[origin_y][origin_x] &= ~origin_c
+  raise "bug" if rule_bitmap[origin_y][origin_x] == 0
+
+  # phase three: discard full tiles
 
   coord_iter = [*0 ... rule_bitmap.length].product([*0 ... rule_bitmap[0].length])
     .select{|y, x| rule_bitmap[y][x].digits(2).count(1) < ruleset.tileset.count}
     .sort_by{|y, x| [
       rule_bitmap[y][x].digits(2).count(1),
-      (origin_x - new_rule_min_x - x) ** 2 + (origin_y - new_rule_min_y - y) ** 2,
+      (origin_x - x) ** 2 + (origin_y - y) ** 2,
       y, x
     ]}.reverse
 
   renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length,
-    [origin_x - new_rule_min_x, origin_x - new_rule_min_x,
-     origin_y - new_rule_min_y, origin_y - new_rule_min_y], hl: true
+    [origin_x, origin_x,origin_y, origin_y], hl: true
   coord_iter.each.with_index do |(y, x), ix|
     y, x = coord_iter[ix]
     renderer.call rule_bitmap, ix + 1, coord_iter.length, [x, x, y, y], hl: true
@@ -332,22 +357,22 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
                        nil, nil, true, [x, y, rule_bitmap[y][x]]) {}
       rule_bitmap[y][x] = ruleset.all_tiles
     end
-    unless x == origin_x - new_rule_min_x && y == origin_y - new_rule_min_y
+    unless x == origin_x && y == origin_y
       renderer.call rule_bitmap, ix + 1, coord_iter.length, [x, x, y, y], hl: false
     end
   end
+
+  # phase four: discard individual constraints
 
   coord_iter = [*0 ... rule_bitmap.length].product([*0 ... rule_bitmap[0].length])
     .select{|y, x| rule_bitmap[y][x].digits(2).count(1) < ruleset.tileset.count - 1}
     .sort_by{|y, x| [
       rule_bitmap[y][x].digits(2).count(1),
-      (origin_x - new_rule_min_x - x) ** 2 + (origin_y - new_rule_min_y - y) ** 2,
+      (origin_x - x) ** 2 + (origin_y - y) ** 2,
       y, x
     ]}.reverse
 
-  renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length,
-    [origin_x - new_rule_min_x, origin_x - new_rule_min_x,
-     origin_y - new_rule_min_y, origin_y - new_rule_min_y], hl: true
+  renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length
   coord_iter.each.with_index do |(y, x), ix|
     renderer.call rule_bitmap, ix + 0.0, coord_iter.length, [x, x, y, y], hl: true
     bitmap_without = rule_bitmap.map(&:dup)
@@ -582,9 +607,9 @@ def generate ruleset, method, w, h, seeded, tile = nil
       case method
       when :drizzle
         randomization = randomization.flat_map{|x, y, ts| ts.map{|t| [x, y, ruleset.all_tiles - t]}}.shuffle
-      when :rain, :wfc then randomization.shuffle!
-      when :pour then randomization.sort_by!{|x, y, _| (2 * x - w + 1) ** 2 + (2 * y - h + 1) ** 2}
-      when :lex then randomization.sort_by!{|x, y, _| [-y, x]}
+      when :rain, :wfcr then randomization.shuffle!
+      when :pour, :wfcp then randomization.sort_by!{|x, y, _| (2 * x - w + 1) ** 2 + (2 * y - h + 1) ** 2}
+      when :lex, :wfcl then randomization.sort_by!{|x, y, _| [-y, x]}
       else raise "bug: unknown generation method"
       end
       if method != :drizzle
@@ -609,7 +634,7 @@ def generate ruleset, method, w, h, seeded, tile = nil
         x, y, t = randomization[gen_progress]
       end
       break if gen_progress == randomization.length
-      if method == :wfc
+      if method == :wfcr || method == :wfcp || method == :wfcl
         count = board.flat_map{|row| row.map{_1.digits(2).count(1)}}.select{_1 > 1}.min
         x, y, t = randomization[gen_progress..].find do 
           |x, y, t| board[y][x].digits(2).count(1) == count && board[y][x] & ~t != 0 && board[y][x] & t != 0
@@ -801,7 +826,7 @@ if $0 == __FILE__
           puts rule
         end
       end
-    when /^(gen|genus|gense|generate(?: seeded| unseeded)?) (drizzle|rain|pour|wfc|lex)(?: (\d+)x(\d+))?(?: (\S+))?$/
+    when /^(gen|genus|gense|generate(?: seeded| unseeded)?) (drizzle|rain|pour|wfc[rpl]|lex)(?: (\d+)x(\d+))?(?: (\S+))?$/
       if ruleset.tileset.empty?
         puts "at least one tile required"
         next
@@ -856,8 +881,8 @@ show (all)? rules - list all rules in the ruleset. Omits symmetric images of oth
   drizzle - at each step, select a random position and remove one possible tile from it
   rain - at each step, select a random position and select one tile for that position
   pour - at each step, sulect an unresolved position closest to the middle and select one tile for that position
-  wfc - wavefunction collapse classic. At each step, randomly choose a tile with the fewest possibilities and resolve it.
   lex - resolve tiles from left to right, then bottom to top
+  wfc(r|p|l) - wavefunction collapse classic. At each step, randomly choose a tile with the fewest possibilities and resolve it. The variant decides the order in which tiles with equal number of possibilities are chosen.
 
 save as (filename) - save the ruleset to a file
 load from (filename) - restore a ruleset from the file
