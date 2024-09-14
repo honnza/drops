@@ -763,7 +763,7 @@ if $0 == __FILE__
       begin
         strs = []
         loop{str = gets.chomp; break if str.empty?; strs << str}
-        strs.flat_map{|str| str =~ /(.+)\*\*(\d+)/ ? [$1] * $2.to_i : [str]}
+        strs = strs.flat_map{|str| str =~ /^(.+)\*\*(\d+)$/ ? [$1] * $2.to_i : [str]}
         rule_tiles = strs.map do |row_str|
           row_str.gsub!(/(\S)+\*(\d+)/){([$1] * $2.to_i).join " "}
           row_str.split(" ").map do |tile_str|
