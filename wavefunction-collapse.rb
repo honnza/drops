@@ -298,33 +298,35 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   # phase one: trace the undo log
 
   new_rule_tiles = Hash.new{0}
-  undo_log.reverse.each do |entry|
+  inferred_tiles = Hash.new(0)
+  undo_log.reverse.each.with_index do |entry, entry_ix|
     diff_x, diff_y, diff_c, rule_x, rule_y, rule = entry
     board[diff_y][diff_x] |= diff_c
     next if !new_rule_tiles.empty? && !new_rule_tiles.include?([diff_x, diff_y])
-    diff_x = diff_y = nil if new_rule_tiles.empty?
     entry << :x
     stat_rule = rule.source[0] == :symm ? rule.source[1] : rule.id
+    inferred_tiles[[diff_x, diff_y]] |= diff_c if entry_ix > 0
     rule.sparse.each do |x, y, c|
-      next if diff_x == rule_x + x && diff_y == rule_y + y
-      (0..ruleset.tileset.count).each{new_rule_tiles[[rule_x + x, rule_y + y]] |= c}
+      if entry_ix == 0 || diff_x != rule_x + x || diff_y != rule_y + y
+        (0..ruleset.tileset.count).each{new_rule_tiles[[rule_x + x, rule_y + y]] |= c}
+      end
     end
   end
 
-  new_rule_min_x, new_rule_max_x = new_rule_tiles.keys.map{|x, _| x}.minmax
-  new_rule_min_y, new_rule_max_y = new_rule_tiles.keys.map{|_, y| y}.minmax
+  new_rule_min_x, new_rule_max_x = (new_rule_tiles.keys.map{|x, _| x} + [origin_x]).minmax
+  new_rule_min_y, new_rule_max_y = (new_rule_tiles.keys.map{|_, y| y} + [origin_y]).minmax
   rule_bitmap = [*new_rule_min_y .. new_rule_max_y].map{[*new_rule_min_x .. new_rule_max_x].map{ruleset.all_tiles}}
   new_rule_tiles.keys.each{|x, y| rule_bitmap[y - new_rule_min_y][x - new_rule_min_x] &= board[y][x]}
   renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length
 
   # phase two: find the last conflict
 
-  new_rule_tiles[[origin_x, origin_y]] = ruleset.all_tiles & ~board[origin_y][origin_x]
+  inferred_tiles[[origin_x, origin_y]] = ruleset.all_tiles & ~board[origin_y][origin_x]
   rule_bitmap[origin_y - new_rule_min_y][origin_x - new_rule_min_x] = ruleset.all_tiles
   renderer.call board, 0, new_rule_tiles.length
-  (origin_x, origin_y), origin_c = new_rule_tiles.find.with_index do |((origin_x, origin_y), origin_c), ix|
-    renderer.call rule_bitmap, ix, new_rule_tiles.length
-    renderer.call rule_bitmap, ix, new_rule_tiles.length,
+  (origin_x, origin_y), origin_c = inferred_tiles.find.with_index do |((origin_x, origin_y), origin_c), ix|
+    renderer.call rule_bitmap, ix, inferred_tiles.length
+    renderer.call rule_bitmap, ix, inferred_tiles.length,
       [origin_x - new_rule_min_x, origin_x - new_rule_min_x,
        origin_y - new_rule_min_y, origin_y - new_rule_min_y], hl: true
     new_bitmap = rule_bitmap.map &:dup
@@ -372,7 +374,6 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
       y, x
     ]}.reverse
 
-  renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length
   coord_iter.each.with_index do |(y, x), ix|
     renderer.call rule_bitmap, ix + 0.0, coord_iter.length, [x, x, y, y], hl: true
     bitmap_without = rule_bitmap.map(&:dup)
