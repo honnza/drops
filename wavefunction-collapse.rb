@@ -773,6 +773,7 @@ if $0 == __FILE__
         strs = strs
           .flat_map{|str| str.split %r"(?<!/)//(?!/)"}
           .flat_map{|str| str =~ /^(.+)\*\*(\d+)$/ ? [$1] * $2.to_i : [str]}
+        raise "rule must include at least one tile" if strs.empty?
         rule_tiles = strs.map do |row_str|
           row_str.gsub!(/(\S+)\*(\d+)/){([$1] * $2.to_i).join " "}
           row_str.split(" ").map do |tile_str|
@@ -836,7 +837,7 @@ if $0 == __FILE__
         end
       end
     when /^(gen|genus|gense|generate(?: seeded| unseeded)?) (drizzle|rain|pour|wfc[rpl]|lex)(?: (\d+)x(\d+))?(?: (\S+))?$/
-      if ruleset.tileset.empty?
+      if ruleset.nil? || ruleset.tileset.empty?
         puts "at least one tile required"
         next
       end
@@ -859,7 +860,6 @@ if $0 == __FILE__
         generate ruleset, $2.to_sym, w, h, seeded, tile
       rescue Interrupt
         p $!
-        p $@
       end
       StackProf.stop
     when /^save as (.*)$/
@@ -867,12 +867,19 @@ if $0 == __FILE__
       Zlib::GzipWriter.open($1, level = 9){_1.write json}
       puts "ok; wrote #{File.size $1} bytes (#{json.length} uncompressed)"
     when /^load from (.*)$/
-      Zlib::GzipReader.open($1){ruleset = Ruleset.from_json _1.read}
-      puts "ok; #{ruleset.tileset.count} tiles and #{ruleset.rules.count} rules loaded"
+      begin
+        Zlib::GzipReader.open($1){ruleset = Ruleset.from_json _1.read}
+        puts "ok; #{ruleset.tileset.count} tiles and #{ruleset.rules.count} rules loaded"
+      rescue SystemCallError
+        puts "cannot load file: #{$!.message.sub(/@ \w+ /, "")}"
+      rescue Zlib::GzipFile::Error, JSON::ParserError
+        puts "cannot load file: not a valid WFC file"
+      end
     when /^quit$/
       StackProf.results("stackprof-output.dump")
       puts "profiling data saved to stackprof-output.dump"
       exit
+    when "" then nil
     when /^help$/
       puts <<END
 available commands:
