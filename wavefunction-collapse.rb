@@ -322,6 +322,8 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   # phase two: find the last conflict
 
   inferred_tiles[[origin_x, origin_y]] = ruleset.all_tiles & ~board[origin_y][origin_x]
+  inferred_tiles = inferred_tiles.to_a.sort_by.with_index{|((x, y), c), ix| [(board[y][x]& ~c).digits(2).count, ix]}
+  inferred_tiles = inferred_tiles[0 .. inferred_tiles.find_index{|(x, y), _| x == origin_x && y == origin_y}]
   rule_bitmap[origin_y - new_rule_min_y][origin_x - new_rule_min_x] = ruleset.all_tiles
   renderer.call board, 0, new_rule_tiles.length
   (origin_x, origin_y), origin_c = inferred_tiles.find.with_index do |((origin_x, origin_y), origin_c), ix|
