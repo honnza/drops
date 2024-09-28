@@ -774,7 +774,7 @@ if $0 == __FILE__
           .flat_map{|str| str.split %r"(?<!/)//(?!/)"}
           .flat_map{|str| str =~ /^(.+)\*\*(\d+)$/ ? [$1] * $2.to_i : [str]}
         rule_tiles = strs.map do |row_str|
-          row_str.gsub!(/(\S)+\*(\d+)/){([$1] * $2.to_i).join " "}
+          row_str.gsub!(/(\S+)\*(\d+)/){([$1] * $2.to_i).join " "}
           row_str.split(" ").map do |tile_str|
             names = tile_str.split("/", -1)
             if names == ["", ""]
