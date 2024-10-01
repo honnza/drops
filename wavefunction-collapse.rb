@@ -805,7 +805,6 @@ if $0 == __FILE__
         puts "ok; #{rule.summary} added"
       rescue
         p $!
-        p $@
       end
     when /^delete (cascade )?rule (\d+)$/
       delete_stack = [$2.to_i]
