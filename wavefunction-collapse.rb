@@ -764,6 +764,7 @@ if $0 == __FILE__
       end
     when /^add rule(?: (.+))?$/
       begin
+        raise "no tiles defined" if ruleset.nil? || ruleset.tileset.empty?
         if $1.nil?
           strs = []
           loop{str = gets.chomp; break if str.empty?; strs << str}
@@ -784,27 +785,26 @@ if $0 == __FILE__
               tiles = ruleset.tileset.select{names.include? _1.name}
               if tiles.count != names.count - 1
                 error = names.select{|name| !ruleset.tileset.any? {_1.name == name}}
-                puts "#{error} aren't tiles in this ruleset"
-                raise
+                raise "#{error} aren't tiles in this ruleset"
               end
               ruleset.pack_tiles(ruleset.tileset.to_a - tiles)
             else
               tiles = ruleset.tileset.select{names.include? _1.name}
               if tiles.count != names.count
                 error = names.select{|name| !ruleset.tileset.any? {_1.name == name}} - [""]
-                puts "#{error} aren't tiles in this ruleset"
-                raise
+                raise "#{error} aren't tiles in this ruleset"
               end
               ruleset.pack_tiles(tiles)
             end
           end
         end
+        raise "pattern must be a rectangle" unless rule_tiles.all?{_1.length == rule_tiles[0].length}
         rule = Rule.new(ruleset, (ruleset.rules.map(&:id).max || -1) + 1, [:axiom], rule_tiles)
         new_rules = rule.all_syms
         ruleset.rules += new_rules
         puts "ok; #{rule.summary} added"
       rescue
-        p $!
+        puts $!.message
       end
     when /^delete (cascade )?rule (\d+)$/
       delete_stack = [$2.to_i]
