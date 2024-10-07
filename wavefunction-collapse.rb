@@ -665,8 +665,16 @@ def generate ruleset, method, w, h, seeded, tile = nil
         gets
         
         new_board = board.map(&:dup)
-        new_rule = apply_ruleset ruleset, new_board, stats, nil, nil, true, &render
-        if new_rule
+        new_stats = stats.dup
+        conflict = apply_ruleset ruleset, new_board, new_stats, nil, nil, true, &render
+        if new_stats[new_rule.id] == 1 && seeded == :rsr
+          ruleset.rules.reject!{_1.id == new_rule.id || _1.source == [:symm, new_rule.id]}
+          randomization.delete [x, y, t]
+          randomization << [x, y, t]
+          puts "removing singular rule"
+          gets
+        elsif conflict
+          stats = new_stats
           board[y][x] = 0
           render[board, stats.values.reduce(&:+), board.length * board[0].length * (ruleset.tileset.length)]
           if seeded.nil?
@@ -678,6 +686,7 @@ def generate ruleset, method, w, h, seeded, tile = nil
           end
         else
           board = new_board
+          stats = new_stats
         end
       else
         board = new_board
@@ -835,7 +844,7 @@ if $0 == __FILE__
           puts rule
         end
       end
-    when /^(gen|genus|gense|generate(?: seeded| unseeded)?) (drizzle|rain|pour|wfc[rpl]|lex)(?: (\d+)x(\d+))?(?: (\S+))?$/
+    when /^(gen(?: rsr)?|genus|gense|generate(?: seeded| unseeded| rsr)?) (drizzle|rain|pour|wfc[rpl]|lex)(?: (\d+)x(\d+))?(?: (\S+))?$/
       if ruleset.nil? || ruleset.tileset.empty?
         puts "at least one tile required"
         next
@@ -844,6 +853,7 @@ if $0 == __FILE__
                when "gen", "generate" then nil
                when "gense", "generate seeded" then :seeded
                when "genus", "generate unseeded" then :unseeded
+               when "gen rsr", "generate rsr" then :rsr
                else raise "error parsing command. This is a bug."
                end
       normalize_tiles ruleset.tileset
@@ -893,7 +903,7 @@ Ruleset must be defined before tiles, tiles must be defined before tile symmetri
 delete (cascade)? rule (id) - delete a rule. Must not be referenced by other rules. If cascade is set, delete refererrers instead.
 show (all)? rules - list all rules in the ruleset. Omits symmetric images of other rules unless specified.
 
-(gen|genus|gense|generate) (seeded|unseeded)? (drizzle|rain|pour|wfc) (wxh)? (tile)? - generates a pattern using the ruleset or finds and adds a rule non-trivially implied by existing rules. Uses the screen size if unspecified. If gense/seeded is set, it attemts to generate the board again with the same RNG if unsuccessful. If genus/unseeded is set, it retries with a different RNG. If neither is set, aborts after one attempt. If tile is specified, it tries to place that tile in the selected position.
+(gen|genus|gense|generate) (rsr|seeded|unseeded)? (drizzle|rain|pour|wfc) (wxh)? (tile)? - generates a pattern using the ruleset or finds and adds a rule non-trivially implied by existing rules. Uses the screen size if unspecified. If gense/seeded is set, it attemts to generate the board again with the same RNG if unsuccessful. If rsr is set, if a new rule only applies once, it is removed and the randomizzation is adjusted. If genus/unseeded is set, it retries with a different RNG. If neither is set, aborts after one attempt. If tile is specified, it tries to place that tile in the selected position.
   drizzle - at each step, select a random position and remove one possible tile from it
   rain - at each step, select a random position and select one tile for that position
   pour - at each step, sulect an unresolved position closest to the middle and select one tile for that position
