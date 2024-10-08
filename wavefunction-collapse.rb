@@ -349,21 +349,24 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
       (origin_x - x) ** 2 + (origin_y - y) ** 2,
       y, x
     ]}.reverse
+  progress_bar = []
 
-  renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length,
+  renderer.call rule_bitmap, progress_bar, rule_bitmap.length * rule_bitmap[0].length,
     [origin_x, origin_x,origin_y, origin_y], hl: true
   coord_iter.each.with_index do |(y, x), ix|
     y, x = coord_iter[ix]
-    renderer.call rule_bitmap, ix + 1, coord_iter.length, [x, x, y, y], hl: true
+    renderer.call rule_bitmap, progress_bar, coord_iter.length, [x, x, y, y], hl: true
     new_bitmap = rule_bitmap.map{|row| row.dup}
     new_bitmap[y][x] = ruleset.all_tiles
     if apply_ruleset(ruleset, new_bitmap, Hash.new(0),
                        nil, nil, true, [x, y, rule_bitmap[y][x]]) {}
       rule_bitmap[y][x] = ruleset.all_tiles
+      progress_bar << :removed
+    else
+      progress_bar << :kept
     end
-    unless x == origin_x && y == origin_y
-      renderer.call rule_bitmap, ix + 1, coord_iter.length, [x, x, y, y], hl: false
-    end
+    renderer.call rule_bitmap, progress_bar, coord_iter.length, [x, x, y, y],
+                  hl: x == origin_x && y == origin_y
   end
 
   # phase four: discard individual constraints
@@ -375,9 +378,11 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
       (origin_x - x) ** 2 + (origin_y - y) ** 2,
       y, x
     ]}.reverse
+  progress_bar = []
+  progress_bar_length = coord_iter.length * (ruleset.tileset.length + 1)
 
   coord_iter.each.with_index do |(y, x), ix|
-    renderer.call rule_bitmap, ix + 0.0, coord_iter.length, [x, x, y, y], hl: true
+    renderer.call rule_bitmap, progress_bar, progress_bar_length, [x, x, y, y], hl: true
     bitmap_without = rule_bitmap.map(&:dup)
     bitmap_without[y][x] = ruleset.all_tiles
     if apply_ruleset(ruleset, bitmap_without, Hash.new(0),
@@ -385,18 +390,26 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
       raise "There's a conflict if #{[x, y]} is removed. We should have noticed earlier."
     end
     rule_bitmap[y][x] |= ruleset.all_tiles & ~bitmap_without[y][x]
-    tile_iter = (0 ... ruleset.tileset.count).select{|tile| rule_bitmap[y][x] & 2 ** tile == 0}
-    tile_iter.each.with_index(1) do |tile, tix|
-      renderer.call rule_bitmap, ix + tix / (tile_iter.length + 1.0), coord_iter.length, [x, x, y, y], hl: true
-      new_bitmap = bitmap_without.map(&:dup)
-      new_bitmap[y][x] = rule_bitmap[y][x] | 2 ** tile
-      if apply_ruleset(ruleset, new_bitmap, Hash.new(0),
-          nil, nil, true, [x, y, rule_bitmap[y][x]]
-                      ) {}
-        rule_bitmap[y][x] |= 2 ** tile
+    # tile_iter = (0 ... ruleset.tileset.count).select{|tile| rule_bitmap[y][x] & 2 ** tile == 0}
+    progress_bar << :head
+    (0 ... ruleset.tileset.count).each do |tile|
+      renderer.call rule_bitmap, progress_bar, progress_bar_length, [x, x, y, y], hl: true
+      if rule_bitmap[y][x] & 2 ** tile == 0
+        new_bitmap = bitmap_without.map(&:dup)
+        new_bitmap[y][x] = rule_bitmap[y][x] | 2 ** tile
+        if apply_ruleset(ruleset, new_bitmap, Hash.new(0),
+            nil, nil, true, [x, y, rule_bitmap[y][x]]
+                        ) {}
+          rule_bitmap[y][x] |= 2 ** tile
+          progress_bar << :removed
+        else
+          progress_bar << :kept
+        end
+      else
+        progress_bar << :skipped
       end
     end
-    renderer.call rule_bitmap, ix + 1.0, coord_iter.length, [x, x, y, y], hl: false
+    renderer.call rule_bitmap, progress_bar, progress_bar_length, [x, x, y, y], hl: false
   end
 
   #we do one last run to collect conflict stats because the previous run may have taken a shortcut
@@ -566,6 +579,40 @@ def progress_bar progress, text = "", width
   end
 end
 
+def bucketed_progress_bar progress, text = "", width 
+  def bucket_rgb bucket
+    plte = {blank: [0, 0, 0],
+            removed: [0, 255, 0],
+            kept: [255, 0, 0],
+            skipped: [0, 255, 255],
+            head: [255, 255, 255]}
+    r = 0
+    g = 0
+    b = 0
+    bucket.each {|n| r += plte[n][0]; g += plte[n][1]; b += plte[n][2]}
+    [r / bucket.length, g / bucket.length, b / bucket.length]
+  end
+
+  bucket_volume = Rational(progress.length, 2 * (width - 2)).ceil
+  buckets = progress.each_slice(bucket_volume).to_a
+  bucket_width = 2 * (width - 2) / buckets.length
+  buckets = buckets.flat_map{[_1] * bucket_width}
+
+  text = buckets.each_slice(2).zip(text.chars).map do |(left, right), char|
+    if char
+      rgb = bucket_rgb(left + (right || [:blank]))
+      fg = rgb[1] > 127 ? "30" : "97"
+      bg = "48;2;#{rgb.join ";"}"
+    else
+      char = "\u258c"
+      fg = "38;2;#{bucket_rgb(left).join(";")}"
+      bg = "48;2;#{bucket_rgb(right || [:blank]).join(";")}"
+    end
+    "\e[#{fg};#{bg}m#{char}"
+  end.join
+  "[#{text}\e[0m]"
+end
+
 def generate ruleset, method, w, h, seeded, tile = nil
   render = proc do |board, n, d, diff = nil, hl: false|
     print "\e[H\e[?25l"
@@ -593,11 +640,16 @@ def generate ruleset, method, w, h, seeded, tile = nil
         print "\e[K" if full_draw
       end
     end
-    n_str = n.is_a?(Integer) ? n.to_s : "%.2f" % n
     print "\e[#{board.length * th + 1};1H"
-    print progress_bar(n.fdiv(d), "%s / %d" % [n_str, d], IO.console.winsize[1] - 1)
-    print "\e[J" if full_draw
-    print "\e[?25h"
+    print case n
+    when Integer
+      progress_bar(n.fdiv(d), "%d / %d" % [n, d], IO.console.winsize[1] - 1)
+    when Float
+      progress_bar(n / d, "%.2f / %d" % [n, d], IO.console.winsize[1] - 1)
+    when Array
+      bucketed_progress_bar(n + [:blank] * (d - n.length), "", IO.console.winsize[1] - 1)
+    end
+    print "\e[J\e[?25h"
   end
 
   tile = ruleset.tileset.find_index tile
@@ -652,7 +704,7 @@ def generate ruleset, method, w, h, seeded, tile = nil
       if new_rule
         new_rule_syms = new_rule.all_syms
         ruleset.rules += new_rule_syms
-        puts "new rule #{new_rule.summary}; now at #{ruleset.rules.count} rules"
+        puts "\nnew rule #{new_rule.summary}; now at #{ruleset.rules.count} rules"
         puts new_rule
         puts "rule stats:"
         puts vwrap stats.to_a
@@ -661,7 +713,7 @@ def generate ruleset, method, w, h, seeded, tile = nil
           [(rule.source[0] == :symm ? -stats[rule.source[1]] : -stats[rule.id] rescue -stats.values.max - 1), rule.source[0], ix]
         end
         stats[new_rule.id] = 0
-        puts "press enter to retry"
+        puts "press enter to continue"
         gets
         
         new_board = board.map(&:dup)
