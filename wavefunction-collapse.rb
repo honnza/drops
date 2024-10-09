@@ -582,15 +582,17 @@ end
 def bucketed_progress_bar progress, text = "", width 
   def bucket_rgb bucket
     plte = {blank: [0, 0, 0],
-            removed: [0, 255, 0],
+            removed: [255, 255, 0],
             kept: [255, 0, 0],
-            skipped: [0, 255, 255],
+            skipped: [0, 255, 0],
             head: [255, 255, 255]}
     r = 0
     g = 0
     b = 0
-    bucket.each {|n| r += plte[n][0]; g += plte[n][1]; b += plte[n][2]}
-    [r / bucket.length, g / bucket.length, b / bucket.length]
+    bucket.each {|n| r += plte[n][0] ** 2; g += plte[n][1] ** 2; b += plte[n][2] ** 2}
+    [((r / bucket.length) ** 0.5).floor,
+     ((g / bucket.length) ** 0.5).floor,
+     ((b / bucket.length) ** 0.5).floor]
   end
 
   bucket_volume = Rational(progress.length, 2 * (width - 2)).ceil
