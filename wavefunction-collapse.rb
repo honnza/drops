@@ -234,8 +234,8 @@ end
 #            generalisation while generating a r ule.
 def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check_only = false, stop_at = nil, &renderer)
   return if board.empty? || board[0].empty?
-  renderer.call board, rule_stats.values.sum, board.length * board[0].length * (ruleset.tileset.length - 1)
-  renderer.call board, rule_stats.values.sum, board.length * board[0].length * (ruleset.tileset.length - 1), [origin_x, origin_x, origin_y, origin_y], hl: true if origin_x
+  renderer.call board, rule_stats.values.select{_1.is_a? Numeric}.sum, board.length * board[0].length * (ruleset.tileset.length - 1)
+  renderer.call board, rule_stats.values.select{_1.is_a? Numeric}.sum, board.length * board[0].length * (ruleset.tileset.length - 1), [origin_x, origin_x, origin_y, origin_y], hl: true if origin_x
   conflict = false
   undo_log = []
   diff_queue = {}
@@ -253,7 +253,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
             stop_at && stop_at[0] == diff_x && stop_at[1] == diff_y && board[diff_y][diff_x] & ~stop_at[2] == 0
           undo_log << [diff_x, diff_y, diff_c, rule_x, rule_y, rule]
             diff_queue[[diff_x, diff_y]] = nil
-          renderer.call board, rule_stats.values.sum, board.length * board[0].length * (ruleset.tileset.length - 1), [diff_x, diff_x, diff_y, diff_y]
+          renderer.call board, rule_stats.values.select{_1.is_a? Numeric}.sum, board.length * board[0].length * (ruleset.tileset.length - 1), [diff_x, diff_x, diff_y, diff_y]
           break if conflict
         end
         break if conflict
@@ -275,7 +275,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
           stop_at && stop_at[0] == diff_x && stop_at[1] == diff_y && board[diff_y][diff_x] & ~stop_at[2] == 0
         undo_log << new_diff
         diff_queue[[diff_x, diff_y]] = nil
-        renderer.call board, rule_stats.values.sum, board.length * board[0].length * (ruleset.tileset.length - 1), [diff_x, diff_x, diff_y, diff_y]
+        renderer.call board, rule_stats.values.select{_1.is_a? Numeric}.sum, board.length * board[0].length * (ruleset.tileset.length - 1), [diff_x, diff_x, diff_y, diff_y]
         break if conflict
       end
       break if conflict
@@ -661,41 +661,48 @@ def generate ruleset, method, w, h, seeded, tile = nil
       randomization = [*0 ... w].product([*0 ... h]).map do |x, y|
         [x, y, [*0 ... ruleset.tileset.length].map{2 ** _1}.shuffle]
       end
-      case method
-      when :drizzle
+      if method == :drizzle
         randomization = randomization.flat_map{|x, y, ts| ts.map{|t| [x, y, ruleset.all_tiles - t]}}.shuffle
-      when :rain, :wfcr then randomization.shuffle!
-      when :pour, :wfcp then randomization.sort_by!{|x, y, _| (2 * x - w + 1) ** 2 + (2 * y - h + 1) ** 2}
-      when :lex, :wfcl then randomization.sort_by!{|x, y, _| [-y, x]}
-      else raise "bug: unknown generation method"
-      end
-      if method != :drizzle
-        randomization = randomization.flat_map{|x, y, ts| ts.map{|t| [x, y, t]}}
+      else
+        randomization = randomization.shuffle.flat_map{|x, y, ts| ts.map{|t| [x, y, t]}}
       end
     end
 
     board = Array.new(h){Array.new(w){ruleset.all_tiles}}
     stats = Hash[ruleset.rules.select{_1.source[0] != :symm}.map{[_1.id, 0]}]
     stats[:g] = 0
+    rsr_undo_log = []
     if apply_ruleset ruleset, board, stats, nil, nil, true, &render
       puts "no solution"
       return
     end
 
-    gen_progress = 0
     loop do
-      x, y, t = randomization[gen_progress]
-      while board[y][x] & ~t == 0 || board[y][x] & t == 0
-        gen_progress += 1
-        break if gen_progress == randomization.length
-        x, y, t = randomization[gen_progress]
-      end
-      break if gen_progress == randomization.length
-      if method == :wfcr || method == :wfcp || method == :wfcl
-        count = board.flat_map{|row| row.map{_1.digits(2).count(1)}}.select{_1 > 1}.min
-        x, y, t = randomization[gen_progress..].find do 
-          |x, y, t| board[y][x].digits(2).count(1) == count && board[y][x] & ~t != 0 && board[y][x] & t != 0
+      x, y, t = randomization.select{|x, y, t| board[y][x] & ~t != 0 && board[y][x] & t != 0}.min_by do |x, y, t|
+        case method
+          when :drizzle, :rain then 0
+          when :pour then (2 * x - w + 1) ** 2 + (2 * y - h + 1) ** 2
+          when :lex then [-y, x]
+          when :wfcr then board[y][x].digits(2).count(1)
+          when :wfcp then [board[y][x].digits(2).count(1), (2 * x - w + 1) ** 2 + (2 * y - h + 1) ** 2]
+          when :wfcl then [board[y][x].digits(2).count(1), -y, x]
         end
+      end
+      break if x.nil?
+
+      cycle_from = rsr_undo_log.find_index{|k, _| k == [x, y, t]}
+      if cycle_from
+        puts "conflict detected; restoring #{rsr_undo_log.length-cycle_from}/#{rsr_undo_log.length} singular rules"
+        rsr_undo_log[cycle_from ..].each do |k, rule|
+          rule = Rule.new(ruleset,
+                          ruleset.rules.map{_1.id}.max + 1,
+                          rule.source,
+                          rule.tiles)
+          ruleset.rules += rule.all_syms
+          stats[rule.id] = :back
+          puts " #{rule.summary} @ #{k}"
+        end
+        break
       end
 
       new_stats = stats.dup
@@ -704,15 +711,14 @@ def generate ruleset, method, w, h, seeded, tile = nil
       new_board[y][x] &= t
       new_rule = apply_ruleset ruleset, new_board, new_stats, x, y, &render
       if new_rule
-        new_rule_syms = new_rule.all_syms
-        ruleset.rules += new_rule_syms
+        ruleset.rules += new_rule.all_syms
         puts "\nnew rule #{new_rule.summary}; now at #{ruleset.rules.count} rules"
         puts new_rule
         puts "rule stats:"
         puts vwrap stats.to_a
-        puts "#{stats.values.sum} total"
+        puts "#{stats.values.select{_1.is_a? Numeric}.sum} total"
         ruleset.rules.sort_by!.with_index do |rule, ix|
-          [(rule.source[0] == :symm ? -stats[rule.source[1]] : -stats[rule.id] rescue -stats.values.max - 1), rule.source[0], ix]
+          [(rule.source[0] == :symm ? -stats[rule.source[1]] : -stats[rule.id] rescue -stats.values.select{_1.is_a? Numeric}.max - 1), rule.source[0], ix]
         end
         stats[new_rule.id] = 0
         puts "press enter to continue"
@@ -723,14 +729,17 @@ def generate ruleset, method, w, h, seeded, tile = nil
         conflict = apply_ruleset ruleset, new_board, new_stats, nil, nil, true, &render
         if new_stats[new_rule.id] == 1 && seeded == :rsr
           ruleset.rules.reject!{_1.id == new_rule.id || _1.source == [:symm, new_rule.id]}
+          stats[new_rule.id] = :gone
           randomization.delete [x, y, t]
           randomization << [x, y, t]
-          puts "removing singular rule"
+          rsr_undo_log << [[x, y, t], new_rule]
+          puts "removing singular rule (#{rsr_undo_log.length} removed recently)"
           gets
         elsif conflict
           stats = new_stats
           board[y][x] = 0
           render[board, stats.values.reduce(&:+), board.length * board[0].length * (ruleset.tileset.length)]
+          rsr_undo_log = []
           if seeded.nil?
             puts "conflict; aborting"
             return
@@ -741,17 +750,19 @@ def generate ruleset, method, w, h, seeded, tile = nil
         else
           board = new_board
           stats = new_stats
+          rsr_undo_log = []
         end
       else
         board = new_board
         stats = new_stats
+        rsr_undo_log = []
       end
     end
     puts "rule stats:"
     puts vwrap stats.to_a
-    puts "#{stats.values.sum} total"
+    puts "#{stats.values.select{_1.is_a? Numeric}.sum} total"
     ruleset.rules.sort_by!.with_index do |rule, ix|
-      [(rule.source[0] == :symm ? -stats[rule.source[1]] : -stats[rule.id] rescue -stats.values.max - 1), rule.source[0], ix]
+      [(rule.source[0] == :symm ? -stats[rule.source[1]] : -stats[rule.id] rescue -stats.values.select{_1.is_a? Numeric}.max - 1), rule.source[0], ix]
     end
 
     rules_deleted = ruleset.rules.select{_1.source[0] == :conflict && stats[_1.id] == 0}.each do |to_delete, _|
@@ -763,9 +774,9 @@ def generate ruleset, method, w, h, seeded, tile = nil
     end.length
     puts "#{rules_deleted}/#{stats.length - 1} rules purged"
     ruleset.rules.sort_by!.with_index do |rule, ix|
-      [(rule.source[0] == :symm ? -stats[rule.source[1]] : -stats[rule.id] rescue - stats.values.max - 1), rule.source[0], ix]
+      [(rule.source[0] == :symm ? -stats[rule.source[1]] : -stats[rule.id] rescue - stats.values.select{_1.is_a? Numeric}.max - 1), rule.source[0], ix]
     end
-    if gen_progress == randomization.length
+    if board.all?{|row| row.all?{_1 & (_1 - 1) == 0}}
       puts "success"
       return
     end
