@@ -735,8 +735,6 @@ def generate ruleset, method, w, h, seeded, tile = nil
           randomization.delete [x, y, t]
           randomization << [x, y, t]
           rsr_undo_log << [[x, y, t], new_rule]
-          puts "removing singular rule (#{rsr_undo_log.length} removed recently)"
-          gets
         elsif conflict
           stats = new_stats
           board[y][x] = 0
