@@ -249,8 +249,11 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
           board[diff_y][diff_x] -= diff_c
           stat_rule = rule.source[0] == :symm ? rule.source[1] : rule.id
           rule_stats[stat_rule] += diff_c.digits(2).count(1)
-          conflict = board[diff_y][diff_x] == 0 ||
-            stop_at && stop_at[0] == diff_x && stop_at[1] == diff_y && board[diff_y][diff_x] & ~stop_at[2] == 0
+          if stop_at && stop_at[0] == diff_x && stop_at[1] == diff_y && board[diff_y][diff_x] & ~stop_at[2] == 0
+            conflict = :skipped
+          else
+            conflict = board[diff_y][diff_x] == 0
+          end
           undo_log << [diff_x, diff_y, diff_c, rule_x, rule_y, rule]
             diff_queue[[diff_x, diff_y]] = nil
           renderer.call board, rule_stats.values.select{_1.is_a? Numeric}.sum, board.length * board[0].length * (ruleset.tileset.length - 1), [diff_x, diff_x, diff_y, diff_y]
@@ -271,8 +274,11 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
         board[diff_y][diff_x] &= ~diff_c
         stat_rule = rule.source[0] == :symm ? rule.source[1] : rule.id
         rule_stats[stat_rule] += diff_c.digits(2).count(1)
-        conflict = board[diff_y][diff_x] == 0 ||
-          stop_at && stop_at[0] == diff_x && stop_at[1] == diff_y && board[diff_y][diff_x] & ~stop_at[2] == 0
+        if stop_at && stop_at[0] == diff_x && stop_at[1] == diff_y && board[diff_y][diff_x] & ~stop_at[2] == 0
+          conflict = :skipped
+        else
+          conflict = board[diff_y][diff_x] == 0
+        end
         undo_log << new_diff
         diff_queue[[diff_x, diff_y]] = nil
         renderer.call board, rule_stats.values.select{_1.is_a? Numeric}.sum, board.length * board[0].length * (ruleset.tileset.length - 1), [diff_x, diff_x, diff_y, diff_y]
@@ -352,23 +358,27 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
       y, x
     ]}.reverse
   progress_bar = []
+  head_at = nil
 
   renderer.call rule_bitmap, progress_bar, rule_bitmap.length * rule_bitmap[0].length,
     [origin_x, origin_x,origin_y, origin_y], hl: true
   coord_iter.each.with_index do |(y, x), ix|
     y, x = coord_iter[ix]
-    renderer.call rule_bitmap, progress_bar, coord_iter.length, [x, x, y, y], hl: true
+    progress_bar << :head if head_at != rule_bitmap[y][x].digits(2).count(1) && ! head_at.nil?
+    head_at = rule_bitmap[y][x].digits(2).count(1)
+    renderer.call rule_bitmap, progress_bar, coord_iter.length + ruleset.tileset.length, [x, x, y, y], hl: true
     new_bitmap = rule_bitmap.map{|row| row.dup}
     new_bitmap[y][x] = ruleset.all_tiles
-    if apply_ruleset(ruleset, new_bitmap, Hash.new(0),
+    r = apply_ruleset(ruleset, new_bitmap, Hash.new(0),
                        nil, nil, true, [x, y, rule_bitmap[y][x]]) {}
+    if r
       rule_bitmap[y][x] = ruleset.all_tiles
-      progress_bar << :removed
+      progress_bar << (r == :skipped ? :skipped : :removed)
     else
       progress_bar << :kept
     end
-    renderer.call rule_bitmap, progress_bar, coord_iter.length, [x, x, y, y],
-                  hl: x == origin_x && y == origin_y
+    renderer.call rule_bitmap, progress_bar, coord_iter.length + ruleset.tileset.length,
+                  [x, x, y, y], hl: x == origin_x && y == origin_y
   end
 
   # phase four: discard individual constraints
