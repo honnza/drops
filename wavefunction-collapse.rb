@@ -193,9 +193,25 @@ Rule = Struct.new(
     [self] + bitmaps[1..].map.with_index(1){|bmp, i| Rule.new(ruleset, id + i, [:symm, id], bmp)}
   end
 
+  CONSONANTS = %w{b d f g h k l m n p r s t v w y z  dh ng sh th zh  dzh tsh}
+  VOWELS = %w{a e i o u ii uu  ae ai au ei oi ou  ar er ir or ur}
+  def hash_phrase(morae = 2, words = 2)
+    modulus = (CONSONANTS.length * VOWELS.length * 2) ** (morae * words)
+    hash = 0
+    tiles.flatten.each{hash = ((hash << ruleset.tileset.length) + _1) % modulus}
+    hash.digits(CONSONANTS.length * VOWELS.length * 2).map do |hash_bit|
+      consonant = CONSONANTS[hash_bit % CONSONANTS.length]
+      vowel = VOWELS[hash_bit / CONSONANTS.length % VOWELS.length]
+      if hash_bit / (CONSONANTS.length * VOWELS.length) > 0
+        consonant + vowel
+      else
+        vowel + consonant
+      end
+    end.each_slice(morae).map{_1.join}.join " "
+  end
+
   B64E = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789[]"
   B64D = Hash[B64E.chars.each_with_index.to_a]
-
   def compressed_tiles
     tiles.map do |row|
       row.map do |tile|
@@ -242,7 +258,7 @@ Rule = Struct.new(
 
   def summary
     w, h = [tiles.length, tiles[0].length].sort
-    "Rule ##{id} (#{sparse.length} of #{w}*#{h}}"
+    "Rule ##{id} \"#{hash_phrase}\" (#{sparse.length}/#{w}*#{h}}"
   end
 end
 
