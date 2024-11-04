@@ -3,6 +3,31 @@ require 'json'
 require 'io/console'
 require 'stackprof'
 
+class SetQueue
+  def initialize
+    @tail = []
+    @head = []
+    @set = {}
+  end
+
+  def << x
+    @head << x unless @set[x]
+    @set[x] = true
+  end
+
+  def empty?; @set.empty?; end
+
+  def pop
+    if @tail.empty?
+      @tail = @head.reverse!
+      @head = []
+    end
+    r = @tail.pop
+    @set.delete r
+    r
+  end
+end
+
 Tile = Struct.new(:name, :ascii, :rotated, :mirrored) do
   def inspect;
     "<Tile name = #{name.inspect} ascii = #{ascii.inspect} " +
@@ -238,8 +263,8 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   renderer.call board, rule_stats.values.select{_1.is_a? Numeric}.sum, board.length * board[0].length * (ruleset.tileset.length - 1), [origin_x, origin_x, origin_y, origin_y], hl: true if origin_x
   conflict = false
   undo_log = []
-  diff_queue = {}
-  diff_queue[[origin_x, origin_y]] = nil if origin_x .is_a? Numeric
+  diff_queue = SetQueue.new
+  diff_queue << [origin_x, origin_y] if origin_x.is_a? Numeric
   if !origin_x.is_a?(Numeric)
     (origin_x || ruleset.rules).each do |rule|
       (0 .. board.length - rule.tiles.length).each do |rule_y|
@@ -255,7 +280,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
             conflict = board[diff_y][diff_x] == 0
           end
           undo_log << [diff_x, diff_y, diff_c, rule_x, rule_y, rule]
-            diff_queue[[diff_x, diff_y]] = nil
+          diff_queue << [diff_x, diff_y]
           renderer.call board, rule_stats.values.select{_1.is_a? Numeric}.sum, board.length * board[0].length * (ruleset.tileset.length - 1), [diff_x, diff_x, diff_y, diff_y]
           break if conflict
         end
@@ -266,8 +291,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   end
 
   while !diff_queue.empty? && !conflict
-    prev_diff = diff_queue.keys[0]
-    diff_queue.delete prev_diff
+    prev_diff = diff_queue.pop
     ruleset.rules.each do |rule|
       rule.apply_at_diff(board, *prev_diff).each do |new_diff|
         diff_x, diff_y, diff_c, rule_x, rule_y, _ = new_diff
@@ -280,7 +304,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
           conflict = board[diff_y][diff_x] == 0
         end
         undo_log << new_diff
-        diff_queue[[diff_x, diff_y]] = nil
+        diff_queue << [diff_x, diff_y]
         renderer.call board, rule_stats.values.select{_1.is_a? Numeric}.sum, board.length * board[0].length * (ruleset.tileset.length - 1), [diff_x, diff_x, diff_y, diff_y]
         break if conflict
       end
