@@ -724,7 +724,6 @@ def generate ruleset, method, w, h, seeded, tile = nil
     stats = Hash[ruleset.rules.select{_1.source[0] != :symm}.map{[_1.id, 0]}]
     stats[:g] = 0
     rsr_undo_log = []
-    rsr_protected_rules = []
     if apply_ruleset ruleset, board, stats, nil, nil, true, &render
       puts "no solution"
       return
@@ -786,7 +785,6 @@ def generate ruleset, method, w, h, seeded, tile = nil
           randomization.delete [x, y, t]
           randomization << [x, y, t]
           rsr_undo_log << [[x, y, t], new_rule]
-          rsr_protected_rules |= stats.keys.select{stats[_1] != new_stats[_1]}
         elsif conflict
           stats = new_stats
           board[y][x] = 0
@@ -803,13 +801,11 @@ def generate ruleset, method, w, h, seeded, tile = nil
           board = new_board
           stats = new_stats
           rsr_undo_log = []
-          rsr_protected_rules = []
         end
       else
         board = new_board
         stats = new_stats
         rsr_undo_log = []
-        rsr_protected_rules = []
       end
     end
     puts "rule stats:"
@@ -819,17 +815,18 @@ def generate ruleset, method, w, h, seeded, tile = nil
       [(rule.source[0] == :symm ? -stats[rule.source[1]] : -stats[rule.id] rescue -stats.values.select{_1.is_a? Numeric}.max - 1), rule.source[0], ix]
     end
 
-    rules_deleted = ruleset.rules.select do 
-      _1.source[0] == :conflict && stats[_1.id] == 0 && !rsr_protected_rules.include?(_1.id)
-    end.each do |to_delete, _|
-      ruleset.rules.select{_1.source[0] == :conflict && _1.source.include?(to_delete.id)}.each do |child_rule|
-        child_rule.source = child_rule.source - [to_delete.id] | to_delete.source[1..]
-      end
+    unless stats.values.include? :back
+      rules_deleted = ruleset.rules.select do 
+        _1.source[0] == :conflict && stats[_1.id] == 0
+      end.each do |to_delete, _|
+        ruleset.rules.select{_1.source[0] == :conflict && _1.source.include?(to_delete.id)}.each do |child_rule|
+          child_rule.source = child_rule.source - [to_delete.id] | to_delete.source[1..]
+        end
       puts "#{to_delete.summary} purged"
       ruleset.rules.reject!{_1.id == to_delete.id || _1.source == [:symm, to_delete.id]}
-    end.length
-    puts "#{rules_deleted}/#{stats.length - 1} rules purged"
-    puts "#{rsr_protected_rules.length} rules protected" unless rsr_protected_rules.empty?
+      end.length
+      puts "#{rules_deleted}/#{stats.length - 1} rules purged"
+    end
     ruleset.rules.sort_by!.with_index do |rule, ix|
       [(rule.source[0] == :symm ? -stats[rule.source[1]] : -stats[rule.id] rescue - stats.values.select{_1.is_a? Numeric}.max - 1), rule.source[0], ix]
     end
