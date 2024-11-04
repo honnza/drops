@@ -365,7 +365,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
        origin_y - new_rule_min_y, origin_y - new_rule_min_y], hl: true
     new_bitmap = rule_bitmap.map &:dup
     new_bitmap[origin_y - new_rule_min_y][origin_x - new_rule_min_x] &= ~origin_c
-    apply_ruleset(ruleset, new_bitmap, Hash.new(0), origin_x - new_rule_min_x, origin_y - new_rule_min_y, true) {}
+    apply_ruleset(ruleset, new_bitmap, Hash.new(0), nil, nil, true) {}
   end
   origin_x -= new_rule_min_x
   origin_y -= new_rule_min_y
