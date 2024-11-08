@@ -369,19 +369,20 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
 
   inferred_tiles[[origin_x, origin_y]] = ruleset.all_tiles & ~board[origin_y][origin_x]
   rule_bitmap[origin_y - new_rule_min_y][origin_x - new_rule_min_x] = ruleset.all_tiles
+  applied_bitmap = rule_bitmap.map &:dup
+  if apply_ruleset(ruleset, applied_bitmap, Hash.new(0), nil, nil, true) {}
+    raise "bug: there shouldn't be a conflict here"
+  end
   board[origin_y][origin_x] = ruleset.all_tiles
   apply_ruleset(ruleset, board, Hash.new(0), origin_x, origin_y, true) {}
-  inferred_tiles = inferred_tiles.to_a.sort_by.with_index{|((x, y), c), ix| [board[y][x].digits(2).count(1), ix]}
-  inferred_tiles = inferred_tiles[0 .. inferred_tiles.find_index{|(x, y), _| x == origin_x && y == origin_y}]
-  renderer.call board, 0, new_rule_tiles.length
   (origin_x, origin_y), origin_c = inferred_tiles.find.with_index do |((origin_x, origin_y), origin_c), ix|
     renderer.call rule_bitmap, ix, inferred_tiles.length
     renderer.call rule_bitmap, ix, inferred_tiles.length,
       [origin_x - new_rule_min_x, origin_x - new_rule_min_x,
        origin_y - new_rule_min_y, origin_y - new_rule_min_y], hl: true
-    new_bitmap = rule_bitmap.map &:dup
+    new_bitmap = applied_bitmap.map &:dup
     new_bitmap[origin_y - new_rule_min_y][origin_x - new_rule_min_x] &= ~origin_c
-    apply_ruleset(ruleset, new_bitmap, Hash.new(0), nil, nil, true) {}
+    apply_ruleset(ruleset, new_bitmap, Hash.new(0), origin_x - new_rule_min_x, origin_y - new_rule_min_y, true) {}
   end
   origin_x -= new_rule_min_x
   origin_y -= new_rule_min_y
