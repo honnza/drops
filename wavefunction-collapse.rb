@@ -679,7 +679,7 @@ def bucketed_progress_bar progress, text = "", width
   "[#{text}\e[0m]"
 end
 
-def generate ruleset, method, w, h, seeded, tile = nil
+def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
   render = proc do |board, n, d, diff = nil, hl: false|
     print "\e[H\e[?25l"
     full_draw = diff.nil?
@@ -754,17 +754,13 @@ def generate ruleset, method, w, h, seeded, tile = nil
       end
       break if x.nil?
 
-      cycle_from = rsr_undo_log.find_index{|k, _| k == [x, y, t]}
-      if cycle_from
-        puts "conflict detected; restoring #{rsr_undo_log.length-cycle_from}/#{rsr_undo_log.length} singular rules"
-        rsr_undo_log[cycle_from ..].each do |k, rule|
-          rule = Rule.new(ruleset,
-                          ruleset.rules.map{_1.id}.max + 1,
-                          rule.source,
-                          rule.tiles)
-          ruleset.rules += rule.all_syms
-          stats[rule.id] = :back
-          puts " #{rule.summary} @ #{k}"
+      if rsr_undo_log[0] && rsr_undo_log[0][0] == [x, y, t]
+        rule = rsr_undo_log.min_by{[_1[1].sparse.length, _1[1].tiles.length * _1[1].tiles[0].length]}[1]
+        ruleset.rules += rule.all_syms
+        stats[rule.id] = :back
+        if quiet < 1
+          puts "conflict detected; selecting from #{rsr_undo_log.length} singular rules"
+          rsr_undo_log.each{|k, r| puts (r == rule ? ">" : " ") + " #{r.summary} @ #{k}"}
         end
         break
       end
@@ -776,17 +772,19 @@ def generate ruleset, method, w, h, seeded, tile = nil
       new_rule = apply_ruleset ruleset, new_board, new_stats, x, y, &render
       if new_rule
         ruleset.rules += new_rule.all_syms
-        puts "\nnew rule #{new_rule.summary}; now at #{ruleset.rules.count} rules"
-        puts new_rule
-        puts "rule stats:"
-        puts vwrap stats.to_a
-        puts "#{stats.values.select{_1.is_a? Numeric}.sum} total"
         ruleset.rules.sort_by!.with_index do |rule, ix|
           [(rule.source[0] == :symm ? -stats[rule.source[1]] : -stats[rule.id] rescue -stats.values.select{_1.is_a? Numeric}.max - 1), rule.source[0], ix]
         end
         stats[new_rule.id] = 0
-        puts "press enter to continue"
-        gets
+        if quiet < 1
+          puts "\nnew rule #{new_rule.summary}; now at #{ruleset.rules.count} rules"
+          puts new_rule
+          puts "rule stats:"
+          puts vwrap stats.to_a
+          puts "#{stats.values.select{_1.is_a? Numeric}.sum} total"
+          puts "press enter to continue"
+          gets
+        end
         
         new_board = board.map(&:dup)
         new_stats = stats.dup
@@ -820,9 +818,6 @@ def generate ruleset, method, w, h, seeded, tile = nil
         rsr_undo_log = []
       end
     end
-    puts "rule stats:"
-    puts vwrap stats.to_a
-    puts "#{stats.values.select{_1.is_a? Numeric}.sum} total"
     ruleset.rules.sort_by!.with_index do |rule, ix|
       [(rule.source[0] == :symm ? -stats[rule.source[1]] : -stats[rule.id] rescue -stats.values.select{_1.is_a? Numeric}.max - 1), rule.source[0], ix]
     end
@@ -837,16 +832,22 @@ def generate ruleset, method, w, h, seeded, tile = nil
       puts "#{to_delete.summary} purged"
       ruleset.rules.reject!{_1.id == to_delete.id || _1.source == [:symm, to_delete.id]}
       end.length
-      puts "#{rules_deleted}/#{stats.length - 1} rules purged"
+      puts "#{rules_deleted}/#{stats.length - 1} rules purged" if quiet < 2
     end
-    ruleset.rules.sort_by!.with_index do |rule, ix|
-      [(rule.source[0] == :symm ? -stats[rule.source[1]] : -stats[rule.id] rescue - stats.values.select{_1.is_a? Numeric}.max - 1), rule.source[0], ix]
+
+    if quiet < 2
+      puts "rule stats:"
+      puts vwrap stats.to_a
+      ruleset.rules.sort_by!.with_index do |rule, ix|
+        [(rule.source[0] == :symm ? -stats[rule.source[1]] : -stats[rule.id] rescue - stats.values.select{_1.is_a? Numeric}.max - 1), rule.source[0], ix]
+      end
+      puts "#{stats.values.select{_1.is_a? Numeric}.sum} total"
     end
     if board.all?{|row| row.all?{_1 & (_1 - 1) == 0}}
       puts "success"
       return
     end
-    gets
+    gets if quiet < 2
   end
 end
 
@@ -975,12 +976,12 @@ if $0 == __FILE__
           puts rule
         end
       end
-    when /^(gen(?: rsr)?|genus|gense|generate(?: seeded| unseeded| rsr)?) (drizzle|rain|pour|wfc[rpl]|lex)(?: (\d+)x(\d+))?(?: (\S+))?$/
+    when /^(q?q?)(gen(?: rsr)?|genus|gense|generate(?: seeded| unseeded| rsr)?) (drizzle|rain|pour|wfc[rpl]|lex)(?: (\d+)x(\d+))?(?: (\S+))?$/
       if ruleset.nil? || ruleset.tileset.empty?
         puts "at least one tile required"
         next
       end
-      seeded = case $1
+      seeded = case $2
                when "gen", "generate" then nil
                when "gense", "generate seeded" then :seeded
                when "genus", "generate unseeded" then :unseeded
@@ -988,16 +989,16 @@ if $0 == __FILE__
                else raise "error parsing command. This is a bug."
                end
       normalize_tiles ruleset.tileset
-      h = $3&.to_i || (IO.console.winsize[0] - 1) / ruleset.tileset[0].ascii.length
-      w = $4&.to_i || IO.console.winsize[1] / ruleset.tileset[0].ascii[0].display_length
-      tile = ruleset.tileset.find{_1.name == $5}
-      if $5 && !tile
-        puts "couldn't find tile #{$5}"
+      h = $4&.to_i || (IO.console.winsize[0] - 1) / ruleset.tileset[0].ascii.length
+      w = $5&.to_i || IO.console.winsize[1] / ruleset.tileset[0].ascii[0].display_length
+      tile = ruleset.tileset.find{_1.name == $6}
+      if $6 && !tile
+        puts "couldn't find tile #{$6}"
         next
       end
       StackProf.start(mode: :cpu)
       begin
-        generate ruleset, $2.to_sym, w, h, seeded, tile
+        generate ruleset, $3.to_sym, w, h, seeded, $1.length, tile
       rescue Interrupt
         p $!
       end
@@ -1034,7 +1035,7 @@ Ruleset must be defined before tiles, tiles must be defined before tile symmetri
 delete (cascade)? rule (id) - delete a rule. Must not be referenced by other rules. If cascade is set, delete refererrers instead.
 show (all)? rules - list all rules in the ruleset. Omits symmetric images of other rules unless specified.
 
-(gen|genus|gense|generate) (rsr|seeded|unseeded)? (drizzle|rain|pour|wfc) (wxh)? (tile)? - generates a pattern using the ruleset or finds and adds a rule non-trivially implied by existing rules. Uses the screen size if unspecified. If gense/seeded is set, it attemts to generate the board again with the same RNG if unsuccessful. If rsr is set, if a new rule only applies once, it is removed and the randomizzation is adjusted. If genus/unseeded is set, it retries with a different RNG. If neither is set, aborts after one attempt. If tile is specified, it tries to place that tile in the selected position.
+(q|qq)?(gen|genus|gense|generate) (rsr|seeded|unseeded)? (drizzle|rain|pour|wfc) (wxh)? (tile)? - generates a pattern using the ruleset or finds and adds a rule non-trivially implied by existing rules. Uses the screen size if unspecified. If q (quiet mode) is set, no stats are shown after each new rule. If superquiet is set, do not show stats when resetting the board either. If gense/seeded is set, it attemts to generate the board again with the same RNG if unsuccessful. If rsr is set, if a new rule only applies once, it is removed and the randomizzation is adjusted. If genus/unseeded is set, it retries with a different RNG. If neither is set, aborts after one attempt. If tile is specified, it tries to place that tile in the selected position.
   drizzle - at each step, select a random position and remove one possible tile from it
   rain - at each step, select a random position and select one tile for that position
   pour - at each step, sulect an unresolved position closest to the middle and select one tile for that position
