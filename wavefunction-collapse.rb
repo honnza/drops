@@ -655,6 +655,15 @@ def bucketed_progress_bar progress, text = "", width
   bucket_width = 2 * (width - 2) / buckets.length
   buckets = buckets.flat_map{[_1] * bucket_width}
 
+  if bucket_volume > 1
+    buckets.each_cons(2) do |left, right|
+      data = (left + right).tally.flat_map{|k, v| [k] * v}
+      left.replace data[...bucket_volume]
+      right.replace data[bucket_volume...]
+      right.reverse! if left[0] == right[0] # avoid chasing debris if there's an element with majority
+    end
+  end
+
   text = buckets.each_slice(2).zip(text.chars).map do |(left, right), char|
     if char
       rgb = bucket_rgb(left + (right || [:blank]))
