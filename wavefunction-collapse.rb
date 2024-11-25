@@ -658,10 +658,10 @@ def bucketed_progress_bar progress, text = "", width
 
   if bucket_volume > 1
     buckets.each_cons(2) do |left, right|
-      data = (left + right).tally.flat_map{|k, v| [k] * v}
+      data = left + right
+      data.sort_by!{|elem| [right.include?(elem) ? 1 : 0, data.index(elem)]}
       left.replace data[...bucket_volume]
       right.replace data[bucket_volume...]
-      right.reverse! if left[0] == right[0] # avoid chasing debris if there's an element with majority
     end
   end
 
