@@ -207,7 +207,8 @@ Rule = Struct.new(
       else
         vowel + consonant
       end
-    end.each_slice(morae).map{_1.join}.join " "
+    end.each_slice(morae).map{_1.compact.join "'"}.join(" ")
+       .gsub(/(?<=(.))'(?=(.))/){"'" if (VOWELS + %w{dh ng th zh dz ts}).include?($1 + $2)}
   end
 
   B64E = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789[]"
