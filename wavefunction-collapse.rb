@@ -759,7 +759,7 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
         rule = rsr_undo_log.min_by{[_1[1].sparse.length, _1[1].tiles.length * _1[1].tiles[0].length]}[1]
         ruleset.rules += rule.all_syms
         stats[rule.id] = :back
-        if quiet < 1
+        if quiet < 2
           puts "conflict detected; selecting from #{rsr_undo_log.length} singular rules"
           rsr_undo_log.each{|k, r| puts (r == rule ? ">" : " ") + " #{r.summary} @ #{k}"}
         end
@@ -790,9 +790,9 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
         new_board = board.map(&:dup)
         new_stats = stats.dup
         conflict = apply_ruleset ruleset, new_board, new_stats, nil, nil, true, &render
+        stats[new_rule.id] = :gone
         if new_stats[new_rule.id] == 1 && seeded == :rsr
           ruleset.rules.reject!{_1.id == new_rule.id || _1.source == [:symm, new_rule.id]}
-          stats[new_rule.id] = :gone
           randomization.delete [x, y, t]
           randomization << [x, y, t]
           rsr_undo_log << [[x, y, t], new_rule]
