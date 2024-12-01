@@ -1,0 +1,4 @@
+target/
+Cargo.lock
+day*.in
+!day*test*.in
