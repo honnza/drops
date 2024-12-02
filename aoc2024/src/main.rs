@@ -1,3 +1,4 @@
+use itertools::{Itertools, MinMaxResult};
 use std::iter::zip;
 
 fn day1(part: u8, input: &str) -> String {
@@ -9,10 +10,10 @@ fn day1(part: u8, input: &str) -> String {
         lefts.push(left.parse().expect(left));
         rights.push(right.parse().expect(right));
     }
-    lefts.sort_unstable();
-    rights.sort_unstable();
 
     if part == 1 {
+        lefts.sort_unstable();
+        rights.sort_unstable();
         zip(lefts, rights).map(|(left, right)| (left - right).abs()).sum::<i64>().to_string()
     } else {
         lefts.iter().map(|left|
@@ -21,9 +22,63 @@ fn day1(part: u8, input: &str) -> String {
     }
 }
 
+fn day2(part: u8, input: &str) -> String {
+    input.trim().lines().filter(|line| {
+        let diffs =
+            line.split_ascii_whitespace()
+                .map(|n| n.parse::<isize>().unwrap())
+                .tuple_windows()
+                .map(|(x, y)| x - y);
+        if part == 1 {
+            let MinMaxResult::MinMax(min, max) = diffs.minmax() else {
+                panic!("expected more than one element in {}", line)
+            };
+            min > -4 && max < 0 || min > 0 && max < 4
+        } else {
+            let mut diffs: Vec<isize> = diffs.collect();
+            let trend = match diffs[0..3].iter().map(|x| x.signum()).collect::<Vec<_>>()[..] {
+                [-1, -1, _] | [-1, _, -1] | [_, -1, -1] => -1,
+                [ 1,  1, _] | [ 1, _,  1] | [_,  1,  1] =>  1,
+                _ => return false
+            };
+            let trend_breaker = diffs.iter().positions(|&x| x.signum() != trend).exactly_one();
+            if trend_breaker.is_err() {
+                // either vanilla safe, too large gap without opposite step, or too wobbly
+                // ... but that can still be fine if the gap is at one end
+                if diffs[0].abs() > 3 {
+                    diffs.swap_remove(0);
+                } else if diffs[diffs.len() - 1].abs() > 3 {
+                    diffs.remove(diffs.len() - 1);
+                }
+                let MinMaxResult::MinMax(&min, &max) = diffs.iter().minmax() else {
+                    panic!("expected more than one element in {}", line)
+                };
+                return min > -4 && max < 0 || min > 0 && max < 4;
+            };
+
+            let trend_breaker = trend_breaker.unwrap();
+            let diff_left = if trend_breaker == 0 {None} else {Some(diffs[trend_breaker - 1])};
+            let diff_right = diffs.get(trend_breaker + 1).copied();
+            let compensate_at =
+                if diff_left.is_none() {trend_breaker + 1}
+                else if diff_right.is_none() {trend_breaker - 1}
+                else if diff_left.unwrap().abs() < diff_right.unwrap().abs() {trend_breaker + 1}
+                else {trend_breaker - 1};
+            if diff_left.is_some() && diff_right.is_some() || diffs[compensate_at].abs() > 3 {
+                diffs[compensate_at] += diffs[trend_breaker];
+            }
+            diffs.swap_remove(trend_breaker);
+            let MinMaxResult::MinMax(&min, &max) = diffs.iter().minmax() else {
+                panic!("expected more than one element in {}", line)
+            };
+            min > -4 && max < 0 || min > 0 && max < 4
+        }
+    }).count().to_string()
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let days = [
-      day1
+      day1, day2
     ];
 
     let args = std::env::args().collect::<Vec<_>>();
