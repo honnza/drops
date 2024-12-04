@@ -1,4 +1,5 @@
 use itertools::{Itertools, MinMaxResult};
+use regex::{Regex};
 use std::iter::zip;
 
 fn day1(part: u8, input: &str) -> String {
@@ -59,11 +60,12 @@ fn day2(part: u8, input: &str) -> String {
             let trend_breaker = trend_breaker.unwrap();
             let diff_left = if trend_breaker == 0 {None} else {Some(diffs[trend_breaker - 1])};
             let diff_right = diffs.get(trend_breaker + 1).copied();
-            let compensate_at =
-                if diff_left.is_none() {trend_breaker + 1}
-                else if diff_right.is_none() {trend_breaker - 1}
-                else if diff_left.unwrap().abs() < diff_right.unwrap().abs() {trend_breaker + 1}
-                else {trend_breaker - 1};
+            let compensate_at = match (diff_left, diff_right) {
+                (None, _) => trend_breaker + 1,
+                (_, None) => trend_breaker - 1,
+                (Some(left), Some(right)) if left.abs() < right.abs() => trend_breaker + 1,
+                _ => trend_breaker - 1
+            };
             if diff_left.is_some() && diff_right.is_some() || diffs[compensate_at].abs() > 3 {
                 diffs[compensate_at] += diffs[trend_breaker];
             }
@@ -76,9 +78,63 @@ fn day2(part: u8, input: &str) -> String {
     }).count().to_string()
 }
 
+fn day3(part: u8, input: &str) -> String {
+    let mut enabled = true;
+    Regex::new(r"mul\((\d+),(\d+)\)|do\(\)|don't\(\)").unwrap()
+        .captures_iter(input)
+        .map(|m| {
+            match &m[0] {
+                "do()" => {enabled = true; 0},
+                "don't()" => {if part == 2 {enabled = false}; 0},
+                _ => if enabled {
+                    m[1].parse::<u64>().unwrap() * m[2].parse::<u64>().unwrap()
+                } else {0}
+            }
+        })
+        .sum::<u64>().to_string()
+}
+
+fn day4(part: u8, input: &str) -> String {
+    let input = input.trim().lines().map(|line| line.as_bytes()).collect::<Vec<_>>();
+    let input = &input;
+    if part == 1 {
+        (0 .. input.len()).flat_map(|ri| {
+            (0 .. input[ri].len()).map(move |ci| {
+                if input[ri][ci] == b'X' {
+                    (-1i8 ..= 1).flat_map(|rd| {
+                        (-1i8 ..= 1).filter(move |&cd| {
+                            input.get(ri + rd as usize).and_then(|row|
+                                row.get(ci + cd as usize)
+                            ) == Some(&b'M') &&
+                            input.get(ri + 2 * rd as usize).and_then(|row|
+                                row.get(ci + 2 * cd as usize)
+                            ) == Some(&b'A') &&
+                            input.get(ri + 3 * rd as usize).and_then(|row|
+                                row.get(ci + 3 * cd as usize)
+                            ) == Some(&b'S')
+                        })
+                    }).count()
+                } else {0}
+            })
+        }).sum::<usize>().to_string()
+    } else {
+        (1 .. input.len() - 1).flat_map(|ri| {
+            (1 .. input[ri].len() - 1).filter(move |&ci| {
+                input[ri][ci] == b'A' && (
+                    (input[ri - 1][ci - 1] == b'M' && input[ri + 1][ci + 1] == b'S') ||
+                    (input[ri + 1][ci + 1] == b'M' && input[ri - 1][ci - 1] == b'S')
+                ) && (
+                    (input[ri - 1][ci + 1] == b'M' && input[ri + 1][ci - 1] == b'S') ||
+                    (input[ri + 1][ci - 1] == b'M' && input[ri - 1][ci + 1] == b'S')
+                )
+            })
+        }).count().to_string()
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let days = [
-      day1, day2
+      day1, day2, day3, day4
     ];
 
     let args = std::env::args().collect::<Vec<_>>();
