@@ -1,3 +1,4 @@
+use bitvec::prelude::*;
 use itertools::{Itertools, MinMaxResult};
 use regex::{Regex};
 use std::iter::zip;
@@ -132,9 +133,47 @@ fn day4(part: u8, input: &str) -> String {
     }
 }
 
+fn day5(part: u8, input: &str) -> String {
+    let mut lines = input.trim().lines();
+    let mut rules = bitarr![0; 10000];
+    for line in lines.by_ref().take_while(|&line| line != ""){
+        let [x, y] = line.split("|").map(|s|
+            s.parse::<usize>().unwrap()
+        ).collect::<Vec<_>>()[..] else {
+            panic!("cannot parse line {}", line)
+        };
+        rules.set(100 * x + y, true);
+    }
+
+    let lines = lines.map(|line|
+        line.split(",").map(|s| s.parse::<usize>().unwrap()).collect::<Vec<_>>()
+    );
+
+    if part == 1 {
+        lines.filter(|line|
+            (0 .. line.len()).all(|x| (x + 1 .. line.len()).all(|y| !rules[100 * line[y] + line[x]]))
+        ).map(|line|
+            line[line.len() / 2]
+        ).sum::<usize>().to_string()
+    } else {
+        lines.filter_map(|line| {
+            let mut unsorted = line.clone();
+            let mut sorted = Vec::with_capacity(unsorted.len());
+            while !unsorted.is_empty() {
+                let x_at = unsorted.iter().position(|&x|
+                    unsorted.iter().all(|&y| !rules[100 * y + x])
+                ).unwrap();
+                sorted.push(unsorted[x_at]);
+                unsorted.swap_remove(x_at);
+            }
+            if sorted == line {None} else {Some(sorted[sorted.len() / 2])}
+        }).sum::<usize>().to_string()
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let days = [
-      day1, day2, day3, day4
+      day1, day2, day3, day4, day5
     ];
 
     let args = std::env::args().collect::<Vec<_>>();
