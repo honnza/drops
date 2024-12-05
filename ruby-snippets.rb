@@ -943,6 +943,11 @@ def foo(x, limit = nil, filter: nil, n: :n4, f: 0.1, grid: nil, hicolor: false, 
 end
 
 def bar(x, n: :n4, f: 0.1)
+  x = x.gsub(/([0-9a-v]{2})([A-J])/){$1 * ($2.ord - "A".ord + 1)}
+       .gsub(/[0-9a-v]/){"%05b" % _1.to_i(32)}
+       .tr("01", " ?")
+       .scan(/.{10}/).join("/")
+  p x
   r = relax_rescale_eigen(x, n:).lazy.select{_1[:delta_1] > 1e-10}.take(4).to_a
   c = r.each_cons(2).map{|r1, r2| (r1[:delta_1] / r2[:delta_1] * 256).floor.clamp(0..255) rescue 0}
   puts "ratio color = " + c.map{_1.to_s.rjust(3, "0")}.join(" ")
