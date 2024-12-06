@@ -38,7 +38,7 @@ fn day2(part: u8, input: &str) -> String {
             min > -4 && max < 0 || min > 0 && max < 4
         } else {
             let mut diffs: Vec<isize> = diffs.collect();
-            let trend = match diffs[0..3].iter().map(|x| x.signum()).collect::<Vec<_>>()[..] {
+            let trend = match diffs[0..3].into_iter().map(|x| x.signum()).collect::<Vec<_>>()[..] {
                 [-1, -1, _] | [-1, _, -1] | [_, -1, -1] => -1,
                 [ 1,  1, _] | [ 1, _,  1] | [_,  1,  1] =>  1,
                 _ => return false
@@ -171,9 +171,86 @@ fn day5(part: u8, input: &str) -> String {
     }
 }
 
+fn day6(part: u8, input: &str) -> String {
+    let input = input.trim().lines().map(|line| line.as_bytes()).collect::<Vec<_>>();
+    let mut input = input.into_iter().map(|x| x.to_owned()).collect::<Vec<_>>();
+    let guard_origin = (0 .. input.len()).find_map(|ri|
+        input[ri].iter().position(|&x| x != b'.' && x != b'#').map(|ci| (ri, ci))
+    ).unwrap();
+    let (mut guard_ri, mut guard_ci) = guard_origin;
+    let mut guard_dir = input[guard_ri][guard_ci];
+
+    loop {
+        input[guard_ri][guard_ci] = b'X';
+        let (next_ri, next_ci) = match guard_dir {
+            b'^' => (guard_ri - 1, guard_ci), b'>' => (guard_ri, guard_ci + 1),
+            b'v' => (guard_ri + 1, guard_ci), b'<' => (guard_ri, guard_ci - 1),
+            dir => panic!("unexpected guard direction '{}'", dir as char)
+        };
+
+        match input.get(next_ri).and_then(|row| row.get(next_ci)) {
+            Some(b'#') => {
+                guard_dir = match guard_dir {
+                    b'^' => b'>', b'>' => b'v', b'v' => b'<', b'<' => b'^',
+                    _ => unreachable!()
+                };
+            },
+            Some(b'.') | Some(b'X') => {
+                guard_ri = next_ri; guard_ci = next_ci;
+            },
+            None => break,
+            Some(x) => panic!("unexpected board cell {}", x)
+        };
+    }
+
+    if part == 1 {
+        input.iter().flat_map(|row| row.iter().filter(|&&x| x == b'X')).count().to_string()
+    } else {
+        (0 .. input.len()).flat_map(|ri|
+            (0 .. input[ri].len()).map(move |ci| (ri, ci))
+        ).filter(|&(ri, ci)|
+            (ri, ci) != guard_origin && input[ri][ci] == b'X'
+        ).filter(|&(obstacle_ri, obstacle_ci)| {
+            let mut input_clone = input.clone();
+            input_clone[obstacle_ri][obstacle_ci] = b'#';
+            let (mut guard_ri, mut guard_ci) = guard_origin;
+            guard_dir = b'^';
+
+            loop {
+                input_clone[guard_ri][guard_ci] = match input_clone[guard_ri][guard_ci] {
+                    b'.' | b'X' => guard_dir,
+                    dir if dir == guard_dir => break true,
+                    b'^' | b'>' | b'v' | b'<' => b'2',
+                    b'2' => b'3', b'3' => b'4', b'4' => break true,
+                    x => panic!("unexpected board tile {}", x as char)
+                };
+                let (next_ri, next_ci) = match guard_dir {
+                    // TODO: memorize (obstacle x dir) => next turn
+                    b'^' => (guard_ri - 1, guard_ci), b'>' => (guard_ri, guard_ci + 1),
+                    b'v' => (guard_ri + 1, guard_ci), b'<' => (guard_ri, guard_ci - 1),
+                    dir => panic!("unexpected guard direction '{}'", dir as char)
+                };
+
+                match input_clone.get(next_ri).and_then(|row| row.get(next_ci)) {
+                    Some(b'#') => {
+                        guard_dir = match guard_dir {
+                            b'^' => b'>', b'>' => b'v', b'v' => b'<', b'<' => b'^',
+                            _ => unreachable!()
+                        };
+                    },
+                    Some(_) => {
+                        guard_ri = next_ri; guard_ci = next_ci;
+                    },
+                    None => break false,
+                };
+            }
+        }).count().to_string()
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let days = [
-      day1, day2, day3, day4, day5
+      day1, day2, day3, day4, day5, day6
     ];
 
     let args = std::env::args().collect::<Vec<_>>();
