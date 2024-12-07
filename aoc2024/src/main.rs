@@ -249,22 +249,25 @@ fn day6(part: u8, input: &str) -> String {
 }
 
 fn day7(part: u8, input: &str) -> String {
+    let mut bfs = Vec::new();
+    let mut new_bfs = Vec::new();
     input.trim().lines().filter_map(|line| {
         let (goal, bits) = line.split_once(": ").unwrap();
         let goal = goal.parse::<usize>().unwrap();
         let bits = bits.split_whitespace().map(|x| x.parse::<usize>().unwrap()).collect::<Vec<_>>();
         let decade = bits.iter().map(|bit| 10usize.pow(bit.ilog10() + 1)).collect::<Vec<_>>();
-        let mut bfs = vec![bits[0]];
+        bfs.clear();
+        bfs.push(bits[0]);
         for bi in 1 .. bits.len() {
             let bit = bits[bi];
-            let mut new_bfs = Vec::with_capacity(3 * bfs.len());
-            for r in bfs {
+            new_bfs.clear();
+            for r in &bfs {
                 if r + bit <= goal {new_bfs.push(r + bit)}
                 if r * bit <= goal {new_bfs.push(r * bit)}
                 let new_r = r * decade[bi] + bit;
                 if new_r <= goal && part > 1 {new_bfs.push(new_r)};
             }
-            bfs = new_bfs;
+            std::mem::swap(&mut new_bfs, &mut bfs);
         }
         bfs.iter().any(|&r| r == goal).then_some(goal)
     }).sum::<usize>().to_string()
