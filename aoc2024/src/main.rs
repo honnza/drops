@@ -248,34 +248,24 @@ fn day6(part: u8, input: &str) -> String {
     }
 }
 
+// 36 us / 3.4 ms / 37 us / 724 ms
 fn day7(part: u8, input: &str) -> String {
     input.trim().lines().filter_map(|line| {
         let (goal, bits) = line.split_once(": ").unwrap();
         let goal = goal.parse::<usize>().unwrap();
         let bits = bits.split_whitespace().map(|x| x.parse::<usize>().unwrap()).collect::<Vec<_>>();
-        if part == 1 {
-            (0 .. 1 << (bits.len() - 1)).any(|opcode| {
-                let mut r = bits[0];
-                for i in 0 .. bits.len() - 1 {
-                    if opcode & 1 << i == 0 {r *= bits[i + 1]} else {r += bits[i + 1]}
-                }
-                r == goal
-            }).then_some(goal)
-        } else {
-            (0 .. 3usize.pow((bits.len() - 1) as _)).any(|mut opcode| {
-                let mut r = bits[0];
-                for i in 0 .. bits.len() - 1 {
-                    match opcode % 3 {
-                        0 => r *= bits[i + 1],
-                        1 => r += bits[i + 1],
-                        2 => r = r * 10usize.pow(bits[i + 1].ilog10() + 1) + bits[i + 1],
-                        _ => unreachable!()
-                    }
-                    opcode /= 3;
-                }
-                r == goal
-            }).then_some(goal)
+        let mut bfs = vec![bits[0]];
+        for bit in &bits[1..] {
+            let mut new_bfs = Vec::with_capacity(3 * bfs.len());
+            for r in bfs {
+                if r + bit <= goal {new_bfs.push(r + bit)}
+                if r * bit <= goal {new_bfs.push(r * bit)}
+                let new_r = r * 10usize.pow(bit.ilog10() + 1) + bit;
+                if new_r <= goal && part > 1 {new_bfs.push(new_r)};
+            }
+            bfs = new_bfs;
         }
+        bfs.iter().any(|&r| r == goal).then_some(goal)
     }).sum::<usize>().to_string()
 }
 
