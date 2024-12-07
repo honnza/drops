@@ -248,9 +248,40 @@ fn day6(part: u8, input: &str) -> String {
     }
 }
 
+fn day7(part: u8, input: &str) -> String {
+    input.trim().lines().filter_map(|line| {
+        let (goal, bits) = line.split_once(": ").unwrap();
+        let goal = goal.parse::<usize>().unwrap();
+        let bits = bits.split_whitespace().map(|x| x.parse::<usize>().unwrap()).collect::<Vec<_>>();
+        if part == 1 {
+            (0 .. 1 << (bits.len() - 1)).any(|opcode| {
+                let mut r = bits[0];
+                for i in 0 .. bits.len() - 1 {
+                    if opcode & 1 << i == 0 {r *= bits[i + 1]} else {r += bits[i + 1]}
+                }
+                r == goal
+            }).then_some(goal)
+        } else {
+            (0 .. 3usize.pow((bits.len() - 1) as _)).any(|mut opcode| {
+                let mut r = bits[0];
+                for i in 0 .. bits.len() - 1 {
+                    match opcode % 3 {
+                        0 => r *= bits[i + 1],
+                        1 => r += bits[i + 1],
+                        2 => r = r * 10usize.pow(bits[i + 1].ilog10() + 1) + bits[i + 1],
+                        _ => unreachable!()
+                    }
+                    opcode /= 3;
+                }
+                r == goal
+            }).then_some(goal)
+        }
+    }).sum::<usize>().to_string()
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let days = [
-      day1, day2, day3, day4, day5, day6
+      day1, day2, day3, day4, day5, day6, day7
     ];
 
     let args = std::env::args().collect::<Vec<_>>();
