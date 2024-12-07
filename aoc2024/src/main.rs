@@ -38,7 +38,7 @@ fn day2(part: u8, input: &str) -> String {
             min > -4 && max < 0 || min > 0 && max < 4
         } else {
             let mut diffs: Vec<isize> = diffs.collect();
-            let trend = match diffs[0..3].into_iter().map(|x| x.signum()).collect::<Vec<_>>()[..] {
+            let trend = match diffs[0..3].iter().map(|x| x.signum()).collect::<Vec<_>>()[..] {
                 [-1, -1, _] | [-1, _, -1] | [_, -1, -1] => -1,
                 [ 1,  1, _] | [ 1, _,  1] | [_,  1,  1] =>  1,
                 _ => return false
@@ -136,7 +136,7 @@ fn day4(part: u8, input: &str) -> String {
 fn day5(part: u8, input: &str) -> String {
     let mut lines = input.trim().lines();
     let mut rules = bitarr![0; 10000];
-    for line in lines.by_ref().take_while(|&line| line != ""){
+    for line in lines.by_ref().take_while(|&line| !line.is_empty()){
         let [x, y] = line.split("|").map(|s|
             s.parse::<usize>().unwrap()
         ).collect::<Vec<_>>()[..] else {
