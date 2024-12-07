@@ -248,19 +248,20 @@ fn day6(part: u8, input: &str) -> String {
     }
 }
 
-// 36 us / 3.4 ms / 37 us / 724 ms
 fn day7(part: u8, input: &str) -> String {
     input.trim().lines().filter_map(|line| {
         let (goal, bits) = line.split_once(": ").unwrap();
         let goal = goal.parse::<usize>().unwrap();
         let bits = bits.split_whitespace().map(|x| x.parse::<usize>().unwrap()).collect::<Vec<_>>();
+        let decade = bits.iter().map(|bit| 10usize.pow(bit.ilog10() + 1)).collect::<Vec<_>>();
         let mut bfs = vec![bits[0]];
-        for bit in &bits[1..] {
+        for bi in 1 .. bits.len() {
+            let bit = bits[bi];
             let mut new_bfs = Vec::with_capacity(3 * bfs.len());
             for r in bfs {
                 if r + bit <= goal {new_bfs.push(r + bit)}
                 if r * bit <= goal {new_bfs.push(r * bit)}
-                let new_r = r * 10usize.pow(bit.ilog10() + 1) + bit;
+                let new_r = r * decade[bi] + bit;
                 if new_r <= goal && part > 1 {new_bfs.push(new_r)};
             }
             bfs = new_bfs;
