@@ -273,9 +273,42 @@ fn day7(part: u8, input: &str) -> String {
     }).sum::<usize>().to_string()
 }
 
+fn day8(part: u8, input: &str) -> String {
+    let mut freqs = [const{vec![]}; 62];
+    for (ri, line) in input.trim().lines().enumerate() {
+        for (ci, cell) in line.as_bytes().iter().enumerate() {
+            match cell {
+                b'0' ..= b'9' => freqs[(cell - b'0') as usize].push((ri as isize, ci as isize)),
+                b'A' ..= b'Z' => freqs[(cell - b'A' + 10) as usize].push((ri as isize, ci as isize)),
+                b'a' ..= b'z' => freqs[(cell - b'a' + 36) as usize].push((ri as isize, ci as isize)),
+                b'.' => (),
+                _ => panic!("unexpected character {} at ({}, {})", cell, ri, ci)
+            }
+        }
+    }
+    let rows = input.trim().lines().count();
+    let cols = input.lines().next().unwrap().len();
+
+    freqs.iter().flat_map(|antennas|
+        antennas.iter().flat_map(move |rci @ (ri, ci)|
+            antennas.iter().flat_map(move |rcj @ (rj, cj)|
+                ((if part == 1 {1} else {0}) ..).map_while(move |n| {
+                          let rij = ri + n * (ri - rj);
+                          let cij = ci + n * (ci - cj);
+                          (
+                              (0 .. rows as isize).contains(&rij) &&
+                              (0 .. cols as isize).contains(&cij) &&
+                              rci != rcj && (n == 1 || part > 1)
+                          ).then_some((rij, cij))
+                      })
+            )
+        )
+    ).unique().count().to_string()
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let days = [
-      day1, day2, day3, day4, day5, day6, day7
+      day1, day2, day3, day4, day5, day6, day7, day8
     ];
 
     let args = std::env::args().collect::<Vec<_>>();
