@@ -306,9 +306,65 @@ fn day8(part: u8, input: &str) -> String {
     ).unique().count().to_string()
 }
 
+fn day9(part: u8, input: &str) -> String {
+    let mut blocks = Vec::with_capacity(9 * input.len());
+    let mut input = input.trim().as_bytes().iter();
+    for id in 0 .. {
+        let Some(&n) = input.next() else {break};
+        for _ in 0 .. n - b'0' {blocks.push(id as i16)};
+        let Some(&n) = input.next() else {break};
+        for _ in 0 .. n - b'0' {blocks.push(-1)};
+    }
+
+    if part == 1 {
+        let mut block_iter = blocks.iter_mut();
+        loop {
+            let Some(left) = block_iter.find(|n| **n == -1) else {break};
+            let Some(right) = block_iter.rfind(|n| **n != -1) else {break};
+            *left = *right;
+            *right = -1;
+        }
+    } else {
+        let mut gap_iters = [0; 9];
+        let mut file_iter = blocks.len() - 1;
+        let mut id_seen = -1;
+        'compact: while id_seen != 0 {
+            while blocks[file_iter] as u16 >= id_seen as u16 {
+                if file_iter == 0 {break 'compact};
+                file_iter -= 1;
+            };
+            let file_end = file_iter;
+            id_seen = blocks[file_iter];
+            while file_iter > 0 && blocks[file_iter - 1] == id_seen {file_iter -= 1};
+            let file_start = file_iter;
+            let file_sz = file_end - file_start + 1;
+
+            for i in 1 .. file_sz {
+                if gap_iters[file_sz - 1] > gap_iters[i] {gap_iters[file_sz - 1] = gap_iters[i]};
+            }
+            let gap_iter = &mut gap_iters[file_sz - 1];
+
+            while *gap_iter < file_start {
+                let Some(nongap_at) = (*gap_iter .. *gap_iter + file_sz).rfind(|&ix|
+                    blocks[ix] != -1
+                ) else {break};
+                *gap_iter = nongap_at + 1;
+            }
+
+            if *gap_iter < file_start {
+                blocks[*gap_iter ..][.. file_sz].fill(id_seen);
+                blocks[file_start ..][.. file_sz].fill(-1);
+            }
+        }
+    }
+
+    blocks.iter().enumerate().filter(|&(_, &id)| id != -1)
+          .map(|(pos, &id)| pos * id as usize).sum::<usize>().to_string()
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let days = [
-      day1, day2, day3, day4, day5, day6, day7, day8
+      day1, day2, day3, day4, day5, day6, day7, day8, day9
     ];
 
     let args = std::env::args().collect::<Vec<_>>();
