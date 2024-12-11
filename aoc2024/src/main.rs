@@ -1,6 +1,7 @@
 use bitvec::prelude::*;
 use itertools::{Itertools, MinMaxResult};
 use regex::{Regex};
+use std::collections::HashMap;
 use std::iter::zip;
 
 fn day1(part: u8, input: &str) -> String {
@@ -362,9 +363,65 @@ fn day9(part: u8, input: &str) -> String {
           .map(|(pos, &id)| pos * id as usize).sum::<usize>().to_string()
 }
 
+fn day10(part: u8, input: &str) -> String {
+    let input = input.trim().as_bytes();
+    let w = input.iter().position(|&x| x == b'\n').unwrap() + 1;
+
+    let mut bfs = Vec::with_capacity(400);
+    let mut new_bfs = Vec::with_capacity(400);
+    (0 .. input.len()).map(|ix_0| {
+        if input[ix_0] != b'0' {return 0};
+        bfs.clear();
+        bfs.push(ix_0);
+        for lv in b'1' ..= b'9' {
+            new_bfs.clear();
+            for &ix in &bfs {
+                if ix >= w && input[ix - w] == lv {new_bfs.push(ix - w)};
+                if ix >= 1 && input[ix - 1] == lv {new_bfs.push(ix - 1)};
+                if ix < input.len() - 1 && input[ix + 1] == lv {new_bfs.push(ix + 1)};
+                if ix < input.len() - w && input[ix + w] == lv {new_bfs.push(ix + w)};
+                if part == 1 {
+                    new_bfs.sort_unstable();
+                    new_bfs.dedup();
+                }
+            }
+            std::mem::swap(&mut new_bfs, &mut bfs);
+        }
+        bfs.len()
+    }).sum::<usize>().to_string()
+}
+
+fn day11(part: u8, input: &str) -> String {
+    let mut eval_cache = HashMap::new();
+
+    fn eval(eval_cache: &mut HashMap<(u64, u8), u64>, stone: u64, steps: u8) -> u64 {
+        if let Some(&r) = eval_cache.get(&(stone, steps)) {return r};
+        let r = if steps == 0 {
+            1
+        } else if stone == 0 {
+            eval(eval_cache, 1, steps - 1)
+        } else {
+            let nl = stone.ilog10() + 1;
+            if nl % 2 == 0 {
+                let d = 10u64.pow(nl / 2);
+                eval(eval_cache, stone / d, steps - 1) + eval(eval_cache, stone % d, steps - 1)
+            } else {
+                eval(eval_cache, stone * 2024, steps - 1)
+            }
+        };
+
+        eval_cache.insert((stone, steps), r);
+        r
+    }
+
+    input.trim().split_whitespace().map(|str|
+        eval(&mut eval_cache, str.parse::<u64>().unwrap(), if part == 1 {25} else {75})
+    ).sum::<u64>().to_string()
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let days = [
-      day1, day2, day3, day4, day5, day6, day7, day8, day9
+      day1, day2, day3, day4, day5, day6, day7, day8, day9, day10, day11, 
     ];
 
     let args = std::env::args().collect::<Vec<_>>();
