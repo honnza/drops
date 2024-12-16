@@ -1,7 +1,7 @@
 use bitvec::prelude::*;
 use itertools::{Itertools, MinMaxResult};
 use regex::{Regex};
-use std::collections::HashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::iter::zip;
 
 fn day1(part: u8, input: &str) -> String {
@@ -392,9 +392,9 @@ fn day10(part: u8, input: &str) -> String {
 }
 
 fn day11(part: u8, input: &str) -> String {
-    let mut eval_cache = HashMap::new();
+    let mut eval_cache = FxHashMap::default();
 
-    fn eval(eval_cache: &mut HashMap<(u64, u8), u64>, stone: u64, steps: u8) -> u64 {
+    fn eval(eval_cache: &mut FxHashMap<(u64, u8), u64>, stone: u64, steps: u8) -> u64 {
         if let Some(&r) = eval_cache.get(&(stone, steps)) {return r};
         let r = if steps == 0 {
             1
@@ -414,14 +414,312 @@ fn day11(part: u8, input: &str) -> String {
         r
     }
 
-    input.trim().split_whitespace().map(|str|
+    input.split_whitespace().map(|str|
         eval(&mut eval_cache, str.parse::<u64>().unwrap(), if part == 1 {25} else {75})
     ).sum::<u64>().to_string()
 }
 
+fn day12(part: u8, input: &str) -> String {
+    let mut input = input.trim().as_bytes().to_owned();
+    let w = input.iter().position(|&x| x == b'\n').unwrap() + 1;
+    let mut dfs = Vec::new();
+
+    let mut price_sum = 0u64;
+
+    for ix in 0 .. input.len() {
+        let plant @ b'A' ..= b'Z' = input[ix] else {continue};
+        let mut area = 0;
+        let mut inner_edges = 0;
+        let mut straight_edges = 0;
+
+        dfs.clear();
+        dfs.push(ix);
+        for dfs_ix in 0.. {
+            let Some(&ix) = dfs.get(dfs_ix) else {break};
+            if input[ix] != plant {continue};
+            input[ix] = b',';
+            area += 1;
+            if ix >= w && input[ix - w] == plant {inner_edges += 1; dfs.push(ix - w)};
+            if ix >= 1 && input[ix - 1] == plant {inner_edges += 1; dfs.push(ix - 1)};
+            if input.get(ix + 1) == Some(&plant) {inner_edges += 1; dfs.push(ix + 1)};
+            if input.get(ix + w) == Some(&plant) {inner_edges += 1; dfs.push(ix + w)};
+
+            if part > 1 {
+                let nw = ix > w && (input[ix - w - 1] == plant || input[ix - w - 1] == b',');
+                let n = ix >= w && (input[ix - w] == plant || input[ix - w] == b',');
+                let we = ix >= 1 && (input[ix - 1] == plant || input[ix - 1] == b',');
+                if !nw && (n != we) {straight_edges += 1};
+                let se = input.get(ix + w + 1) == Some(&plant) || input.get(ix + w + 1) == Some(&b',');
+                let s = input.get(ix + w) == Some(&plant) || input.get(ix + w) == Some(&b',');
+                let e = input.get(ix + 1) == Some(&plant) || input.get(ix + 1) == Some(&b',');
+                if !se && (s != e) {straight_edges += 1};
+            }
+        }
+        if part > 1 {for &ix in &dfs {input[ix] = b' '}};
+        let fences = 4 * area - 2 * inner_edges - straight_edges;
+        price_sum += fences * area;
+    }
+
+    price_sum.to_string()
+}
+
+fn day13(part: u8, input: &str) -> String {
+    let mut input = input.chars();
+    let input = input.by_ref();
+    let mut res = 0;
+    loop {
+        if !input.any(|c| c == '+') {break};
+        let ax = 10 * input.next().unwrap().to_digit(10).unwrap() as i64
+            + input.next().unwrap().to_digit(10).unwrap() as i64;
+        input.find(|&c| c == '+').unwrap();
+        let ay = 10 * input.next().unwrap().to_digit(10).unwrap() as i64
+            + input.next().unwrap().to_digit(10).unwrap() as i64;
+        input.find(|&c| c == '+').unwrap();
+        let bx = 10 * input.next().unwrap().to_digit(10).unwrap() as i64
+            + input.next().unwrap().to_digit(10).unwrap() as i64;
+        input.find(|&c| c == '+').unwrap();
+        let by = 10 * input.next().unwrap().to_digit(10).unwrap() as i64
+            + input.next().unwrap().to_digit(10).unwrap() as i64;
+        input.find(|&c| c == '=').unwrap();
+        let mut px = 0;
+        input.take_while(|c| c.is_ascii_digit()).for_each(|c|
+            px = 10 * px + c.to_digit(10).unwrap() as i64
+        );
+        input.find(|&c| c == '=').unwrap();
+        let mut py = 0;
+        input.take_while(|c| c.is_ascii_digit()).for_each(|c|
+            py = 10 * py + c.to_digit(10).unwrap() as i64
+        );
+        if part > 1 {px += 10_000_000_000_000; py += 10_000_000_000_000}
+
+        if ax * by == bx * ay {panic!("TODO: collinear case: {:?}", (ax, ay, bx, by, px, py))}
+        let ran = px * by - py * bx;
+        let rbn = ax * py - ay * px;
+        let rde = ax * by - ay * bx;
+        res += if ran % rde != 0 || rbn % rde != 0 || ran / rde < 0 || rbn / rde < 0 {
+            0
+        } else {
+            3 * ran / rde + rbn / rde
+        };
+    }
+    res.to_string()
+}
+
+fn day14(part: u8, input: &str) -> String {
+    let is_test = dbg!(!input.ends_with("\n\n"));
+    let w = if is_test {11} else {101};
+    let h = if is_test {7} else {103};
+
+    let mut ulq = 0;
+    let mut urq = 0;
+    let mut blq = 0;
+    let mut brq = 0;
+    let robots = input.trim().lines().map(|line| {
+        let [pxy, vxy] = &line.split_whitespace().collect::<Vec<_>>()[..] else {panic!("{}", line)};
+        let ["p", pxy] = &pxy.split('=').collect::<Vec<_>>()[..] else {panic!("{}", line)};
+        let [px, py] = &pxy.split(',').collect::<Vec<_>>()[..] else {panic!("{}", line)};
+        let px: i64 = px.parse().unwrap();
+        let py: i64 = py.parse().unwrap();
+        let ["v", vxy] = &vxy.split('=').collect::<Vec<_>>()[..] else {panic!("{}", line)};
+        let [vx, vy] = &vxy.split(',').collect::<Vec<_>>()[..] else {panic!("{}", line)};
+        let vx: i64 = vx.parse().unwrap();
+        let vy: i64 = vy.parse().unwrap();
+        (px, py, vx, vy)
+    }).collect::<Vec<_>>();
+
+    if part == 1 {
+        for (px, py, vx, vy) in robots {
+            let fpx = (px + 100 * vx).rem_euclid(w);
+            let fpy = (py + 100 * vy).rem_euclid(h);
+            if fpx < w / 2 && fpy < h / 2 {ulq += 1}
+            else if fpx > w / 2 && fpy < h / 2 {urq += 1}
+            else if fpx < w / 2 && fpy > h / 2 {blq += 1}
+            else if fpx > w / 2 && fpy > h / 2 {brq += 1};
+        }
+        (ulq * urq * blq * brq).to_string()
+    } else {
+        let mut r = vec![];
+        let mut buf = vec![b'.'; (w * h) as usize];
+        't: for t in 0 .. w * h {
+            for c in &mut buf {*c = b'.'};
+            for &(px, py, vx, vy) in &robots {
+                let fpx = (px + t * vx).rem_euclid(w);
+                let fpy = (py + t * vy).rem_euclid(h);
+                buf[(fpx + fpy * w) as usize] += 1;
+                if buf[(fpx + fpy * w) as usize] > b'.' + 1 {continue 't};
+            }
+            r.push(t);
+        }
+        if r.len() == 1 {r[0].to_string()} else {"?".to_string()}
+    }
+}
+    
+fn day15(part: u8, input: &str) -> String {
+    let &[map, moves] = &input.trim().split("\n\n").collect::<Vec<_>>()[..] else {
+        panic!("expected exactly two paragraphs");
+    };
+    let mut map = map.as_bytes().to_owned();
+    let mut w = map.iter().position(|&c| c == b'\n').unwrap() + 1;
+    let mut bot_pos = map.iter().position(|&c| c == b'@').unwrap() as isize;
+    map[bot_pos as usize] = b'.';
+
+    if part == 1 {
+        for m in moves.bytes() {
+            let m = match m {
+                b'^' => -(w as isize), b'>' => 1, b'v' => w as isize, b'<' => -1,
+                b'\n' => continue, m => panic!("unknown move {m}")
+            };
+            let mut push_until = bot_pos + m;
+            while map[push_until as usize] == b'O' {push_until += m};
+            if map[push_until as usize] == b'#' {continue};
+            map[push_until as usize] = b'O';
+            map[(bot_pos + m) as usize] = b'.';
+            bot_pos += m;
+        }
+    } else {
+        map = map.into_iter().flat_map(|c|
+            match c {
+                b'.' | b'@' => b"..", b'O' => b"[]", b'#' => b"##", b'\n' => b"\n\n",
+                _ => panic!("unknown map tile {}", c as char)
+            }
+        ).copied().collect::<Vec<_>>();
+        bot_pos *= 2;
+        w *= 2;
+
+        let mut pushed_crates = vec![];
+        'moves: for m in moves.bytes() {
+            let m = match m {
+                b'^' => -(w as isize), b'>' => 1, b'v' => w as isize, b'<' => -1,
+                b'\n' => continue, m => panic!("unknown move {m}")
+            };
+
+            pushed_crates.clear();
+            match map[(bot_pos + m) as usize] {
+                b'#' => continue,
+                b'[' => pushed_crates.push(bot_pos + m),
+                b']' => pushed_crates.push(bot_pos + m - 1),
+                _ => ()
+            }
+            for pc_ix in 0.. {
+                let Some(&crate_pos) = pushed_crates.get(pc_ix) else {break};
+                match map[(crate_pos + m) as usize] {
+                    b'#' => continue 'moves,
+                    b'[' => pushed_crates.push(crate_pos + m),
+                    b']' if m != 1 => pushed_crates.push(crate_pos + m - 1),
+                    _ => ()
+                }
+                match map[(crate_pos + m + 1) as usize] {
+                    b'#' => continue 'moves,
+                    b'[' if m != -1 => pushed_crates.push(crate_pos + m + 1),
+                    _ => ()
+                }
+            }
+
+            bot_pos += m;
+            for &crate_pos in pushed_crates.iter().rev() {
+                map[crate_pos as usize] = b'.';
+                map[(crate_pos + 1) as usize] = b'.';
+                map[(crate_pos + m) as usize] = b'[';
+                map[(crate_pos + m + 1) as usize] = b']';
+            }
+        }
+    }
+
+    map.iter().positions(|&c| c == b'O' || c == b'[').map(|pos|
+        100 * (pos / w) + pos % w
+    ).sum::<usize>().to_string()
+}
+
+fn day16(part: u8, input: &str) -> String {
+    let input = input.as_bytes();
+    let w = (input.iter().position(|&c| c == b'\n').unwrap() + 1) as isize;
+    let start_pos = input.iter().position(|&c| c == b'S').unwrap() as isize;
+
+    let mut to_check = vec![(start_pos, 1)];
+    let mut node_cost = FxHashMap::default();
+    node_cost.insert((start_pos, 1), 0);
+    let mut node_source = FxHashMap::default();
+    node_source.insert((start_pos, 1), vec![]);
+
+    let mut checked = FxHashSet::default();
+    loop {
+        let node_ix = (0 .. to_check.len()).min_by_key(|&node_ix|
+            node_cost[&to_check[node_ix]]
+        ).expect("exit not found");
+        let (pos, dir) = to_check[node_ix];
+        let cost = node_cost[&(pos, dir)];
+        to_check.swap_remove(node_ix);
+        let dir_cw = if dir == 1 {-w}
+                     else if dir == -w {-1}
+                     else if dir == -1 {w}
+                     else if dir == w {1}
+                     else {unreachable!()};
+        if checked.contains(&(pos, dir)) {continue};
+        checked.insert((pos, dir));
+
+        match node_cost.get(&(pos, dir_cw)) {
+            Some(&old_cost) if old_cost < cost + 1000 => {}
+            Some(&old_cost) if old_cost == cost + 1000 =>
+                node_source.get_mut(&(pos, dir_cw)).unwrap().push((pos, dir)),
+            Some(_) => {
+                node_cost.insert((pos, dir_cw), cost + 1000);
+                node_source.insert((pos, dir_cw), vec![(pos, dir)]);
+            }
+            None => {
+                to_check.push((pos, dir_cw));
+                node_cost.insert((pos, dir_cw), cost + 1000);
+                node_source.insert((pos, dir_cw), vec![(pos, dir)]);
+            }
+        }
+
+        match node_cost.get(&(pos, -dir_cw)) {
+            Some(&old_cost) if old_cost < cost + 1000 => {}
+            Some(&old_cost) if old_cost == cost + 1000 =>
+                node_source.get_mut(&(pos, -dir_cw)).unwrap().push((pos, dir)),
+            Some(_) => {
+                node_cost.insert((pos, -dir_cw), cost + 1000);
+                node_source.insert((pos, -dir_cw), vec![(pos, dir)]);
+            }
+            None => {
+                to_check.push((pos, -dir_cw));
+                node_cost.insert((pos, -dir_cw), cost + 1000);
+                node_source.insert((pos, -dir_cw), vec![(pos, dir)]);
+            }
+        }
+
+        if input[(pos + dir) as usize] == b'#' {continue};
+        let mut new_pos = pos;
+        let mut new_cost = cost;
+        loop {
+            new_pos += dir;
+            new_cost += 1;
+            if input[(new_pos - dir_cw) as usize] != b'#'
+                || input[(new_pos + dir_cw) as usize] != b'#' 
+                || input[(new_pos + dir) as usize] == b'#'
+            {break};
+        }
+        if input[new_pos as usize] == b'E' {return new_cost.to_string()};
+        match node_cost.get(&(new_pos, dir)) {
+            Some(&old_cost) if old_cost < new_cost => {}
+            Some(&old_cost) if old_cost == new_cost =>
+                node_source.get_mut(&(new_pos, dir)).unwrap().push((pos, dir)),
+            Some(_) => {
+                node_cost.insert((new_pos, dir), new_cost);
+                node_source.insert((new_pos, dir), vec![(pos, dir)]);
+            }
+            None => {
+                to_check.push((new_pos, dir));
+                node_cost.insert((new_pos, dir), new_cost);
+                node_source.insert((new_pos, dir), vec![(pos, dir)]);
+            }
+        }
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let days = [
-      day1, day2, day3, day4, day5, day6, day7, day8, day9, day10, day11, 
+        day1, day2, day3, day4, day5, day6, day7, day8, day9, day10, day11, day12, day13, day14,
+        day15, day16
     ];
 
     let args = std::env::args().collect::<Vec<_>>();
