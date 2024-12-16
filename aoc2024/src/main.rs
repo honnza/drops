@@ -642,7 +642,7 @@ fn day16(part: u8, input: &str) -> String {
     node_source.insert((start_pos, 1), vec![]);
 
     let mut checked = FxHashSet::default();
-    loop {
+    let (end_pos, end_dir) = loop {
         let node_ix = (0 .. to_check.len()).min_by_key(|&node_ix|
             node_cost[&to_check[node_ix]]
         ).expect("exit not found");
@@ -655,6 +655,7 @@ fn day16(part: u8, input: &str) -> String {
                      else if dir == w {1}
                      else {unreachable!()};
         if checked.contains(&(pos, dir)) {continue};
+        if input[pos as usize] == b'E' {break (pos, dir)};
         checked.insert((pos, dir));
 
         match node_cost.get(&(pos, dir_cw)) {
@@ -698,7 +699,6 @@ fn day16(part: u8, input: &str) -> String {
                 || input[(new_pos + dir) as usize] == b'#'
             {break};
         }
-        if input[new_pos as usize] == b'E' {return new_cost.to_string()};
         match node_cost.get(&(new_pos, dir)) {
             Some(&old_cost) if old_cost < new_cost => {}
             Some(&old_cost) if old_cost == new_cost =>
@@ -713,6 +713,27 @@ fn day16(part: u8, input: &str) -> String {
                 node_source.insert((new_pos, dir), vec![(pos, dir)]);
             }
         }
+    };
+
+    if part == 1 {
+        node_cost[&(end_pos, end_dir)].to_string()
+    } else {
+        let mut input = input.to_owned();
+        input[end_pos as usize] = b'O';
+        let mut path_scan = vec![(end_pos, end_dir)];
+        for ps_ix in 0 .. {
+            let Some(&(pos, dir)) = path_scan.get(ps_ix) else {break};
+            for &(prev_pos, prev_dir) in &node_source[&(pos, dir)] {
+                path_scan.push((prev_pos, prev_dir));
+                let mut pos_iter = prev_pos;
+                while pos_iter != pos {
+                    input[pos_iter as usize] = b'O';
+                    pos_iter += prev_dir;
+                }
+            }
+        }
+
+        input.iter().filter(|&&c| c == b'O').count().to_string()
     }
 }
 
