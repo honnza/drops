@@ -2,6 +2,16 @@ require "io/console"
 require "matrix"
 def gc x; (255 * x ** (1/2.2)).round; end
 
+def rainbow_gradient(x)
+  x /= 100.0
+  y = 1 - x
+  [
+    21 * x**2 * y**5 + 35 * x**3 * y**4 + 35 * x**4 * y**3 + x**7,
+    35 * x**4 * y**3 + 21 * x**5 * y**2 +  7 * x**6 * y    + x**7,
+    7  * x    * y**6 + 21 * x**2 * y**5 +  7 * x**6 * y    + x**7
+  ].map{gc _1}
+end
+
 class Array; include Comparable; end
 
 def find_collatz(x, triple_even = true)
@@ -942,40 +952,58 @@ def foo(x, limit = nil, filter: nil, n: :n4, f: 0.1, grid: nil, hicolor: false, 
   end
 end
 
-def bar(x, n: :n4, f: 0.1)
+def bar(x, n: :n4, f: 0.1, modes: [0, 1, 2], eigen: true)
   x = x.gsub(/([0-9a-v]{2})([A-J])/){$1 * ($2.ord - "A".ord + 1)}
        .gsub(/[0-9a-v]/){"%05b" % _1.to_i(32)}
        .tr("01", " ?")
        .scan(/.{10}/).join("/")
   p x
-  r = relax_rescale_eigen(x, n:).lazy.select{_1[:delta_1] > 1e-10}.take(4).to_a
-  c = r.each_cons(2).map{|r1, r2| (r1[:delta_1] / r2[:delta_1] * 256).floor.clamp(0..255) rescue 0}
-  puts "ratio color = " + c.map{_1.to_s.rjust(3, "0")}.join(" ")
+  if eigen
+    r = relax_rescale_eigen(x, n:).lazy
+  else
+    r = []
+    until r.select{_1[:delta_1] > 1e-10}.length > modes.max + 1
+      mode = relax_rescale(x, n:, f:, s: r.map{_1[:mode]})
+      break if mode.nil?
+      r << mode
+    end
+  end
+  r = r.select{_1[:delta_1] > 1e-10}.take(modes.max + 2).to_a
+
+  c = r.each_cons(2).map do |r1, r2|
+    (r1[:delta_1] / r2[:delta_1] * 256).floor.clamp(0..255) rescue 0
+  end
+  c << 255 until c.length > modes.max
+  c = modes.map{c[_1]}
+  puts "ratio color = " + c.map{"%03d" % _1}.join(" ") +
+                   " #" + c.map{"%02x" % _1}.join
   puts "  \e[48;2;#{c.map(&:to_s).join(";")}m  \e[107;1m  \e[0m"
   
-  sa = Hash[[0, 1, 2, 3].combination(2).map do |i, j|
-    saij = r[i][:mode].flatten.compact.zip(r[j][:mode].flatten.compact).any? do |ei, ej|
-      ei.abs > 1e-10 && ej.abs > 1e-10
-    end
-    [[i, j], saij]
-  end]
-  r0lone = !sa[[0, 1]] && !sa[[0, 2]] && !sa[[0, 3]]
-  r1lone = !sa[[0, 1]] && !sa[[1, 2]] && !sa[[1, 3]]
-  r2lone = !sa[[0, 2]] && !sa[[1, 2]] && !sa[[2, 3]]
-  r3lone = !sa[[0, 3]] && !sa[[1, 3]] && !sa[[2, 3]]
-  sag = case
-        when r0lone && r1lone && r2lone && r3lone then 14
-        when r0lone || r1lone || r2lone || r3lone
-          (r0lone ? 1 : 0) + (r1lone ? 2 : 0) + (r2lone ? 4 : 0) + (r3lone ? 8 : 0)
-        when !sa[[0, 2]] && !sa[[0, 3]] && !sa[[1, 2]] && !sa[[1, 3]] then 13
-        when !sa[[0, 1]] && !sa[[0, 3]] && !sa[[1, 2]] && !sa[[2, 3]] then 11
-        when !sa[[0, 1]] && !sa[[0, 2]] && !sa[[1, 3]] && !sa[[2, 3]] then 7
-        else 0
-        end
+  if r.length > 3
+    sa = Hash[[0, 1, 2, 3].combination(2).map do |i, j|
+      saij = r[i][:mode].flatten.compact.zip(r[j][:mode].flatten.compact).any? do |ei, ej|
+        ei.abs > 1e-10 && ej.abs > 1e-10
+      end
+      [[i, j], saij]
+    end]
+    r0lone = !sa[[0, 1]] && !sa[[0, 2]] && !sa[[0, 3]]
+    r1lone = !sa[[0, 1]] && !sa[[1, 2]] && !sa[[1, 3]]
+    r2lone = !sa[[0, 2]] && !sa[[1, 2]] && !sa[[2, 3]]
+    r3lone = !sa[[0, 3]] && !sa[[1, 3]] && !sa[[2, 3]]
+    sag = case
+          when r0lone && r1lone && r2lone && r3lone then 14
+          when r0lone || r1lone || r2lone || r3lone
+            (r0lone ? 1 : 0) + (r1lone ? 2 : 0) + (r2lone ? 4 : 0) + (r3lone ? 8 : 0)
+          when !sa[[0, 2]] && !sa[[0, 3]] && !sa[[1, 2]] && !sa[[1, 3]] then 13
+          when !sa[[0, 1]] && !sa[[0, 3]] && !sa[[1, 2]] && !sa[[2, 3]] then 11
+          when !sa[[0, 1]] && !sa[[0, 2]] && !sa[[1, 3]] && !sa[[2, 3]] then 7
+          else 0
+          end
 
-  sag_id = [0, 4, 3, 13, 2, 11, 12, 5, 1, 10, 9, 6, 8, 7, 14]
-  sag_name = %w{aaaa aaa_ aa_a aa__ a_aa a_a_ a__a abba _aaa _aa_ _a_a baba __aa bbaa ____}
-  puts "same area group id #{sag_id[sag]} = #{sag_name[sag]}"
+    sag_id = [0, 4, 3, 13, 2, 11, 12, 5, 1, 10, 9, 6, 8, 7, 14]
+    sag_name = %w{aaaa aaa_ aa_a aa__ a_aa a_a_ a__a abba _aaa _aa_ _a_a baba __aa bbaa ____}
+    puts "same area group id #{sag_id[sag]} = #{sag_name[sag]}"
+  end
 end
 
 def gen_palette n_colors, adjacencies

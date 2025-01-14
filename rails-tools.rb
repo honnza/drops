@@ -67,6 +67,23 @@ end
 
 # h="";loop{h+=rand(2).to_s;print h;h="" if gets[/./]}
 
+def sample_smooth(w, h)
+  pts = [*0...w].product [*0...(h||w)]
+  pts.select!{_1 <= _2} if h.nil?
+  visited_x = [0] * w
+  visited_y = h.nil? ? visited_x : ([0] * h)
+  pts.shuffle!
+  Enumerator.new do |e|
+    loop do
+      x, y = pts.min_by{|x, y| [visited_x[x], visited_y[y]]}
+      e.yield [[x, y], [visited_x[x], visited_y[y]]]
+      visited_x[x] += 1
+      visited_y[y] += 1
+      pts.delete [x, y]
+    end
+  end
+end
+
 class Rational
   def to_mixed_s
     if denominator == 1
@@ -169,11 +186,18 @@ end
 def voronoi_subdivide(xs, ys, reflexive = false, z_metric: -> a, b {(a - b).abs})
 
   z_metric = case z_metric
+             when :discrete then -> x, y {x == y ? 0 : 1}
              when :linear then -> x, y {(x-y).abs}
              when :rgb then lambda do |x, y|
                a, b, c, *_ = x.digits(1000) + [0, 0]
                d, e, f, *_ = y.digits(1000) + [0, 0]
                (a - d) ** 2 + (b - e) ** 2 + (c - f) ** 2
+             end
+             when :pcd_rgb then lambda do |x, y|
+               a, b, c, *_ = x.digits(1000) + [0, 0]
+               d, e, f, *_ = y.digits(1000) + [0, 0]
+               rm = (a + d) / 512.0
+               (2 + rm) * (a - d) ** 2 + 4 * (b - e) ** 2 + (3 - rm) * (c - f) ** 2
              end
              when :xxyy then lambda do |x, y|
                a, b, c, d, *_ = x.digits(10) + [0, 0, 0]
@@ -295,8 +319,9 @@ if __FILE__ == $0
     bw ||= w
 
     pts = case ARGV[1]
+          when "lattice" then gen_lattice [w, h]
           when "shuffle" then [*0...w].product([*0...h]).shuffle
-          when "hypercube", "lattice", "smooth lattice"
+          when "hypercube", "smooth"
             puts "TODO"
             exit
           else
@@ -310,32 +335,59 @@ if __FILE__ == $0
       end
       puts
     end
-  when "voronoi"
-    md = %r{^(\d+)(?:x(\d+))?$}.match(ARGV[2])
-    if md.nil?
-      puts "can't parse #{ARGV[2]} as a (w)x(h) string"
-      exit
+  when "sample"
+    case ARGV[1]
+    when "shuffle"
+      md = %r{^(\d+)(?:x(\d+))?$}.match(ARGV[2])
+      if md.nil?
+        puts "can't parse #{ARGV[2]} as a (w)x(h) string"
+        exit
+      end
+      w, h = md[1..].to_a.map{_1&.to_i}
+      pts = [*0...w].product [*0...(h||w)]
+      pts.select!{_1 <= _2} if h.nil?
+      ARGV.replace([])
+      pts.shuffle!.each{print _1; gets}
+    when "smooth"
+      md = %r{^(\d+)(?:x(\d+))?$}.match(ARGV[2])
+      if md.nil?
+        puts "can't parse #{ARGV[2]} as a (w)x(h) string"
+        exit
+      end
+      w, h = md[1..].to_a.map{_1&.to_i}
+      ARGV.replace([])
+      sample_smooth(w, h).each{print _1; gets}
+    when "voronoi"
+      md = %r{^(\d+)(?:x(\d+))?$}.match(ARGV[3])
+      if md.nil?
+        puts "can't parse #{ARGV[3]} as a (w)x(h) string"
+        exit
+      end
+      w, h = md[1..].to_a.map{_1&.to_i}
+      unless %w{discrete linear pcd_rgb rgb xxyy}.include?(ARGV[2])
+        puts "#{ARGV[2]} isn't a recognized z metric method"
+        exit
+      end
+      z_metric = ARGV[2].to_sym
+      ARGV.replace([])
+      voronoi_subdivide [*0...w], [*0...(h||w)], h.nil?, z_metric:
     end
-    unless %w{linear rgb xxyy}.include?(ARGV[1])
-      puts "#{ARGV[1]} isn't a recognized z metric method"
-      exit
-    end
-    w, h = md[1..].to_a.map{_1&.to_i}
-    z_metric = ARGV[1].to_sym
-    ARGV.replace([])
-    voronoi_subdivide [*0...w], [*0...(h||w)], h.nil?, z_metric:
   else
     puts <<END
 gen (method) (w)x(h)/(bh)x(bw) - shuffle a (bw)x(bh) square grid, then prints the points (bw) points in a row, (bh) rows in a block. If unspecified, (h) defaults to (w), (w) defaults to 10, (bh) defaults to (w)x(h) (only one block), and (bw) defaults to (w).
     shuffle - pick points in a completely random order
     hypercube - start with a random point. Select a random vector and add a copy of all points moved by that vector. Repeat until all points have been selected.
     lattice - start with a random point. Shuffle the list of offsets. Move every point by every offset prioritizing earlier offsets until all points have been selected.
-    smooth lattice - like lattice, but if a later offset was used more than an earlier offset, reorder the offsets and retry.
+    smooth - like lattice, but if a later offset was used more than an earlier offset, reorder the offsets and retry.
 
-voronoi (method) (w)x(h) - start at the four corners of a (w)x(h) rectangle. Prompt the z value for each. Repeatedly pick and prompt points in the middle of the greatest z gap between nearby points. If height is not specifiecd, start at the three corners of a (w)x(w) upper diagonal triagle instead.
+sample voronoi (method) (w)x(h) - start at the four corners of a (w)x(h) rectangle. Prompt the z value for each. Repeatedly pick and prompt points in the middle of the greatest z gap between nearby points. If height is not specifiecd, start at the three corners of a (w)x(w) upper diagonal triagle instead.
+    discrete - any two distinct z values are considered equally distinct
     linear - z values are interpreted as decimal values on a linear scale.
     rgb - z values are interpreted as triples of three-digit numbers and their distance is measured using the Euclidean metric.
+    pcd_rgb - z values arre interpreted as RGB triplets, but human perception is taken into account when determining distance.
     xxyy - zvalues are interpreted as pairs of two-digit numbers in base 8 and their distance is measured using the Euclidean metric.
+sample shuffle (w)x(h) - all pairs of a (w)x(h) rectangle / (w)x(w) triangle are taken in random order
+sample smooth (w)x(h) - pairs are taken in random order, but priority is taken to endpoints that have been used fewer times already
 
 END
   end
