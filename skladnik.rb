@@ -60,6 +60,21 @@ class Layout
     exits.each{|ri, ci| r[ri][ci * 2, 2] = "[]"}
   end
 
+  def as_maze
+    h = @flow_map.length
+    w = @flow_map[0].length
+    (0 .. h - 2).map do |ri|
+      (0 .. w - 2).map do |ci|
+        ul = @flow_map[ri][ci]
+        ur = @flow_map[ri][ci + 1]
+        bl = @flow_map[ri + 1][ci]
+        hz = (ul == ?v || bl == ?^ || ul == ?# && bl == ?#) ? " " : "_"
+        vt = (ul == ?> || ur == ?< || ul == ?# && ur == ?#) ? "," : "|"
+        hz + vt
+      end.join
+    end
+  end
+
   class << self
     # creates a rectangular warehouse with empty lines every third line,
     # and one perpendicular line connecting them to the exit. Width and height include the border.
@@ -119,10 +134,10 @@ class Layout
     def prim(w, h)
       flow_map = [?# * w, *(h - 2).times.map{?# + ?. * (w - 2) + ?#}, ?# * w]
       open_set = [[
-        *[*(1 .. w - 1)].map{[1, _1, ?^]},
-        *[*(1 .. w - 1)].map{[h - 2, _1, ?v]},
-        *[*(1 .. h - 1)].map{[_1, 1, ?<]},
-        *[*(1 .. h - 1)].map{[_1, w - 2, ?>]}
+        *[*(1 .. w - 2)].map{[1, _1, ?^]},
+        *[*(1 .. w - 2)].map{[h - 2, _1, ?v]},
+        *[*(1 .. h - 2)].map{[_1, 1, ?<]},
+        *[*(1 .. h - 2)].map{[_1, w - 2, ?>]}
       ].sample]
       until open_set.empty?
         ri, ci, dir = open_set.sample
@@ -132,6 +147,28 @@ class Layout
         open_set << [ri, ci + 1, ?<] if flow_map[ri][ci + 1] == ?.
         open_set << [ri + 1, ci, ?^] if flow_map[ri + 1][ci] == ?.
         open_set << [ri, ci - 1, ?>] if flow_map[ri][ci - 1] == ?.
+      end
+      Layout.new flow_map
+    end
+
+    # expands a tree of paths randomly to fill the inner area without regards
+    # for the resulting capacity
+    def pruskal(w, h)
+      flow_map = [?# * w, *(h - 2).times.map{?# + ?. * (w - 2) + ?#}, ?# * w]
+      open_set = [[
+        *[*(1 .. w - 2)].map{[0, 1, _1, ?^]},
+        *[*(1 .. w - 2)].map{[0, h - 2, _1, ?v]},
+        *[*(1 .. h - 2)].map{[0, _1, 1, ?<]},
+        *[*(1 .. h - 2)].map{[0, _1, w - 2, ?>]}
+      ].sample]
+      until open_set.empty?
+        _, ri, ci, dir = open_set.min
+        flow_map[ri][ci] = dir
+        open_set.reject!{|_, rj, cj, _| ri == rj && ci == cj}
+        open_set << [rand, ri - 1, ci, ?v] if flow_map[ri - 1][ci] == ?.
+        open_set << [rand, ri, ci + 1, ?<] if flow_map[ri][ci + 1] == ?.
+        open_set << [rand, ri + 1, ci, ?^] if flow_map[ri + 1][ci] == ?.
+        open_set << [rand, ri, ci - 1, ?>] if flow_map[ri][ci - 1] == ?.
       end
       Layout.new flow_map
     end
@@ -151,8 +188,9 @@ puts case ARGV[0]
      when "horizontal" then Layout.regular_3 w, h, :horizontal
      when "vertical" then Layout.regular_3 w, h, :vertical
      when "regular" then Layout.regular_3 w, h, :auto
+     when "pruskal" then Layout.pruskal w, h
      when "prim" then Layout.prim w, h
      else 
-       puts "first argument should be horizontal, vertical, regular or prim"
+       puts "first argument should be horizontal, vertical, regular, prim or pruskal"
        exit
-     end.flow_map
+     end.as_maze
