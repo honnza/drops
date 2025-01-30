@@ -78,10 +78,10 @@ class Layout
       #             ########### #>>>>^<<<<#
       #                         ###########
 
-      cap_hz = (h / 3) * (w - 3) + h - (h % 3 == 0 ? 0 : 1)
-      cap_vt = (w / 3) * (h - 3) + w - (w % 3 == 0 ? 0 : 1)
+      uncap_hz = (h / 3) * (w - 3) + h - (h % 3 == 0 ? 0 : 1)
+      uncap_vt = (w / 3) * (h - 3) + w - (w % 3 == 0 ? 0 : 1)
 
-      if orientation == :horizontal || orientation != :vertical && cap_hz >= cap_vt
+      if orientation == :horizontal || orientation != :vertical && uncap_hz <= uncap_vt
         lane_at = h % 3 == 1 ? 1 : 2
         mid_at = w / 2
         Layout.new((0 ... h).map do |ri|
@@ -113,16 +113,46 @@ class Layout
         end)
       end
     end
+
+    # expands a tree of paths randomly to fill the inner area without regards
+    # for the resulting capacity
+    def prim(w, h)
+      flow_map = [?# * w, *(h - 2).times.map{?# + ?. * (w - 2) + ?#}, ?# * w]
+      open_set = [[
+        *[*(1 .. w - 1)].map{[1, _1, ?^]},
+        *[*(1 .. w - 1)].map{[h - 2, _1, ?v]},
+        *[*(1 .. h - 1)].map{[_1, 1, ?<]},
+        *[*(1 .. h - 1)].map{[_1, w - 2, ?>]}
+      ].sample]
+      until open_set.empty?
+        ri, ci, dir = open_set.sample
+        flow_map[ri][ci] = dir
+        open_set.reject!{|rj, cj, _| ri == rj && ci == cj}
+        open_set << [ri - 1, ci, ?v] if flow_map[ri - 1][ci] == ?.
+        open_set << [ri, ci + 1, ?<] if flow_map[ri][ci + 1] == ?.
+        open_set << [ri + 1, ci, ?^] if flow_map[ri + 1][ci] == ?.
+        open_set << [ri, ci - 1, ?>] if flow_map[ri][ci - 1] == ?.
+      end
+      Layout.new flow_map
+    end
   end
 end
 
 w, h = case ARGV.length
-       when 0 then [IO.console.winsize[1] / 2, IO.console.winsize[0]]
-       when 1 then [ARGV[0].to_i, ARGV[0].to_i]
-       when 2 then [ARGV[0].to_i, ARGV[1].to_i]
+       when 1 then [IO.console.winsize[1] / 2, IO.console.winsize[0] - 1]
+       when 2 then [ARGV[1].to_i, ARGV[1].to_i]
+       when 3 then [ARGV[1].to_i, ARGV[2].to_i]
        else
-         puts "0 .. 2 arguments expected"
+         puts "1 .. 3 arguments expected"
          exit
        end
 
-puts Layout.regular_3(w, h).flow_map
+puts case ARGV[0]
+     when "horizontal" then Layout.regular_3 w, h, :horizontal
+     when "vertical" then Layout.regular_3 w, h, :vertical
+     when "regular" then Layout.regular_3 w, h, :auto
+     when "prim" then Layout.prim w, h
+     else 
+       puts "first argument should be horizontal, vertical, regular or prim"
+       exit
+     end.flow_map
