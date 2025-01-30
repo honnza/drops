@@ -1,3 +1,5 @@
+require "io/console"
+
 Crate = Struct.new :ascii, :id, :pos do
   def self.alpha2(id, pos); new((?A..?Z).sample + (?a..?z).sample, id, pos); end
 end
@@ -23,7 +25,7 @@ class Layout
     when '^' then [ri - 1, ci]
     when '>' then [ri, ci + 1]
     when 'v' then [ri + 1, ci]
-    when 'v' then [ri, ci - 1]
+    when '<' then [ri, ci - 1]
     end
   end
 
@@ -57,6 +59,70 @@ class Layout
     r = @flow_map.map{|row| row.map{|cell| cell == "#" ? "##" : ".."}}
     exits.each{|ri, ci| r[ri][ci * 2, 2] = "[]"}
   end
+
+  class << self
+    # creates a rectangular warehouse with empty lines every third line,
+    # and one perpendicular line connecting them to the exit. Width and height include the border.
+    # Orientation is either horizontal (parallel lines run left to right), vertical
+    # (parallel lines run top to bottom), or auto (chosen to maximize the number of leaf nodes).
+    def regular_3(w, h, orientation = :auto)
+      # the leaf count is the area minus the number of parallel lanes times their length - 1,
+      # plus the size perpendicular to lane orientation - 1.
+      # The final - 1 doesn't apply if the inner size mod 3 is 1 (far lane is at the edge).
+      # The number of lanes is the perpendicular size divided by 3.
+      #
+      # ########### ########### ###########
+      # #>>>>^<<<<# #vvv>^<vvv# #>>>>^<<<<#
+      # #^^^^^^^^^# #>>>>^<<<<# #^^^^^^^^^#
+      # ########### #^^^^^^^^^# #vvv>^<vvv#
+      #             ########### #>>>>^<<<<#
+      #                         ###########
+
+      cap_hz = (h / 3) * (w - 3) + h - (h % 3 == 0 ? 0 : 1)
+      cap_vt = (w / 3) * (h - 3) + w - (w % 3 == 0 ? 0 : 1)
+
+      if orientation == :horizontal || orientation != :vertical && cap_hz >= cap_vt
+        lane_at = h % 3 == 1 ? 1 : 2
+        mid_at = w / 2
+        Layout.new((0 ... h).map do |ri|
+          (0 ... w).map do |ci|
+            ri_rel = (ri - lane_at) % 3
+            case
+            when ri == 0 || ri == h - 1 || ci == 0 || ci == w - 1 then ?#
+            when ci == mid_at || ri_rel == 1 then ?^
+            when ri_rel == 2 && (ci - mid_at).abs > 1 then ?v
+            when ci < mid_at then ?>
+            else ?<
+            end
+          end.join
+        end)
+      else
+        lane_at = w % 3 == 1 ? 1 : 2
+        mid_at = h / 2
+        Layout.new((0 ... h).map do |ri|
+          (0 ... w).map do |ci|
+            ci_rel = (ci - lane_at) % 3
+            case
+            when ri == 0 || ri == h - 1 || ci == 0 || ci == w - 1 then ?#
+            when ri == mid_at || ci_rel == 1 then ?<
+            when ci_rel == 2 && (ri - mid_at).abs > 1 then ?>
+            when ri < mid_at then ?v
+            else ?^
+            end
+          end.join
+        end)
+      end
+    end
+  end
 end
 
+w, h = case ARGV.length
+       when 0 then [IO.console.winsize[1] / 2, IO.console.winsize[0]]
+       when 1 then [ARGV[0].to_i, ARGV[0].to_i]
+       when 2 then [ARGV[0].to_i, ARGV[1].to_i]
+       else
+         puts "0 .. 2 arguments expected"
+         exit
+       end
 
+puts Layout.regular_3(w, h).flow_map
