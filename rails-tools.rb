@@ -321,6 +321,23 @@ if __FILE__ == $0
     pts = case ARGV[1]
           when "lattice" then gen_lattice [w, h]
           when "shuffle" then [*0...w].product([*0...h]).shuffle
+          when /symmetric([124])([\/\-\\\|])?/
+            order = $1.to_i
+            mirror = $2
+            if w != h && (order == 4 || mirror == "\\" || mirror == "/")
+              puts "symmetry type requires a square board"
+              exit
+            end
+            gen_symmetric [w, h] do |pt|
+              orbit = [pt]
+              orbit += orbit.map{|x, y| [w - x - 1, h - y - 1]} if order % 2 == 0
+              orbit += orbit.map{|x, y| [y, w - x - 1]} if order == 4
+              orbit += orbit.map{|x, y| [h - y - 1, w - x - 1]} if mirror == "/"
+              orbit += orbit.map{|x, y| [x, h - y - 1]} if mirror == "-"
+              orbit += orbit.map{|x, y| [w - x - 1, y]} if mirror == "|"
+              orbit += orbit.map{|x, y| [y, x]} if mirror == "\\"
+              orbit.min
+            end
           when "hypercube", "smooth"
             puts "TODO"
             exit
@@ -379,6 +396,7 @@ gen (method) (w)x(h)/(bh)x(bw) - shuffle a (bw)x(bh) square grid, then prints th
     hypercube - start with a random point. Select a random vector and add a copy of all points moved by that vector. Repeat until all points have been selected.
     lattice - start with a random point. Shuffle the list of offsets. Move every point by every offset prioritizing earlier offsets until all points have been selected.
     smooth - like lattice, but if a later offset was used more than an earlier offset, reorder the offsets and retry.
+    symmetric[124][/-\|] - random sampling, but samples at points related by symmetry are kept together. Symmetry is specified by its rotation order (1, 2 or 4) and mirror plane (/, -, \, | or none).
 
 sample voronoi (method) (w)x(h) - start at the four corners of a (w)x(h) rectangle. Prompt the z value for each. Repeatedly pick and prompt points in the middle of the greatest z gap between nearby points. If height is not specifiecd, start at the three corners of a (w)x(w) upper diagonal triagle instead.
     discrete - any two distinct z values are considered equally distinct
