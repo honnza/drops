@@ -1,7 +1,11 @@
 require "io/console"
 
 Crate = Struct.new :ascii, :id, :pos do
-  def self.alpha2(id, pos); new((?A..?Z).sample + (?a..?z).sample, id, pos); end
+  def self.alpha2(id, pos); new((?A..?Z).sample + (?a..?z).sample, id, pos = nil); end
+  def self.rgba2(id, pos)
+    new("\e[39;2;#{rand 100 .. 200};#{rand 100 .. 200};#{rand 100 .. 200}m" +
+        "#{(?A..?Z).sample}#{(?a..?z).sample}\e[0m", id, pos)
+  end
 end
 
 class Layout
@@ -14,7 +18,7 @@ class Layout
   # coordinates of every place that a crate can be
   def places
     flow_map.flat_map.with_index do |row, ri|
-      row.map.with_index{|cell, ci| [ri, ci] if "^>v<"[cell]}.compact
+      row.chars.map.with_index{|cell, ci| [ri, ci] if "^>v<"[cell]}.compact
     end
   end
 
@@ -55,9 +59,10 @@ class Layout
   # is reserved to extract crates, the rest of the inner area is usable.
   def capacity; area - places.map{depth _1}.max - 1; end
 
-  def to_s
-    r = @flow_map.map{|row| row.map{|cell| cell == "#" ? "##" : ".."}}
+  def render_empty
+    r = @flow_map.map{|row| row.chars.map{|cell| cell == "#" ? "##" : ".."}.join}
     exits.each{|ri, ci| r[ri][ci * 2, 2] = "[]"}
+    r
   end
 
   def as_maze
@@ -105,7 +110,7 @@ class Layout
             case
             when ri == 0 || ri == h - 1 || ci == 0 || ci == w - 1 then ?#
             when ci == mid_at || ri_rel == 1 then ?^
-            when ri_rel == 2 && (ci - mid_at).abs > 1 then ?v
+            when ri_rel == 2 then ?v
             when ci < mid_at then ?>
             else ?<
             end
@@ -120,7 +125,7 @@ class Layout
             case
             when ri == 0 || ri == h - 1 || ci == 0 || ci == w - 1 then ?#
             when ri == mid_at || ci_rel == 1 then ?<
-            when ci_rel == 2 && (ri - mid_at).abs > 1 then ?>
+            when ci_rel == 2 then ?>
             when ri < mid_at then ?v
             else ?^
             end
@@ -175,6 +180,24 @@ class Layout
   end
 end
 
+class Model
+  def initialize(layout, crates = [])
+    @layout = layout
+    @crates = {}
+    crates.each {@crates[_1.id] = _1}
+  end
+
+  def render
+    r = @layout.render_empty
+    @crates.each_value do |crate|
+      ri, ci = crate.pos
+      next if ri.nil?
+      r[ri][ci * 2, 2] = crate.ascii
+    end
+    r
+  end
+end
+
 w, h = case ARGV.length
        when 1 then [IO.console.winsize[1] / 2, IO.console.winsize[0] - 1]
        when 2 then [ARGV[1].to_i, ARGV[1].to_i]
@@ -184,7 +207,7 @@ w, h = case ARGV.length
          exit
        end
 
-puts case ARGV[0]
+puts Model.new(case ARGV[0]
      when "horizontal" then Layout.regular_3 w, h, :horizontal
      when "vertical" then Layout.regular_3 w, h, :vertical
      when "regular" then Layout.regular_3 w, h, :auto
@@ -193,4 +216,4 @@ puts case ARGV[0]
      else 
        puts "first argument should be horizontal, vertical, regular, prim or pruskal"
        exit
-     end.as_maze
+     end).render
