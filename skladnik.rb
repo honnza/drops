@@ -3,8 +3,9 @@ require "io/console"
 Crate = Struct.new :ascii, :id, :pos do
   def self.alpha2(id, pos); new((?A..?Z).sample + (?a..?z).sample, id, pos = nil); end
   def self.rgba2(id, pos)
-    new("\e[39;2;#{rand 100 .. 200};#{rand 100 .. 200};#{rand 100 .. 200}m" +
-        "#{(?A..?Z).sample}#{(?a..?z).sample}\e[0m", id, pos)
+    new("\e[38;2;#{rand 155 .. 255};#{rand 155 .. 255};#{rand 155 .. 255}m" +
+        "\e[48;2;#{rand 0..100};#{rand 0..100};#{rand 0..100}m" +
+        "#{(?A..?Z).to_a.sample}#{(?a..?z).to_a.sample}\e[0m", id, pos)
   end
 end
 
@@ -59,9 +60,9 @@ class Layout
   # is reserved to extract crates, the rest of the inner area is usable.
   def capacity; area - places.map{depth _1}.max - 1; end
 
-  def render_empty
-    r = @flow_map.map{|row| row.chars.map{|cell| cell == "#" ? "##" : ".."}.join}
-    exits.each{|ri, ci| r[ri][ci * 2, 2] = "[]"}
+  def render_cells
+    r = @flow_map.map{|row| row.chars.map{|cell| cell == "#" ? "\e[47m  \e[0m" : ".."}}
+    exits.each{|ri, ci| r[ri][ci] = "\e[41m  \e[0m"}
     r
   end
 
@@ -187,14 +188,16 @@ class Model
     crates.each {@crates[_1.id] = _1}
   end
 
+  attr_reader :layout, :crates
+
   def render
-    r = @layout.render_empty
+    r = @layout.render_cells
     @crates.each_value do |crate|
       ri, ci = crate.pos
       next if ri.nil?
-      r[ri][ci * 2, 2] = crate.ascii
+      r[ri][ci] = crate.ascii
     end
-    r
+    r.map(&:join).join "\n"
   end
 end
 
@@ -207,13 +210,20 @@ w, h = case ARGV.length
          exit
        end
 
-puts Model.new(case ARGV[0]
-     when "horizontal" then Layout.regular_3 w, h, :horizontal
-     when "vertical" then Layout.regular_3 w, h, :vertical
-     when "regular" then Layout.regular_3 w, h, :auto
-     when "pruskal" then Layout.pruskal w, h
-     when "prim" then Layout.prim w, h
-     else 
-       puts "first argument should be horizontal, vertical, regular, prim or pruskal"
-       exit
-     end).render
+model = Model.new(case ARGV[0]
+                  when "horizontal" then Layout.regular_3 w, h, :horizontal
+                  when "vertical" then Layout.regular_3 w, h, :vertical
+                  when "regular" then Layout.regular_3 w, h, :auto
+                  when "pruskal" then Layout.pruskal w, h
+                  when "prim" then Layout.prim w, h
+                  else 
+                    puts "first argument should be horizontal, vertical, regular, prim or pruskal"
+                    exit
+                  end)
+space = model.layout.places
+model.layout.capacity.times do |id|
+  pos = space.sample
+  space.delete pos
+  model.crates[id] = p Crate.rgba2 id, pos
+end
+puts model.render
