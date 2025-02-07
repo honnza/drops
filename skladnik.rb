@@ -103,7 +103,7 @@ class Layout
       uncap_vt = (w / 3) * (h - 3) + w - (w % 3 == 0 ? 0 : 1)
 
       if orientation == :horizontal || orientation != :vertical && uncap_hz <= uncap_vt
-        lane_at = h % 3 == 1 ? 1 : 2
+        lane_at = h % 3 == 2 ? 2 : 1
         mid_at = w / 2
         Layout.new((0 ... h).map do |ri|
           (0 ... w).map do |ci|
@@ -118,7 +118,7 @@ class Layout
           end.join
         end)
       else
-        lane_at = w % 3 == 1 ? 1 : 2
+        lane_at = w % 3 == 2 ? 2 : 1
         mid_at = h / 2
         Layout.new((0 ... h).map do |ri|
           (0 ... w).map do |ci|
@@ -220,10 +220,7 @@ model = Model.new(case ARGV[0]
                     puts "first argument should be horizontal, vertical, regular, prim or pruskal"
                     exit
                   end)
-space = model.layout.places
-model.layout.capacity.times do |id|
-  pos = space.sample
-  space.delete pos
-  model.crates[id] = p Crate.rgba2 id, pos
+model.layout.leaves.each.with_index do |pos, id|
+  model.crates[id] = Crate.rgba2 id, pos
 end
 puts model.render
