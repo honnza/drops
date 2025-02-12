@@ -40,9 +40,9 @@ class Layout
   def exits; p = places; p.map{prev _1}.uniq - p; end
 
   # calculates the places a crate needs to pass through to exit the warehouse.
-  # Includes the exit wall but excludes the place the current spot.
+  # Includes both the exit wall and the place the current spot.
   def path(pt)
-    r = []
+    r = [pt]
     loop do
       pt = prev pt
       return r if pt.nil?
@@ -50,7 +50,7 @@ class Layout
     end
   end
 
-  # calculates the distance of a crate spot from a warehouse exit. Depth of 0 is the exit itself.
+  # calculates the distance of a crate spot from a warehouse exit. Depth of 1 is the exit itself.
   def depth(pt); path(pt).length; end
 
   # calculates the amount of space within the warehouse,
@@ -190,6 +190,20 @@ class Model
 
   attr_reader :layout, :crates
 
+
+  # lists the places not occupied by a crate
+  def free_places; @layout.places - crates.values.map{_1.pos}; end
+
+  # chooses an empty space: the closest leaf if one is available, or the furthest non-leaf otherwise
+  def suggest_place
+    leaves = @layout.leaves - crates.values.map{_1.pos}
+    if leaves.empty?
+      free_places.max_by{@layout.depth(_1)}
+    else
+      leaves.min_by{@layout.depth(_1)}
+    end
+  end
+
   def render
     r = @layout.render_cells
     @crates.each_value do |crate|
@@ -220,7 +234,15 @@ model = Model.new(case ARGV[0]
                     puts "first argument should be horizontal, vertical, regular, prim or pruskal"
                     exit
                   end)
-model.layout.leaves.each.with_index do |pos, id|
+
+at_exit {puts "\e[?25h"}
+puts "\e[?25l"
+IO.console.clear_screen
+
+model.layout.capacity.times do |id|
+  pos = model.suggest_place
   model.crates[id] = Crate.rgba2 id, pos
+  IO.console.cursor = [0, 0]
+  puts model.render
+  sleep 0.05
 end
-puts model.render
