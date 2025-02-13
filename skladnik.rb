@@ -81,6 +81,24 @@ class Layout
     end
   end
 
+  # modifies a layout such that a crate's path doesn't touch itself orthogonally
+  def chordless
+    flow_map = @flow_map
+    places.each do |pos|
+      ri, ci = pos
+      rj, cj = path(pos).reverse_each.find do |rj, cj|
+        (ri - rj).abs + (ci - cj).abs == 1
+      end
+      flow_map[ri][ci] = case [rj, cj]
+                         when [ri - 1, ci] then ?^
+                         when [ri, ci + 1] then ?>
+                         when [ri + 1, ci] then ?v
+                         when [ri, ci - 1] then ?<
+                         end
+    end
+    Layout.new flow_map
+  end
+
   class << self
     # creates a rectangular warehouse with empty lines every third line,
     # and one perpendicular line connecting them to the exit. Width and height include the border.
@@ -277,17 +295,25 @@ w, h = case ARGV.length
          exit
        end
 
-model = Model.new(case ARGV[0]
-                  when "horizontal" then Layout.regular_3 w, h, :horizontal
-                  when "vertical" then Layout.regular_3 w, h, :vertical
-                  when "regular" then Layout.regular_3 w, h, :auto
-                  when "pruskal" then Layout.pruskal w, h
-                  when "prim" then Layout.prim w, h
-                  when "dbt" then Layout.dbt w, h
-                  else 
-                    puts "first argument should be horizontal, vertical, regular, dbt, prim or pruskal"
-                    exit
-                  end)
+unless ARGV[0] =~ /^(chordless-)?(horizontal|vertical|regular|pruskal|prim|dbt)/
+  puts "first argument should be horizontal, vertical, regular, dbt, prim, pruskal or chordless- plus one of the preceding"
+end
+
+layout = case ARGV[0].split("-").last
+         when "horizontal" then Layout.regular_3 w, h, :horizontal
+         when "vertical" then Layout.regular_3 w, h, :vertical
+         when "regular" then Layout.regular_3 w, h, :auto
+         when "pruskal" then Layout.pruskal w, h
+         when "prim" then Layout.prim w, h
+         when "dbt" then Layout.dbt w, h
+           exit
+         end
+
+ARGV[0].split("-")[0 .. -1].reverse_each do |_lad|
+  layout = layout.chordless
+end
+
+model = Model.new layout
 
 begin
   puts "\e[?25l"
