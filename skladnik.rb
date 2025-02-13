@@ -1,8 +1,8 @@
 require "io/console"
 
 Crate = Struct.new :ascii, :id, :pos do
-  def self.alpha2(id, pos); new((?A..?Z).sample + (?a..?z).sample, id, pos = nil); end
-  def self.rgba2(id, pos)
+  def self.alpha2(id, pos = nil); new((?A..?Z).sample + (?a..?z).sample, id, pos); end
+  def self.rgba2(id, pos = nil)
     new("\e[38;2;#{rand 155 .. 255};#{rand 155 .. 255};#{rand 155 .. 255}m" +
         "\e[48;2;#{rand 0..100};#{rand 0..100};#{rand 0..100}m" +
         "#{(?A..?Z).to_a.sample}#{(?a..?z).to_a.sample}\e[0m", id, pos)
@@ -178,6 +178,27 @@ class Layout
       end
       Layout.new flow_map
     end
+
+    # diagonal binary tree, rooted at the top left corner of the warehouse
+    def dbt(w, h)
+      Layout.new((0 ... h).map do |ri|
+        (0 ... w).map do |ci|
+          case
+          when ri == 0 || ri == h - 1 || ci == 0 || ci == w - 1 then ?#
+          when ri == 1 then ?<
+          when ci == 1 then ?^
+          else
+            rix = ri - 1
+            cix = ci - 1
+            while rix % 2 == 0 && cix % 2 == 0
+              rix /= 2
+              cix /= 2
+            end
+            rix % 2 == 0 ? ?< : ?^
+          end
+        end.join
+      end)
+    end
   end
 end
 
@@ -185,10 +206,12 @@ class Model
   def initialize(layout, crates = [])
     @layout = layout
     @crates = {}
+    @worker_pos = nil
     crates.each {@crates[_1.id] = _1}
   end
 
   attr_reader :layout, :crates
+  attr_accessor :worker_pos
 
 
   # lists the places not occupied by a crate
@@ -211,7 +234,37 @@ class Model
       next if ri.nil?
       r[ri][ci] = crate.ascii
     end
+    ri, ci = @worker_pos
+    r[ri][ci] = "👷"
     r.map(&:join).join "\n"
+  end
+
+  def render_frame; IO.console.cursor = [0, 0]; puts render; sleep 0.03; end
+
+  # moves a crate along the specified path, with the worker following after it
+  def animate_insert(crate, path)
+    path.each_cons(2) do |p1, p2|
+      @worker_pos = p1
+      crate.pos = p2
+      render_frame
+    end
+  end
+
+  # moves the worker along the specified path
+  def animate_worker(path)
+    path.each do |pt|
+      @worker_pos = pt
+      render_frame
+    end
+  end
+
+  # moves a crate along the specified path, with the worker leading before it
+  def animate_extract(crate, path)
+    path.each_cons(2) do |p1, p2|
+      crate.pos = p1
+      @worker_pos = p2
+      render_frame
+    end
   end
 end
 
@@ -230,19 +283,28 @@ model = Model.new(case ARGV[0]
                   when "regular" then Layout.regular_3 w, h, :auto
                   when "pruskal" then Layout.pruskal w, h
                   when "prim" then Layout.prim w, h
+                  when "dbt" then Layout.dbt w, h
                   else 
-                    puts "first argument should be horizontal, vertical, regular, prim or pruskal"
+                    puts "first argument should be horizontal, vertical, regular, dbt, prim or pruskal"
                     exit
                   end)
 
-at_exit {puts "\e[?25h"}
-puts "\e[?25l"
-IO.console.clear_screen
+begin
+  puts "\e[?25l"
+  IO.console.clear_screen
 
-model.layout.capacity.times do |id|
-  pos = model.suggest_place
-  model.crates[id] = Crate.rgba2 id, pos
-  IO.console.cursor = [0, 0]
-  puts model.render
-  sleep 0.05
+  puts model.layout.as_maze
+  STDIN.gets
+
+  model.layout.capacity.times do |id|
+    pos = model.suggest_place
+    crate = Crate.rgba2 id
+    model.crates[id] = crate
+    path = model.layout.path pos
+    model.animate_insert crate, path.reverse
+    model.animate_worker path[1..]
+  end
+ensure
+  puts "\e[?25h"
+  IO.console.clear_screen
 end
