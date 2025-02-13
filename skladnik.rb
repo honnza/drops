@@ -58,7 +58,7 @@ class Layout
   def area; places.count; end
   # calculates how many crates can be stored within the warehouse. The longest path to a crate
   # is reserved to extract crates, the rest of the inner area is usable.
-  def capacity; area - places.map{depth _1}.max - 1; end
+  def capacity; area - places.map{depth _1}.max + 2; end
 
   def render_cells
     r = @flow_map.map{|row| row.chars.map{|cell| cell == "#" ? "\e[47m  \e[0m" : ".."}}
@@ -235,7 +235,7 @@ class Model
       r[ri][ci] = crate.ascii
     end
     ri, ci = @worker_pos
-    r[ri][ci] = "👷"
+    r[ri][ci] = "👷" unless ri.nil?
     r.map(&:join).join "\n"
   end
 
@@ -301,8 +301,13 @@ begin
     crate = Crate.rgba2 id
     model.crates[id] = crate
     path = model.layout.path pos
-    model.animate_insert crate, path.reverse
-    model.animate_worker path[1..]
+    model.animate_insert crate, [nil, nil] + path.reverse
+    model.animate_worker path[2..]
+  end
+  model.crates.values.reverse_each do |crate|
+    path = model.layout.path crate.pos
+    model.animate_worker path[2..].reverse
+    model.animate_extract crate, path + [nil, nil]
   end
 ensure
   puts "\e[?25h"
