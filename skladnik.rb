@@ -195,7 +195,7 @@ class Layout
     end
 
     # expands a tree of paths randomly to fill the inner area without regards
-    # for the resulting capacity
+    # for the resulting capacity, using a single value generated for each edge
     def pruskal(w, h)
       flow_map = [?# * w, *(h - 2).times.map{?# + ?. * (w - 2) + ?#}, ?# * w]
       open_set = [[
@@ -212,6 +212,33 @@ class Layout
         open_set << [rand, ri, ci + 1, ?<] if flow_map[ri][ci + 1] == ?.
         open_set << [rand, ri + 1, ci, ?^] if flow_map[ri + 1][ci] == ?.
         open_set << [rand, ri, ci - 1, ?>] if flow_map[ri][ci - 1] == ?.
+      end
+      Layout.new flow_map
+    end
+
+    # expands a tree of paths randomly to fill the inner area without regards
+    # for the resulting capacity, using a single value generated for each node
+    def nuskal(w, h)
+      flow_map = [?# * w, *(h - 2).times.map{?# + ?. * (w - 2) + ?#}, ?# * w]
+      rng = Hash.new{|h, k| h[k] = rand}
+      open_set = [[
+        *[*(1 .. w - 2)].map{[0, 1, _1, ?^]},
+        *[*(1 .. w - 2)].map{[0, h - 2, _1, ?v]},
+        *[*(1 .. h - 2)].map{[0, _1, 1, ?<]},
+        *[*(1 .. h - 2)].map{[0, _1, w - 2, ?>]}
+      ].sample]
+      until open_set.empty?
+        _, ri, ci, dir = open_set.min
+        flow_map[ri][ci] = dir
+        open_set.reject!{|_, rj, cj, _| ri == rj && ci == cj}
+        [
+          [ri - 1, ci, ?v],
+          [ri, ci + 1, ?<],
+          [ri + 1, ci, ?^],
+          [ri, ci - 1, ?>]
+        ].each do |rj, cj, djr|
+          open_set << [[rng[[ri, ci]], rng[[rj, cj]]].sort, rj, cj, djr] if flow_map[rj][cj] == ?.
+        end
       end
       Layout.new flow_map
     end
@@ -312,20 +339,21 @@ w, h = case ARGV.length
          exit
        end
 
-unless ARGV[0] =~ /^(chordless-)?(horizontal|vertical|regular|pruskal|prim|dbt)/
-  puts "first argument should be horizontal, vertical, regular, dbt, prim, pruskal or chordless- plus one of the preceding"
+unless ARGV[0] =~ /^(chordless-)?(horizontal|vertical|regular|pruskal|nuskal|prim|dbt)/
+  puts "first argument should be horizontal, vertical, regular, dbt, prim, pruskal, nuskal or chordless- plus one of the preceding"
 end
 
-layout = case ARGV[0].split("-").last
+layout = case $2
          when "horizontal" then Layout.regular_3 w, h, :horizontal
          when "vertical" then Layout.regular_3 w, h, :vertical
          when "regular" then Layout.regular_3 w, h, :auto
          when "pruskal" then Layout.pruskal w, h
+         when "nuskal" then Layout.nuskal w, h
          when "prim" then Layout.prim w, h
          when "dbt" then Layout.dbt w, h
          end
 
-ARGV[0].split("-")[0 .. -1].reverse_each do |_lad|
+$1.split("-").reverse_each do |_lad|
   layout = layout.chordless
 end
 
