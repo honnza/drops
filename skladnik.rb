@@ -7,6 +7,11 @@ Crate = Struct.new :ascii, :id, :pos do
         "\e[48;2;#{rand 0..100};#{rand 0..100};#{rand 0..100}m" +
         "#{(?A..?Z).to_a.sample}#{(?a..?z).to_a.sample}\e[0m", id, pos)
   end
+  def self.rgbcjk(id, pos = nil)
+    new("\e[38;2;#{rand 155 .. 255};#{rand 155 .. 255};#{rand 155 .. 255}m" +
+        "\e[48;2;#{rand 0..100};#{rand 0..100};#{rand 0..100}m" +
+        "#{rand(0x4e00 .. 0x9fff).chr(Encoding::UTF_8)}\e[0m", id, pos)
+  end
 end
 
 class Layout
@@ -52,6 +57,20 @@ class Layout
 
   # calculates the distance of a crate spot from a warehouse exit. Depth of 1 is the exit itself.
   def depth(pt); path(pt).length; end
+
+  # calculates how many crate exit paths pass through this location
+  def subtree_size(pt);
+    unless @subtree_size_cache
+      @subtree_size_cache = {}
+      places.each do |place|
+        path(place).each do |pos|
+          @subtree_size_cache[pos] ||= 0
+          @subtree_size_cache[pos] += 1
+        end
+      end
+    end
+    @subtree_size_cache[pt]
+  end
 
   # calculates the amount of space within the warehouse,
   # including space reserved to extract crates through.
@@ -235,13 +254,11 @@ class Model
   # lists the places not occupied by a crate
   def free_places; @layout.places - crates.values.map{_1.pos}; end
 
-  # chooses an empty space: the closest leaf if one is available, or the furthest non-leaf otherwise
+  # suggests an empty place. Places that block fewest other places are preferred,
+  # then the closest one.
   def suggest_place
-    leaves = @layout.leaves - crates.values.map{_1.pos}
-    if leaves.empty?
-      free_places.max_by{@layout.depth(_1)}
-    else
-      leaves.min_by{@layout.depth(_1)}
+    (@layout.places - @crates.values.map(&:pos)).min_by do |pos|
+      [@layout.subtree_size(pos), @layout.depth(pos)]
     end
   end
 
@@ -306,7 +323,6 @@ layout = case ARGV[0].split("-").last
          when "pruskal" then Layout.pruskal w, h
          when "prim" then Layout.prim w, h
          when "dbt" then Layout.dbt w, h
-           exit
          end
 
 ARGV[0].split("-")[0 .. -1].reverse_each do |_lad|
@@ -324,18 +340,12 @@ begin
 
   model.layout.capacity.times do |id|
     pos = model.suggest_place
-    crate = Crate.rgba2 id
+    crate = Crate.rgbcjk id
     model.crates[id] = crate
     path = model.layout.path pos
     model.animate_insert crate, [nil, nil] + path.reverse
     model.animate_worker path[2..]
   end
-  model.crates.values.reverse_each do |crate|
-    path = model.layout.path crate.pos
-    model.animate_worker path[2..].reverse
-    model.animate_extract crate, path + [nil, nil]
-  end
 ensure
   puts "\e[?25h"
-  IO.console.clear_screen
 end
