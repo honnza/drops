@@ -102,10 +102,9 @@ class Layout
 
   # modifies a layout such that a crate's path doesn't touch itself orthogonally
   def chordless
-    flow_map = @flow_map
-    places.each do |pos|
-      ri, ci = pos
-      rj, cj = path(pos).reverse_each.find do |rj, cj|
+    flow_map = @flow_map.map(&:dup)
+    places.each do |ri, ci|
+      rj, cj = path([ri, ci]).reverse_each.find do |rj, cj|
         (ri - rj).abs + (ci - cj).abs == 1
       end
       flow_map[ri][ci] = case [rj, cj]
@@ -116,6 +115,27 @@ class Layout
                          end
     end
     Layout.new flow_map
+  end
+
+  # modifies a layout such that a crate always exits towards the neighbor
+  # through which most other crates already pass. Implies chordless
+  def tight
+    flow_map = @flow_map.map(&:dup)
+    places.each do |ri, ci|
+      if depth([ri, ci]) > 2
+        flow_map[ri][ci] = [
+          [subtree_size([ri - 1, ci]), rand, ?^],
+          [subtree_size([ri, ci + 1]), rand, ?>],
+          [subtree_size([ri + 1, ci]), rand, ?v],
+          [subtree_size([ri, ci - 1]), rand, ?<],
+        ].reject{_1.first.nil?}.max.last
+      end
+    end
+    return self if flow_map == @flow_map
+    IO.console.cursor = [0, 0]
+    puts Layout.new(flow_map).as_maze
+    sleep 0.1
+    Layout.new(flow_map).tight
   end
 
   class << self
@@ -339,30 +359,35 @@ w, h = case ARGV.length
          exit
        end
 
-unless ARGV[0] =~ /^(chordless-)?(horizontal|vertical|regular|pruskal|nuskal|prim|dbt)/
+unless ARGV[0] =~ /^(chordless-|tight-)?(horizontal|vertical|regular|pruskal|nuskal|prim|dbt)/
   puts "first argument should be horizontal, vertical, regular, dbt, prim, pruskal, nuskal or chordless- plus one of the preceding"
+  exit
 end
-
-layout = case $2
-         when "horizontal" then Layout.regular_3 w, h, :horizontal
-         when "vertical" then Layout.regular_3 w, h, :vertical
-         when "regular" then Layout.regular_3 w, h, :auto
-         when "pruskal" then Layout.pruskal w, h
-         when "nuskal" then Layout.nuskal w, h
-         when "prim" then Layout.prim w, h
-         when "dbt" then Layout.dbt w, h
-         end
-
-$1.split("-").reverse_each do |_lad|
-  layout = layout.chordless
-end
-
-model = Model.new layout
 
 begin
   puts "\e[?25l"
   IO.console.clear_screen
 
+  layout = case $2
+           when "horizontal" then Layout.regular_3 w, h, :horizontal
+           when "vertical" then Layout.regular_3 w, h, :vertical
+           when "regular" then Layout.regular_3 w, h, :auto
+           when "pruskal" then Layout.pruskal w, h
+           when "nuskal" then Layout.nuskal w, h
+           when "prim" then Layout.prim w, h
+           when "dbt" then Layout.dbt w, h
+           end
+
+  $1.split("-").reverse_each do |lad|
+    layout = case lad
+             when "chordless" then layout.chordless
+             when "tight" then layout.tight
+             end
+  end
+
+  model = Model.new layout
+
+  IO.console.cursor = [0, 0]
   puts model.layout.as_maze
   STDIN.gets
 
