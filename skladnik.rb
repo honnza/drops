@@ -10,7 +10,7 @@ Crate = Struct.new :ascii, :id, :pos do
   def self.rgbcjk(id, pos = nil)
     new("\e[38;2;#{rand 155 .. 255};#{rand 155 .. 255};#{rand 155 .. 255}m" +
         "\e[48;2;#{rand 0..100};#{rand 0..100};#{rand 0..100}m" +
-        "#{rand(0x4e00 .. 0x9fff).chr(Encoding::UTF_8)}\e[0m", id, pos)
+        "#{rand(0x4e00 .. 0x9fef).chr(Encoding::UTF_8)}\e[0m", id, pos)
   end
 end
 
@@ -120,22 +120,57 @@ class Layout
   # modifies a layout such that a crate always exits towards the neighbor
   # through which most other crates already pass. Implies chordless
   def tight
-    flow_map = @flow_map.map(&:dup)
-    places.each do |ri, ci|
-      if depth([ri, ci]) > 2
-        flow_map[ri][ci] = [
-          [subtree_size([ri - 1, ci]), rand, ?^],
-          [subtree_size([ri, ci + 1]), rand, ?>],
-          [subtree_size([ri + 1, ci]), rand, ?v],
-          [subtree_size([ri, ci - 1]), rand, ?<],
-        ].reject{_1.first.nil?}.max.last
+    flow_map = @flow_map
+    loop do
+      # In the first phase, we reconnect smaller subtrees to larger subtrees. This cannot form
+      # loops, because a node's subtree cannot be bigger than the subtree that node is in.
+      layout = Layout.new(flow_map.map(&:dup))
+      places.each do |ri, ci|
+        if depth([ri, ci]) > 2
+          flow_map[ri][ci] = [
+            [layout.subtree_size([ri - 1, ci]), rand, ?^],
+            [layout.subtree_size([ri, ci + 1]), rand, ?>],
+            [layout.subtree_size([ri + 1, ci]), rand, ?v],
+            [layout.subtree_size([ri, ci - 1]), rand, ?<],
+          ].reject{_1.first.nil?}.max.last
+        end
       end
+      if flow_map != layout.flow_map
+        IO.console.cursor = [0, 0]
+        puts layout.as_maze
+        sleep 0.1
+        next
+      end
+
+      # In the second phase, we allow reconnecting subtrees to smaller subtrees if they become
+      # bigger than the current predecessor after reconnection, but only if the new path isn't
+      # longer than the current one.
+      places.each do |ri, ci|
+        dir = flow_map[ri][ci]
+        if depth([ri, ci]) > 2
+          candidates = []
+          [
+            [ri - 1, ci, ?^], [ri, ci + 1, ?>], [ri + 1, ci, ?v], [ri, ci - 1, ?<]
+          ].each do |rj, cj, djr|
+            score = layout.subtree_size([rj, cj])
+            next if score.nil?
+            score -= layout.subtree_size([ri, ci]) - 0.5 if dir == djr # bias toward staying
+            candidates << [score, rand, djr] if layout.depth([rj, cj]) < layout.depth([ri, ci])
+          end
+          flow_map[ri][ci] = candidates.max.last
+        end
+      end
+
+      if flow_map != layout.flow_map
+        IO.console.cursor = [0, 0]
+        puts layout.as_maze
+        sleep 0.1
+        next
+      end
+
+      break
     end
-    return self if flow_map == @flow_map
-    IO.console.cursor = [0, 0]
-    puts Layout.new(flow_map).as_maze
-    sleep 0.1
-    Layout.new(flow_map).tight
+    Layout.new(flow_map)
   end
 
   class << self
