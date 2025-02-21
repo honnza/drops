@@ -12,6 +12,14 @@ Crate = Struct.new :ascii, :id, :pos do
         "\e[48;2;#{rand 0..100};#{rand 0..100};#{rand 0..100}m" +
         "#{rand(0x4e00 .. 0x9fef).chr(Encoding::UTF_8)}\e[0m", id, pos)
   end
+  def self.gradient_alpha2(id, gradient, pos = nil)
+    r, g, b = [0, 2/3r, 4/3r]
+      .map{Math.cos(-_1 * Math::PI + 2 * gradient)}
+      .map{((1 + _1) / 2 ** 0.5 * 256).floor.clamp(0..255)}
+
+    new("\e[30;48;2;#{r};#{g};#{rand 0..255}m" +
+        "#{(?A..?Z).to_a.sample}#{(?a..?z).to_a.sample}\e[0m", id, pos)
+  end
 end
 
 class Layout
@@ -426,9 +434,10 @@ begin
   puts model.layout.as_maze
   STDIN.gets
 
-  model.layout.capacity.times do |id|
+  cap = model.layout.capacity
+  cap.times do |id|
     pos = model.suggest_place
-    crate = Crate.rgbcjk id
+    crate = Crate.gradient_alpha2 id, Math.log(layout.subtree_size(pos)) / Math.log(cap)
     model.crates[id] = crate
     path = model.layout.path pos
     model.animate_insert crate, [nil, nil] + path.reverse
