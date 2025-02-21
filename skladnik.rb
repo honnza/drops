@@ -376,7 +376,15 @@ class Model
     r.map(&:join).join "\n"
   end
 
-  def render_frame; IO.console.cursor = [0, 0]; puts render; sleep 0.03; end
+  def render_frame
+    if IO.console.winsize != @winsize
+      @winsize = IO.console.winsize
+      IO.console.clear_screen
+    end
+    IO.console.cursor = [0, 0]
+    puts render
+    sleep 0.03
+  end
 
   # moves a crate along the specified path, with the worker following after it
   def animate_insert(crate, path)
