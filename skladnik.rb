@@ -129,6 +129,7 @@ class Layout
   # through which most other crates already pass. Implies chordless
   def tight
     flow_map = @flow_map
+    text_line = ""
     loop do
       # In the first phase, we reconnect smaller subtrees to larger subtrees. This cannot form
       # loops, because a node's subtree cannot be bigger than the subtree that node is in.
@@ -143,9 +144,15 @@ class Layout
           ].reject{_1.first.nil?}.max.last
         end
       end
-      if flow_map != layout.flow_map
+
+      diff = flow_map.zip(layout.flow_map).flat_map do |ri, rj|
+        ri.chars.zip(rj.chars).map{|ci, cj| ci == cj ? 0 : 1}
+      end.sum
+      if diff > 0
+        text_line << "A#{diff} "
         IO.console.cursor = [0, 0]
         puts layout.as_maze
+        puts text_line
         sleep 0.1
         next
       end
@@ -169,16 +176,21 @@ class Layout
         end
       end
 
-      if flow_map != layout.flow_map
+      diff = flow_map.zip(layout.flow_map).flat_map do |ri, rj|
+        ri.chars.zip(rj.chars).map{|ci, cj| ci == cj ? 0 : 1}
+      end.sum
+      if diff > 0
+        text_line << "B#{diff} "
         IO.console.cursor = [0, 0]
         puts layout.as_maze
+        puts text_line
         sleep 0.1
         next
       end
 
       break
     end
-    Layout.new(flow_map)
+    layout = Layout.new(flow_map)
   end
 
   class << self
