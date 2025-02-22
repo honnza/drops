@@ -137,10 +137,10 @@ class Layout
       places.each do |ri, ci|
         if depth([ri, ci]) > 2
           flow_map[ri][ci] = [
-            [layout.subtree_size([ri - 1, ci]), rand, ?^],
-            [layout.subtree_size([ri, ci + 1]), rand, ?>],
-            [layout.subtree_size([ri + 1, ci]), rand, ?v],
-            [layout.subtree_size([ri, ci - 1]), rand, ?<],
+            [layout.subtree_size([ri - 1, ci]), layout.depth([ri - 1, ci]), rand, ?^],
+            [layout.subtree_size([ri, ci + 1]), layout.depth([ri, ci + 1]), rand, ?>],
+            [layout.subtree_size([ri + 1, ci]), layout.depth([ri + 1, ci]), rand, ?v],
+            [layout.subtree_size([ri, ci - 1]), layout.depth([ri, ci - 1]), rand, ?<],
           ].reject{_1.first.nil?}.max.last
         end
       end
