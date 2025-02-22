@@ -338,6 +338,21 @@ class Layout
         end.join
       end)
     end
+
+    # randomized diagonal binary tree, rooted at the top left corner of the warehouse
+    def rdbt(w, h)
+      rng = (2 ... w - 1).map{[:c, _1]} + (2 ... h - 1).map{[:r, _1]}
+      rng = [[:r, 1], [:c, 1]] + rng.shuffle
+      Layout.new((0 ... h).map do |ri|
+        (0 ... w).map do |ci|
+          if ri == 0 || ri == h - 1 || ci == 0 || ci == w - 1
+            ?#
+          else
+            rng.find{_1 == [:r, ri] || _1 == [:c, ci]} == [:r, ri] ? ?< : ?^
+          end
+        end.join
+      end)
+    end
   end
 end
 
@@ -422,8 +437,8 @@ w, h = case ARGV.length
          exit
        end
 
-unless ARGV[0] =~ /^(chordless-|tight-)?(horizontal|vertical|regular|pruskal|nuskal|prim|dbt)/
-  puts "first argument should be horizontal, vertical, regular, dbt, prim, pruskal, nuskal or chordless- plus one of the preceding"
+unless ARGV[0] =~ /^(chordless-|tight-)?(horizontal|vertical|regular|pruskal|nuskal|prim|dbt|rdbt)/
+  puts "first argument should be horizontal, vertical, regular, dbt, rdbt, prim, pruskal, nuskal or chordless- plus one of the preceding"
   exit
 end
 
@@ -438,10 +453,11 @@ begin
            when "pruskal" then Layout.pruskal w, h
            when "nuskal" then Layout.nuskal w, h
            when "prim" then Layout.prim w, h
+           when "rdbt" then Layout.rdbt w, h
            when "dbt" then Layout.dbt w, h
            end
 
-  $1.split("-").reverse_each do |lad|
+  $1&.split("-")&.reverse_each do |lad|
     layout = case lad
              when "chordless" then layout.chordless
              when "tight" then layout.tight
