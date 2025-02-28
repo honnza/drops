@@ -341,17 +341,52 @@ class Layout
 
     # randomized diagonal binary tree, rooted at the top left corner of the warehouse
     def rdbt(w, h)
-      rng = (2 ... w - 1).map{[:c, _1]} + (2 ... h - 1).map{[:r, _1]}
-      rng = [[:r, 1], [:c, 1]] + rng.shuffle
+      rng = (2 ... w - 1).map{[:c, _1, %w{^ <}.sample]} +
+            (2 ... h - 1).map{[:r, _1, %w{^ <}.sample]}
+      rng = [[:r, 1, ?<], [:c, 1, ?^]] + rng.shuffle
       Layout.new((0 ... h).map do |ri|
         (0 ... w).map do |ci|
           if ri == 0 || ri == h - 1 || ci == 0 || ci == w - 1
             ?#
           else
-            rng.find{_1 == [:r, ri] || _1 == [:c, ci]} == [:r, ri] ? ?< : ?^
+            rng.find{|rc, i, _| rc == :r && i == ri || rc == :c && i == ci}.last
           end
         end.join
       end)
+    end
+
+    # short for leaf rain - randomly marks places as leaf places such that every place is connected
+    # to the exit.through non-leaf places.
+    def frain(w, h)
+      real_flow_map = nil
+      leaf_map = h.times.map{[false] * w}
+      root = [
+        *[*(1 .. w - 2)].map{[1, _1, ?^]},
+        *[*(1 .. w - 2)].map{[h - 2, _1, ?v]},
+        *[*(1 .. h - 2)].map{[_1, 1, ?<]},
+        *[*(1 .. h - 2)].map{[_1, w - 2, ?>]}
+      ].sample
+      [*1...h-1].product([*1...w-1]).shuffle.each do |ri, ci|
+        leaf_map[ri][ci] = true
+        flow_map = [?# * w, *(h - 2).times.map{?# + ?. * (w - 2) + ?#}, ?# * w]
+        bfs = [root]
+        bfs.each do |rj, cj, djr|
+          next if flow_map[rj][cj] != ?.
+          flow_map[rj][cj] = djr
+          next if leaf_map[rj][cj]
+          bfs << [rj - 1, cj, ?v]
+          bfs << [rj, cj + 1, ?<]
+          bfs << [rj + 1, cj, ?^]
+          bfs << [rj, cj - 1, ?>]
+        end
+
+        if flow_map.any?{_1[?.]}
+          leaf_map[ri][ci] = false
+        else
+          real_flow_map = flow_map
+        end
+      end
+      Layout.new real_flow_map
     end
   end
 end
@@ -437,8 +472,8 @@ w, h = case ARGV.length
          exit
        end
 
-unless ARGV[0] =~ /^(chordless-|tight-)?(horizontal|vertical|regular|pruskal|nuskal|prim|dbt|rdbt)/
-  puts "first argument should be horizontal, vertical, regular, dbt, rdbt, prim, pruskal, nuskal or chordless- plus one of the preceding"
+unless ARGV[0] =~ /^(chordless-|tight-)?(horizontal|vertical|regular|pruskal|nuskal|frain|prim|dbt|rdbt)/
+  puts "first argument should be horizontal, vertical, regular, dbt, rdbt, prim, pruskal, nuskal, frain, or tight- or chordless- plus one of the preceding"
   exit
 end
 
@@ -450,11 +485,7 @@ begin
            when "horizontal" then Layout.regular_3 w, h, :horizontal
            when "vertical" then Layout.regular_3 w, h, :vertical
            when "regular" then Layout.regular_3 w, h, :auto
-           when "pruskal" then Layout.pruskal w, h
-           when "nuskal" then Layout.nuskal w, h
-           when "prim" then Layout.prim w, h
-           when "rdbt" then Layout.rdbt w, h
-           when "dbt" then Layout.dbt w, h
+           else Layout.send $2, w, h
            end
 
   $1&.split("-")&.reverse_each do |lad|
