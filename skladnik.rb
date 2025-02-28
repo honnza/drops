@@ -427,13 +427,16 @@ class Model
   end
 
   def render_frame
+    sleep_time = 0.03 - (Time.now - @t_prev_frame) if @t_prev_frame
+    sleep sleep_time if sleep_time &.> 0
+    @t_prev_frame = Time.now
+
     if IO.console.winsize != @winsize
       @winsize = IO.console.winsize
       IO.console.clear_screen
     end
     IO.console.cursor = [0, 0]
     puts render
-    sleep 0.03
   end
 
   # moves a crate along the specified path, with the worker following after it
