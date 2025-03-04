@@ -358,37 +358,55 @@ class Layout
     # short for leaf rain - randomly marks places as leaf places such that every place is connected
     # to the exit.through non-leaf places.
     def frain(w, h)
-      real_flow_map = nil
       leaf_map = h.times.map{[false] * w}
-      root = [
+      [*1...h-1].product([*1...w-1]).shuffle.each do |ri, ci|
+        leaf_map[ri][ci] = true
+        flow_map = [?# * w, *(h - 2).times.map{?# + ?. * (w - 2) + ?#}, ?# * w]
+        bfs = [leaf_map[1][2] ? [2, 1, ?<] : [1, 2, ?^]]
+        bfs.each do |rj, cj, djr|
+          next if flow_map[rj][cj] != ?.
+          flow_map[rj][cj] = djr
+          next if leaf_map[rj][cj]
+          bfs.push *[
+            [rj - 1, cj, ?v],
+            [rj, cj + 1, ?<],
+            [rj + 1, cj, ?^],
+            [rj, cj - 1, ?>]
+          ].shuffle
+        end
+        if flow_map.any?{_1[?.]}
+          leaf_map[ri][ci] = false
+        else
+          IO.console.cursor = [ri, ci * 2]
+          puts "[]"
+        end
+      end
+      
+      IO.console.cursor = [h + 1, 0]
+      [
         *[*(1 .. w - 2)].map{[1, _1, ?^]},
         *[*(1 .. w - 2)].map{[h - 2, _1, ?v]},
         *[*(1 .. h - 2)].map{[_1, 1, ?<]},
         *[*(1 .. h - 2)].map{[_1, w - 2, ?>]}
-      ].sample
-      [*1...h-1].product([*1...w-1]).shuffle.each do |ri, ci|
-        leaf_map[ri][ci] = true
+      ].reject{|ri, ci, _| leaf_map[ri][ci]}.map do |root|
         flow_map = [?# * w, *(h - 2).times.map{?# + ?. * (w - 2) + ?#}, ?# * w]
         bfs = [root]
         bfs.each do |rj, cj, djr|
           next if flow_map[rj][cj] != ?.
           flow_map[rj][cj] = djr
           next if leaf_map[rj][cj]
-          bfs << [rj - 1, cj, ?v]
-          bfs << [rj, cj + 1, ?<]
-          bfs << [rj + 1, cj, ?^]
-          bfs << [rj, cj - 1, ?>]
+          bfs.push *[
+            [rj - 1, cj, ?v],
+            [rj, cj + 1, ?<],
+            [rj + 1, cj, ?^],
+            [rj, cj - 1, ?>]
+          ].shuffle
         end
-
-        if flow_map.any?{_1[?.]}
-          leaf_map[ri][ci] = false
-        else
-          real_flow_map = flow_map
-          IO.console.cursor = [ri, ci * 2]
-          puts "[]"
-        end
-      end
-      Layout.new real_flow_map
+        layout = Layout.new flow_map
+        score = layout.places.map{layout.depth(_1)}.sum
+        print "#{score} "
+        [score, rand, layout]
+      end.min.last
     end
 
     def xyfrain(w, h)
@@ -404,7 +422,7 @@ class Layout
       end
       p root
       [*1...h-1].product([*1...w-1]).sort_by do |ri, ci|
-        [rng.find_index{_1 == [:r, ri]}, rng.find_index{_1 == [:c, ci]}].sort
+        [rng.find_index{_1 == [:r, ri]}, rng.find_index{_1 == [:c, ci]}].sort.reverse
       end.each do |ri, ci|
         leaf_map[ri][ci] = true
         flow_map = [?# * w, *(h - 2).times.map{?# + ?. * (w - 2) + ?#}, ?# * w]
@@ -425,7 +443,6 @@ class Layout
           real_flow_map = flow_map
           IO.console.cursor = [ri, ci * 2]
           puts "[]"
-          sleep 0.03
         end
       end
       Layout.new real_flow_map
