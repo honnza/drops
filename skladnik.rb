@@ -125,6 +125,10 @@ class Layout
     Layout.new flow_map
   end
 
+  def frain
+    Layout.frain(@flow_map[0].length, @flow_map.length){|ri, ci| subtree_size([ri, ci])}
+  end
+
   # modifies a layout such that a crate always exits towards the neighbor
   # through which most other crates already pass. Implies chordless
   def tight
@@ -516,8 +520,8 @@ w, h = case ARGV.length
        end
 
 layouts = %i{horizontal vertical regular prim pruskal nuskal frain xyfrain dbt rdbt}
-unless ARGV[0] =~ /^(chordless-|tight-)?(#{layouts.join ?|})/
-    puts "first argument should be #{layouts.join ", "}, or tight- or chordless- plus one of the preceding"
+unless ARGV[0] =~ /^((?:frain-|chordless-|tight-)*)(#{layouts.join ?|})$/
+    puts "first argument should be #{layouts.join ", "}, or frain-, tight- or chordless- plus one of the preceding"
   exit
 end
 
@@ -533,10 +537,7 @@ begin
            end
 
   $1&.split("-")&.reverse_each do |lad|
-    layout = case lad
-             when "chordless" then layout.chordless
-             when "tight" then layout.tight
-             end
+    layout = layout.send lad
   end
 
   model = Model.new layout
