@@ -357,9 +357,10 @@ class Layout
 
     # short for leaf rain - randomly marks places as leaf places such that every place is connected
     # to the exit.through non-leaf places.
-    def frain(w, h)
+    def frain(w, h, &rng)
+      rng ||= ->_{0}
       leaf_map = h.times.map{[false] * w}
-      [*1...h-1].product([*1...w-1]).shuffle.each do |ri, ci|
+      [*1...h-1].product([*1...w-1]).sort_by{[rng[_1], rand]}.each do |ri, ci|
         leaf_map[ri][ci] = true
         flow_map = [?# * w, *(h - 2).times.map{?# + ?. * (w - 2) + ?#}, ?# * w]
         bfs = [leaf_map[1][2] ? [2, 1, ?<] : [1, 2, ?^]]
@@ -418,42 +419,14 @@ class Layout
     end
 
     def xyfrain(w, h)
-      real_flow_map = nil
-      leaf_map = h.times.map{[false] * w}
-      rng = (1 ... w - 1).map{[:c, _1]} + (1 ... h - 1).map{[:r, _1]}
-      rng.shuffle!
+      r_rng = Hash.new{|h, k| h[k] = rand}
+      c_rng = Hash.new{|h, k| h[k] = rand}
+      df = rand
 
-      root = if rng[0][0] == :r
-        [1, rng.reverse_each.find{_1[0] == :c}[1], ?^]
-      else
-        [rng.reverse_each.find{_1[0] == :r}[1], 1, ?<]
+      frain(w, h) do |ri, ci|
+        min, max = [r_rng[ri], c_rng[ci]].sort
+        min * df + max * (1 - df)
       end
-      p root
-      [*1...h-1].product([*1...w-1]).sort_by do |ri, ci|
-        [rng.find_index{_1 == [:r, ri]}, rng.find_index{_1 == [:c, ci]}].sort.reverse
-      end.each do |ri, ci|
-        leaf_map[ri][ci] = true
-        flow_map = [?# * w, *(h - 2).times.map{?# + ?. * (w - 2) + ?#}, ?# * w]
-        bfs = [root]
-        bfs.each do |rj, cj, djr|
-          next if flow_map[rj][cj] != ?.
-          flow_map[rj][cj] = djr
-          next if leaf_map[rj][cj]
-          bfs << [rj - 1, cj, ?v]
-          bfs << [rj, cj + 1, ?<]
-          bfs << [rj + 1, cj, ?^]
-          bfs << [rj, cj - 1, ?>]
-        end
-
-        if flow_map.any?{_1[?.]}
-          leaf_map[ri][ci] = false
-        else
-          real_flow_map = flow_map
-          IO.console.cursor = [ri, ci * 2]
-          puts "[]"
-        end
-      end
-      Layout.new real_flow_map
     end
   end
 end
