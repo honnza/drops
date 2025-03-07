@@ -416,7 +416,7 @@ class Layout
         IO.console.cursor = [ri, ci * 2]
         score = (score - min).fdiv(max - min)
         r, g = [score, 1 - score].map{(_1 ** 0.5 * 256).floor.clamp(0 .. 255)}
-        print "\e[38;2;#{r};#{g};0m#{dir * 2}\e[0m"
+        print "\e[38;2;#{r};#{score == 0 ? 127 : g};#{score == 0 ? 255 : 0}m#{dir * 2}\e[0m"
       end
       STDIN.gets
       candidates.min.last
@@ -454,7 +454,7 @@ class Model
   # then the closest one.
   def suggest_place
     (@layout.places - @crates.values.map(&:pos)).min_by do |pos|
-      [@layout.subtree_size(pos), @layout.depth(pos)]
+      [@layout.subtree_size(pos), @layout.depth(pos), rand]
     end
   end
 
