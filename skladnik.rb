@@ -28,6 +28,8 @@ class Layout
   #   # are walls. ^>v< denote the path from each internal point to the exit(s).
   attr_reader :flow_map
   def initialize(flow_map); @flow_map = flow_map; end
+  def width; @flow_map[0].length; end
+  def height; @flow_map.length; end
 
   # coordinates of every place that a crate can be
   def places
@@ -87,9 +89,14 @@ class Layout
   # is reserved to extract crates, the rest of the inner area is usable.
   def capacity; area - places.map{depth _1}.max + 2; end
 
-  def render_cells
-    r = @flow_map.map{|row| row.chars.map{|cell| cell == "#" ? "\e[47m  \e[0m" : ".."}}
-    exits.each{|ri, ci| r[ri][ci] = "\e[41m  \e[0m"}
+  def render_cells(r_range, c_range)
+    r = @flow_map[r_range].map do |row|
+      row[c_range].chars.map{|cell| cell == "#" ? "\e[47m  \e[0m" : ".."}
+    end
+    exits.each do |ri, ci|
+      next unless r_range.include?(ri) && c_range.include?(ci)
+      r[ri - r_range.first][ci - c_range.first] = "\e[41m  \e[0m"
+    end
     r
   end
 
@@ -458,19 +465,19 @@ class Model
     end
   end
 
-  def render
-    r = @layout.render_cells
+  def render(r_range = 0 ... @layout.height, c_range = 0 ... @layout.width)
+    r = @layout.render_cells(r_range, c_range)
     @crates.each_value do |crate|
       ri, ci = crate.pos
-      next if ri.nil?
-      r[ri][ci] = crate.ascii
+      next unless r_range.include?(ri) && c_range.include?(ci)
+      r[ri - r_range.first][ci - c_range.first] = crate.ascii
     end
     ri, ci = @worker_pos
-    r[ri][ci] = "👷" unless ri.nil?
-    r.map(&:join).join "\n"
+    r[ri - r_range.first][ci - c_range.first] = "👷" unless ri.nil?
+    r.map(&:join)
   end
 
-  def render_frame
+  def render_frame(*diff)
     sleep_time = 0.03 - (Time.now - @t_prev_frame) if @t_prev_frame
     sleep sleep_time if sleep_time &.> 0
     @t_prev_frame = Time.now
@@ -478,34 +485,47 @@ class Model
     if IO.console.winsize != @winsize
       @winsize = IO.console.winsize
       IO.console.clear_screen
+      puts render
+    elsif diff.empty?
+      IO.console.cursor = [0, 0]
+      puts render
+    else
+      diff.compact!
+      min_r, max_r = diff.map{_1[0]}.minmax
+      min_c, max_c = diff.map{_1[1]}.minmax
+      render(min_r .. max_r, min_c .. max_c).each.with_index(min_r) do |row, ri|
+        IO.console.cursor = [ri, min_c * 2]
+        puts row
+      end
     end
-    IO.console.cursor = [0, 0]
-    puts render
   end
 
   # moves a crate along the specified path, with the worker following after it
   def animate_insert(crate, path)
     path.each_cons(2) do |p1, p2|
+      p0 = @worker_pos
       @worker_pos = p1
       crate.pos = p2
-      render_frame
+      render_frame(p0, p1, p2)
     end
   end
 
   # moves the worker along the specified path
   def animate_worker(path)
-    path.each do |pt|
-      @worker_pos = pt
-      render_frame
+    path.each do |p1|
+      p0 = @worker_pos
+      @worker_pos = p1
+      render_frame(p0, p1)
     end
   end
 
   # moves a crate along the specified path, with the worker leading before it
   def animate_extract(crate, path)
     path.each_cons(2) do |p1, p2|
+      p0 = crate.pos
       crate.pos = p1
       @worker_pos = p2
-      render_frame
+      render_frame(p0, p1, p2)
     end
   end
 end
@@ -556,5 +576,6 @@ begin
     model.animate_worker path[2..]
   end
 ensure
+  IO.console.cursor = [h, 0]
   puts "\e[?25h"
 end
