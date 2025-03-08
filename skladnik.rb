@@ -430,13 +430,12 @@ class Layout
     end
 
     def xyfrain(w, h)
-      r_rng = Hash.new{|h, k| h[k] = rand}
-      c_rng = Hash.new{|h, k| h[k] = rand}
-      df = rand
+      r_rng = Hash.new{|h, k| h[k] = rand - 0.5}
+      c_rng = Hash.new{|h, k| h[k] = rand - 0.5}
 
       frain(w, h) do |ri, ci|
         min, max = [r_rng[ri], c_rng[ci]].sort
-        min * df + max * (1 - df)
+        min ** 3 + max ** 3
       end
     end
   end
