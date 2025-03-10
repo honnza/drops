@@ -139,11 +139,22 @@ class Layout
   # modifies a layout such that a crate always exits towards the neighbor
   # through which most other crates already pass. Implies chordless
   def tight
+    def compress(str)
+      str = str.gsub(/(?<= |^)(.+?)((?: \1)+)(?= |$)/) do
+        mantissa = $1.include?(" ") ? "(#{$1})" : $1
+        exponent = $2.length / ($1.length + 1) + 1
+        r = "#{exponent}#{mantissa}"
+        r.length < $&.length ? r : $&
+      end
+      str[/^(... )?\S+/] = "..." while str.length > IO.console.winsize[1]
+      str
+    end
+
     flow_map = @flow_map
     text_line = ""
     loop do
-      # In the first phase, we reconnect smaller subtrees to larger subtrees. This cannot form
-      # loops, because a node's subtree cannot be bigger than the subtree that node is in.
+      # In the first ("append") phase, we reconnect smaller subtrees to larger subtrees. This cannot
+      # form loops, because a node's subtree cannot be bigger than the subtree that node is in.
       layout = Layout.new(flow_map.map(&:dup))
       places.each do |ri, ci|
         if depth([ri, ci]) > 2
@@ -163,14 +174,17 @@ class Layout
         text_line << "A#{diff} "
         IO.console.cursor = [0, 0]
         puts layout.as_maze
-        puts text_line
+        IO.console.erase_line 2
+        puts compress(text_line)
         sleep 0.1
         next
       end
 
-      # In the second phase, we allow reconnecting subtrees to smaller subtrees if they become
-      # bigger than the current predecessor after reconnection, but only if the new path isn't
-      # longer than the current one.
+      # In the second ("bump") phase, we allow reconnecting subtrees to smaller subtrees if they
+      # become bigger than the current predecessor after reconnection, but only if the new path
+      # isn't longer than the current one.
+      p_coordinator = Hash.new{|h, k| h[k] = []}
+      n_coordinator = Hash.new{|h, k| h[k] = []}
       places.each do |ri, ci|
         dir = flow_map[ri][ci]
         if depth([ri, ci]) > 2
@@ -180,10 +194,20 @@ class Layout
           ].each do |rj, cj, djr|
             score = layout.subtree_size([rj, cj])
             next if score.nil?
-            score -= layout.subtree_size([ri, ci]) - 0.5 if dir == djr # bias toward staying
-            candidates << [score, rand, djr] if layout.depth([rj, cj]) < layout.depth([ri, ci])
+            score -= layout.subtree_size([ri, ci]) if dir == djr
+            if layout.depth([rj, cj]) < layout.depth([ri, ci])
+              candidates << [[score, -layout.depth([rj, cj])], dir == djr ? 0 : 1, rand, rj, cj, djr]
+            end
           end
-          flow_map[ri][ci] = candidates.max.last
+          current = candidates.find{_1[5] == dir}
+          best = candidates.max
+          if (current[0] <=> best[0]) < 0
+            flow_map[ri][ci] = best[5]
+          elsif current != best
+            candidates.sort.reverse.take_while{_1 != current}
+                      .each{p_coordinator[_1[3, 2]] << [ri, ci, _1[5]]}
+            n_coordinator[current[3, 2]] << [ri, ci, best[5]]
+          end
         end
       end
 
@@ -194,7 +218,26 @@ class Layout
         text_line << "B#{diff} "
         IO.console.cursor = [0, 0]
         puts layout.as_maze
-        puts text_line
+        IO.console.erase_line 2
+        puts compress(text_line)
+        sleep 0.1
+        next
+      end
+
+      # finally, if the bump phase doesn't do anything either, we coordinate (C) bumps that would
+      # have been neutral by themselves but are beneficial in tandem.
+
+      p_coordinator.reject!{|_, v| v.length < 2}
+      n_coordinator.reject!{|_, v| v.length < 2}
+      unless p_coordinator.empty? & n_coordinator.empty?
+        p_diff = p_coordinator.values.flatten(1)
+        n_diff = n_coordinator.values.flatten(1)
+        text_line << "C#{p_diff.length}+#{n_diff.length} "
+        (p_diff + n_diff).shuffle.each{|ri, ci, dir| flow_map[ri][ci] = dir}
+        IO.console.cursor = [0, 0]
+        puts layout.as_maze
+        IO.console.erase_line 2
+        puts compress(text_line)
         sleep 0.1
         next
       end
