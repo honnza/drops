@@ -481,6 +481,28 @@ class Layout
         min ** 3 + max ** 3
       end
     end
+
+    def manhattan(w, h)
+      row_period = [rand(4 .. h / 2), rand(4 .. h / 2)].min
+      row_offset = rand(0 ... row_period)
+      road_rows = (1 .. h - 2).select{_1 % row_period == row_offset}
+      middle_row = road_rows.sample
+
+      col_period = [rand(4 .. w / 2), rand(4 .. w/ 2)].min
+      col_offset = rand(0 ... col_period)
+      road_cols = (1 .. w - 2).select{_1 % col_period == col_offset}
+      middle_col = road_cols.sample
+
+      IO.console.cursor = [middle_row, 2 * middle_col]
+      puts "><"
+      frain(w, h) do |ri, ci|
+        if road_rows.include?(ri) || road_cols.include?(ci)
+          [1, -(ri - middle_row).abs - (ci - middle_col).abs]
+        else
+          [0]
+        end
+      end
+      end
   end
 end
 
@@ -581,7 +603,7 @@ w, h = case ARGV.length
          exit
        end
 
-layouts = %i{horizontal vertical regular prim pruskal nuskal frain xyfrain dbt rdbt}
+layouts = %i{horizontal vertical regular prim pruskal nuskal frain xyfrain dbt rdbt manhattan}
 unless ARGV[0] =~ /^((?:frain-|chordless-|tight-)*)(#{layouts.join ?|})$/
     puts "first argument should be #{layouts.join ", "}, or frain-, tight- or chordless- plus one of the preceding"
   exit
