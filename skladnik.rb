@@ -196,7 +196,7 @@ class Layout
             next if score.nil?
             score -= layout.subtree_size([ri, ci]) if dir == djr
             if layout.depth([rj, cj]) < layout.depth([ri, ci])
-              candidates << [[score, -layout.depth([rj, cj])], dir == djr ? 0 : 1, rand, rj, cj, djr]
+              candidates << [score, dir == djr ? 0 : 1, rand, rj, cj, djr]
             end
           end
           current = candidates.find{_1[5] == dir}
