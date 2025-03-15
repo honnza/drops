@@ -417,7 +417,9 @@ class Layout
       [*1...h-1].product([*1...w-1]).sort_by{[rng[_1], rand]}.each do |ri, ci|
         leaf_map[ri][ci] = true
         flow_map = [?# * w, *(h - 2).times.map{?# + ?. * (w - 2) + ?#}, ?# * w]
-        bfs = [leaf_map[1][2] ? [2, 1, ?<] : [1, 2, ?^]]
+        neighbors = [[ri - 1, ci], [ri, ci + 1], [ri + 1, ci], [ri, ci - 1]]
+                      .reject{|ri, ci| flow_map[ri][ci] == ?#}
+        bfs = [neighbors.find{|ri, ci| !leaf_map[ri][ci]} + [?x]]
         bfs.each do |rj, cj, djr|
           next if flow_map[rj][cj] != ?.
           flow_map[rj][cj] = djr
@@ -428,8 +430,9 @@ class Layout
             [rj + 1, cj, ?^],
             [rj, cj - 1, ?>]
           ].shuffle
+          break unless neighbors.any?{|ri, ci| flow_map[ri][ci] == ?.}
         end
-        if flow_map.any?{_1[?.]}
+        if neighbors.any?{|ri, ci| flow_map[ri][ci] == ?.}
           leaf_map[ri][ci] = false
         else
           IO.console.cursor = [ri, ci * 2]
