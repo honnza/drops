@@ -441,19 +441,19 @@ class Layout
       end
       
       candidates = [
-        *[*(1 .. w - 2)].map{[1, _1, ?^, 0]},
-        *[*(1 .. w - 2)].map{[h - 2, _1, ?v, 0]},
-        *[*(1 .. h - 2)].map{[_1, 1, ?<, 0]},
-        *[*(1 .. h - 2)].map{[_1, w - 2, ?>, 0]}
-      ].reject{|ri, ci, _, _| leaf_map[ri][ci]}.map do |root|
+        *[*(1 .. w - 2)].map{[1, _1, ?^]},
+        *[*(1 .. w - 2)].map{[h - 2, _1, ?v]},
+        *[*(1 .. h - 2)].map{[_1, 1, ?<]},
+        *[*(1 .. h - 2)].map{[_1, w - 2, ?>]}
+      ].map do |ri, ci, dir|
         flow_map = [?# * w, *(h - 2).times.map{?# + ?. * (w - 2) + ?#}, ?# * w]
         score = 0
-        bfs = [root]
+        bfs = [[ri, ci, dir, 0]]
         bfs.each do |rj, cj, djr, depth|
           next if flow_map[rj][cj] != ?.
           flow_map[rj][cj] = djr
           score += depth
-          next if leaf_map[rj][cj]
+          next if leaf_map[rj][cj] && depth > 0
           bfs.push *[
             [rj - 1, cj, ?v, depth + 1],
             [rj, cj + 1, ?<, depth + 1],
@@ -462,14 +462,15 @@ class Layout
           ].shuffle
         end
         layout = Layout.new flow_map
-        [score, rand, root[0], root[1], root[2], layout]
+        [score, rand, ri, ci, dir, layout]
       end
       min, max = candidates.map(&:first).minmax
       candidates.each do |score, _, ri, ci, dir, _|
         IO.console.cursor = [ri, ci * 2]
         score = (score - min).fdiv(max - min)
         r, g = [score, 1 - score].map{(_1 ** 0.5 * 256).floor.clamp(0 .. 255)}
-        print "\e[38;2;#{r};#{score == 0 ? 127 : g};#{score == 0 ? 255 : 0}m#{dir * 2}\e[0m"
+        c = leaf_map[ri][ci] ? "[]" : dir * 2
+        print "\e[38;2;#{r};#{score == 0 ? 127 : g};#{score == 0 ? 255 : 0}m#{c}\e[0m"
       end
       STDIN.gets
       candidates.min.last
