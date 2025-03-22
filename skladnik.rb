@@ -101,10 +101,8 @@ class Layout
   end
 
   def as_maze
-    h = @flow_map.length
-    w = @flow_map[0].length
-    (0 .. h - 2).map do |ri|
-      (0 .. w - 2).map do |ci|
+    (0 .. height - 2).map do |ri|
+      (0 .. width - 2).map do |ci|
         ul = @flow_map[ri][ci]
         ur = @flow_map[ri][ci + 1]
         bl = @flow_map[ri + 1][ci]
@@ -114,6 +112,19 @@ class Layout
       end.join
     end
   end
+
+  def as_leaf_flow
+    (0 .. height - 1).map do |ri|
+      (0 .. width - 1).map do |ci|
+        case
+        when @flow_map[ri][ci] == ?# then "\e[47m  \e[0m"
+        when subtree_size([ri, ci]) == 1 then "\e[100m#{@flow_map[ri][ci] * 2}\e[0m"
+        else @flow_map[ri][ci] * 2
+        end
+      end.join
+    end
+  end
+
 
   # modifies a layout such that a crate's path doesn't touch itself orthogonally
   def chordless
@@ -146,6 +157,9 @@ class Layout
         r = "#{exponent}#{mantissa}"
         r.length < $&.length ? r : $&
       end
+      str = str.gsub(/(?<= |^)(.)\d+(?: \1\d+)+(?= |$)/) do
+        "#{$1}#{$&.scan(/\d+/).join("/")}"
+      end
       str[/^(... )?\S+/] = "..." while str.length > IO.console.winsize[1]
       str
     end
@@ -173,9 +187,9 @@ class Layout
       if diff > 0
         text_line << "A#{diff} "
         IO.console.cursor = [0, 0]
-        puts layout.as_maze
+        puts layout.as_leaf_flow
         IO.console.erase_line 2
-        puts compress(text_line)
+        print compress(text_line)
         sleep 0.1
         next
       end
@@ -217,9 +231,9 @@ class Layout
       if diff > 0
         text_line << "B#{diff} "
         IO.console.cursor = [0, 0]
-        puts layout.as_maze
+        puts layout.as_leaf_flow
         IO.console.erase_line 2
-        puts compress(text_line)
+        print compress(text_line)
         sleep 0.1
         next
       end
@@ -232,12 +246,16 @@ class Layout
       unless p_coordinator.empty? & n_coordinator.empty?
         p_diff = p_coordinator.values.flatten(1)
         n_diff = n_coordinator.values.flatten(1)
-        text_line << "C#{p_diff.length}+#{n_diff.length} "
+        if n_diff.empty?
+          text_line << "C#{p_diff.length} "
+        else
+          text_line << "C#{p_diff.length}+#{n_diff.length} "
+        end
         (p_diff + n_diff).shuffle.each{|ri, ci, dir| flow_map[ri][ci] = dir}
         IO.console.cursor = [0, 0]
-        puts layout.as_maze
+        puts layout.as_leaf_flow
         IO.console.erase_line 2
-        puts compress(text_line)
+        print compress(text_line)
         sleep 0.1
         next
       end
@@ -631,7 +649,7 @@ begin
   model = Model.new layout
 
   IO.console.cursor = [0, 0]
-  puts model.layout.as_maze
+  puts model.layout.as_leaf_flow
   STDIN.gets
 
   cap = model.layout.capacity
