@@ -144,7 +144,7 @@ class Layout
   end
 
   def frain
-    Layout.frain(@flow_map[0].length, @flow_map.length){|ri, ci| subtree_size([ri, ci])}
+    Layout.frain(width, height){|ri, ci| subtree_size([ri, ci])}
   end
 
   # modifies a layout such that a crate always exits towards the neighbor
@@ -568,20 +568,40 @@ class Model
     sleep sleep_time if sleep_time &.> 0
     @t_prev_frame = Time.now
 
-    if IO.console.winsize != @winsize
+    if diff.compact.empty?
+      min_r = 0
+      max_r = @layout.height - 1
+      min_c = 0
+      max_c = @layout.width - 1
+    else
+      min_r, max_r = diff.compact.map{_1[0]}.minmax
+      min_c, max_c = diff.compact.map{_1[1]}.minmax
+    end
+
+    @viewport = nil if IO.console.winsize != @winsize
+
+    vr, vc = @viewport
+    if !(vr === min_r && vr === max_r && vc === min_c && vc === max_c)
       @winsize = IO.console.winsize
+      vh = [@layout.height, @winsize[0]].min
+      vr_start = ((min_r + max_r - vh) / 2).clamp(0 .. @layout.height - vh)
+      vr = vr_start ... vr_start + vh
+
+      vw = [@layout.width, @winsize[1] / 2].min
+      vc_start = ((min_c + max_c - vw) / 2).clamp(0 .. @layout.width - vw)
+      vc = vc_start ... vc_start + vw
+      @viewport = [vr, vc]
+
       IO.console.clear_screen
-      puts render
+      print render(vr, vc).join("\n")
     elsif diff.empty?
       IO.console.cursor = [0, 0]
-      puts render
+      print render(vr, vc).join("\n")
     else
       diff.compact!
-      min_r, max_r = diff.map{_1[0]}.minmax
-      min_c, max_c = diff.map{_1[1]}.minmax
       render(min_r .. max_r, min_c .. max_c).each.with_index(min_r) do |row, ri|
-        IO.console.cursor = [ri, min_c * 2]
-        puts row
+        IO.console.cursor = [ri - vr.first, (min_c - vc.first) * 2]
+        print row
       end
     end
   end
