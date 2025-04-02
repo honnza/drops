@@ -343,7 +343,8 @@ class Layout
 
     # expands a tree of paths randomly to fill the inner area without regards
     # for the resulting capacity, using a single value generated for each edge
-    def pruskal(w, h)
+    def pruskal(w, h, &rng)
+      rng ||= -> _, _{rand}
       flow_map = [?# * w, *(h - 2).times.map{?# + ?. * (w - 2) + ?#}, ?# * w]
       open_set = [[
         *[*(1 .. w - 2)].map{[0, 1, _1, ?^]},
@@ -355,10 +356,10 @@ class Layout
         _, ri, ci, dir = open_set.min
         flow_map[ri][ci] = dir
         open_set.reject!{|_, rj, cj, _| ri == rj && ci == cj}
-        open_set << [rand, ri - 1, ci, ?v] if flow_map[ri - 1][ci] == ?.
-        open_set << [rand, ri, ci + 1, ?<] if flow_map[ri][ci + 1] == ?.
-        open_set << [rand, ri + 1, ci, ?^] if flow_map[ri + 1][ci] == ?.
-        open_set << [rand, ri, ci - 1, ?>] if flow_map[ri][ci - 1] == ?.
+        open_set << [rng[[ri, ci], [ri - 1, ci]], ri - 1, ci, ?v] if flow_map[ri - 1][ci] == ?.
+        open_set << [rng[[ri, ci], [ri, ci + 1]], ri, ci + 1, ?<] if flow_map[ri][ci + 1] == ?.
+        open_set << [rng[[ri, ci], [ri + 1, ci]], ri + 1, ci, ?^] if flow_map[ri + 1][ci] == ?.
+        open_set << [rng[[ri, ci], [ri, ci - 1]], ri, ci - 1, ?>] if flow_map[ri][ci - 1] == ?.
       end
       Layout.new flow_map
     end
@@ -366,28 +367,17 @@ class Layout
     # expands a tree of paths randomly to fill the inner area without regards
     # for the resulting capacity, using a single value generated for each node
     def nuskal(w, h)
-      flow_map = [?# * w, *(h - 2).times.map{?# + ?. * (w - 2) + ?#}, ?# * w]
       rng = Hash.new{|h, k| h[k] = rand}
-      open_set = [[
-        *[*(1 .. w - 2)].map{[0, 1, _1, ?^]},
-        *[*(1 .. w - 2)].map{[0, h - 2, _1, ?v]},
-        *[*(1 .. h - 2)].map{[0, _1, 1, ?<]},
-        *[*(1 .. h - 2)].map{[0, _1, w - 2, ?>]}
-      ].sample]
-      until open_set.empty?
-        _, ri, ci, dir = open_set.min
-        flow_map[ri][ci] = dir
-        open_set.reject!{|_, rj, cj, _| ri == rj && ci == cj}
-        [
-          [ri - 1, ci, ?v],
-          [ri, ci + 1, ?<],
-          [ri + 1, ci, ?^],
-          [ri, ci - 1, ?>]
-        ].each do |rj, cj, djr|
-          open_set << [[rng[[ri, ci]], rng[[rj, cj]]].sort, rj, cj, djr] if flow_map[rj][cj] == ?.
-        end
+      pruskal(w, h){|i, j| [rng[i], rng[j]].sort}
+    end
+
+    def xyskal(w, h)
+      r_rng = Hash.new{|h, k| h[k] = rand - 0.5}
+      c_rng = Hash.new{|h, k| h[k] = rand - 0.5}
+
+      pruskal(w, h) do |(ri, ci), (rj, cj)|
+        r_rng[ri] ** 3 + c_rng[ci] ** 3 + r_rng[rj] ** 3 + c_rng[cj] ** 3
       end
-      Layout.new flow_map
     end
 
     # diagonal binary tree, rooted at the top left corner of the warehouse
@@ -499,8 +489,7 @@ class Layout
       c_rng = Hash.new{|h, k| h[k] = rand - 0.5}
 
       frain(w, h) do |ri, ci|
-        min, max = [r_rng[ri], c_rng[ci]].sort
-        min ** 3 + max ** 3
+        r_rng[ri] ** 3 + c_rng[ci] ** 3
       end
     end
 
@@ -645,7 +634,7 @@ w, h = case ARGV.length
          exit
        end
 
-layouts = %i{horizontal vertical regular prim pruskal nuskal frain xyfrain dbt rdbt manhattan}
+layouts = %i{horizontal vertical regular prim pruskal nuskal xyskal frain xyfrain dbt rdbt manhattan}
 unless ARGV[0] =~ /^((?:frain-|chordless-|tight-)*)(#{layouts.join ?|})$/
     puts "first argument should be #{layouts.join ", "}, or frain-, tight- or chordless- plus one of the preceding"
   exit
