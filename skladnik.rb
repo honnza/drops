@@ -373,7 +373,7 @@ class Layout
         *[*(1 .. w - 2)].map{[0, h - 2, _1, ?v]},
         *[*(1 .. h - 2)].map{[0, _1, 1, ?<]},
         *[*(1 .. h - 2)].map{[0, _1, w - 2, ?>]}
-      ].sample]
+      ].min_by{|_, ri, ci, _| rng[nil, [ri, ci]]}]
       until open_set.empty?
         _, ri, ci, dir = open_set.min
         flow_map[ri][ci] = dir
