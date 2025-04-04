@@ -164,33 +164,51 @@ class Layout
       str
     end
 
+    def pif flow_map, text_line
+      IO.console.cursor = [0, 0]
+      if IO.console.winsize[1] / 2 >= flow_map[0].length
+        puts Layout.new(flow_map).as_leaf_flow
+      end
+      IO.console.erase_line 2
+      print compress(text_line)
+    end
+
     flow_map = @flow_map
+    history = []
     text_line = ""
     loop do
+      old_layout = Layout.new(flow_map.map(&:dup))
+      history << old_layout.flow_map
+
       # In the first ("append") phase, we reconnect smaller subtrees to larger subtrees. This cannot
       # form loops, because a node's subtree cannot be bigger than the subtree that node is in.
-      layout = Layout.new(flow_map.map(&:dup))
       places.each do |ri, ci|
         if depth([ri, ci]) > 2
           flow_map[ri][ci] = [
-            [layout.subtree_size([ri - 1, ci]), layout.depth([ri - 1, ci]), rand, ?^],
-            [layout.subtree_size([ri, ci + 1]), layout.depth([ri, ci + 1]), rand, ?>],
-            [layout.subtree_size([ri + 1, ci]), layout.depth([ri + 1, ci]), rand, ?v],
-            [layout.subtree_size([ri, ci - 1]), layout.depth([ri, ci - 1]), rand, ?<],
+            [old_layout.subtree_size([ri - 1, ci]), old_layout.depth([ri - 1, ci]), rand, ?^],
+            [old_layout.subtree_size([ri, ci + 1]), old_layout.depth([ri, ci + 1]), rand, ?>],
+            [old_layout.subtree_size([ri + 1, ci]), old_layout.depth([ri + 1, ci]), rand, ?v],
+            [old_layout.subtree_size([ri, ci - 1]), old_layout.depth([ri, ci - 1]), rand, ?<],
           ].reject{_1.first.nil?}.max.last
         end
       end
 
-      diff = flow_map.zip(layout.flow_map).flat_map do |ri, rj|
-        ri.chars.zip(rj.chars).map{|ci, cj| ci == cj ? 0 : 1}
-      end.sum
-      if diff > 0
-        text_line << "A#{diff} "
-        IO.console.cursor = [0, 0]
-        puts layout.as_leaf_flow
-        IO.console.erase_line 2
-        print compress(text_line)
-        sleep 0.1
+      diff = flow_map.each_index.flat_map do |ri|
+        flow_map[ri].chars.each_index.filter_map do |ci|
+          [ri, ci] unless flow_map[ri][ci] == old_layout.flow_map[ri][ci]
+        end
+      end
+      if diff.length > 0
+        if history.include?(flow_map)
+          ri, ci = diff.sample
+          new_flow_map = old_layout.flow_map.map(&:dup)
+          new_flow_map[ri][ci] = flow_map[ri][ci]
+          flow_map = new_flow_map
+          text_line << "AS "
+        else
+          text_line << "A#{diff.length} "
+        end
+        pif flow_map, text_line
         next
       end
 
@@ -206,10 +224,10 @@ class Layout
           [
             [ri - 1, ci, ?^], [ri, ci + 1, ?>], [ri + 1, ci, ?v], [ri, ci - 1, ?<]
           ].each do |rj, cj, djr|
-            score = layout.subtree_size([rj, cj])
+            score = old_layout.subtree_size([rj, cj])
             next if score.nil?
-            score -= layout.subtree_size([ri, ci]) if dir == djr
-            if layout.depth([rj, cj]) < layout.depth([ri, ci])
+            score -= old_layout.subtree_size([ri, ci]) if dir == djr
+            if old_layout.depth([rj, cj]) < old_layout.depth([ri, ci])
               candidates << [score, dir == djr ? 0 : 1, rand, rj, cj, djr]
             end
           end
@@ -225,16 +243,22 @@ class Layout
         end
       end
 
-      diff = flow_map.zip(layout.flow_map).flat_map do |ri, rj|
-        ri.chars.zip(rj.chars).map{|ci, cj| ci == cj ? 0 : 1}
-      end.sum
-      if diff > 0
-        text_line << "B#{diff} "
-        IO.console.cursor = [0, 0]
-        puts layout.as_leaf_flow
-        IO.console.erase_line 2
-        print compress(text_line)
-        sleep 0.1
+      diff = flow_map.each_index.flat_map do |ri|
+        flow_map[ri].chars.each_index.filter_map do |ci|
+          [ri, ci] unless flow_map[ri][ci] == old_layout.flow_map[ri][ci]
+        end
+      end
+      if diff.length > 0
+        if history.include?(flow_map)
+          ri, ci = diff.sample
+          new_flow_map = old_layout.flow_map.map(&:dup)
+          new_flow_map[ri][ci] = flow_map[ri][ci]
+          flow_map = new_flow_map
+          text_line << "BS "
+        else
+          text_line << "B#{diff.length} "
+        end
+        pif flow_map, text_line
         next
       end
 
@@ -252,17 +276,15 @@ class Layout
           text_line << "C#{p_diff.length}+#{n_diff.length} "
         end
         (p_diff + n_diff).shuffle.each{|ri, ci, dir| flow_map[ri][ci] = dir}
-        IO.console.cursor = [0, 0]
-        puts layout.as_leaf_flow
-        IO.console.erase_line 2
-        print compress(text_line)
-        sleep 0.1
+        pif flow_map, text_line
         next
       end
 
       break
     end
-    layout = Layout.new(flow_map)
+    text_line[-1] = "."
+    pif flow_map, text_line
+    Layout.new(flow_map)
   end
 
   class << self
