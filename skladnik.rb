@@ -52,7 +52,7 @@ class Layout
   # calculates the list of crate spots that don't lie on the path of another crate
   def leaves; p = places; p - p.map{prev _1}; end
   # calculates the bits of wall that crates pass through
-  def exits; p = places; p.map{prev _1}.uniq - p; end
+  def exits; @exits_cache ||= (p = places; p.map{prev _1}.uniq - p); end
 
   # calculates the places a crate needs to pass through to exit the warehouse.
   # Includes both the exit wall and the place the current spot.
