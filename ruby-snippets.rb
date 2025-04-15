@@ -477,7 +477,7 @@ def relax_rescale_eigen(grid, n: :n4, interactive: true)
     when :n4 then [[-1, 0], [0, -1], [0, 1], [1, 0]]
     when :n8 then [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]
     when :n_knight then [[-2, -1], [-2, 1], [-1, 2], [1, 2], [2, 1], [2, -1], [1, -2], [-1, -2]]
-    else neighborhood
+    else n
   end
 
   ix_count = 0
@@ -523,7 +523,7 @@ def relax_rescale_eigen(grid, n: :n4, interactive: true)
           offset = modes[0][2] == 1 && modes.count > 3 ? 1 : 0
           g = aligned_evs[0 + offset]
           r = aligned_evs[1 + offset]
-          b = aligned_evs[2 + offset] || aligned_evs[1 + offset]
+          b = aligned_evs[2 + offset] || aligned_evs[1 + offset].map(&:-@)
           ix_map.each do |row|
             puts row.map{|ix|
               ix.nil? ? "><" : "\e[48;2;%d;%d;%dm  \e[0m" % [r[ix], g[ix], b[ix]].map{|c| (256 * (c + 1)/2).clamp(0..255)} 
