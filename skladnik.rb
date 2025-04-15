@@ -151,14 +151,14 @@ class Layout
   # through which most other crates already pass. Implies chordless
   def tight
     def compress(str)
-      str = str.gsub(/(?<= |^)(.+?)((?: \1)+)(?= |$)/) do
+      str = str.gsub(/(?<= |^)(.)\d+(?: \1\d+)+(?=[ .])/) do
+        "#{$1}#{$&.scan(/\d+/).join("/")}"
+      end
+      str = str.gsub(/(?<= |^)(.+?)((?: \1)+)(?=[ .])/) do
         mantissa = $1.include?(" ") ? "(#{$1})" : $1
         exponent = $2.length / ($1.length + 1) + 1
         r = "#{exponent}#{mantissa}"
         r.length < $&.length ? r : $&
-      end
-      str = str.gsub(/(?<= |^)(.)\d+(?: \1\d+)+(?= |$)/) do
-        "#{$1}#{$&.scan(/\d+/).join("/")}"
       end
       str[/^(... )?\S+/] = "..." while str.length > IO.console.winsize[1]
       str
