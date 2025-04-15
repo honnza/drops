@@ -24,7 +24,7 @@ end
 
 class Layout
 
-  # grid depicting the layout: 
+  # grid depicting the layout
   #   # are walls. ^>v< denote the path from each internal point to the exit(s).
   attr_reader :flow_map
   def initialize(flow_map); @flow_map = flow_map; end
@@ -402,6 +402,77 @@ class Layout
       end
     end
 
+    # maze generator that splits the full area into two halves randomly
+    def bsp(w, h)
+      flow_map = [?# * w, *(h - 2).times.map{?# + ?. * (w - 2) + ?#}, ?# * w]
+      root = [
+        *[*(1 ... w - 1)].map{[1, _1, ?^]},
+        *[*(1 ... w - 1)].map{[h - 2, _1, ?v]},
+        *[*(1 ... h - 1)].map{[_1, 1, ?<]},
+        *[*(1 ... h - 1)].map{[_1, w - 2, ?>]}
+      ].sample
+      blocks = [[1 ... h - 1, 1 ... w - 1, root]]
+
+      until blocks.empty?
+        block_rs, block_cs, root = blocks.pop
+        split = [
+          *[*(block_rs.begin + 1 .. block_rs.end - 1)].map{[_1, :r]},
+          *[*(block_cs.begin + 1 .. block_cs.end - 1)].map{[_1, :c]}
+        ].sample
+        if split.nil?
+          flow_map[root[0]][root[1]] = root[2]
+          next
+        end
+        if split[1] == :r
+          new_root_c = rand block_cs
+          if split[0] > root[0]
+            blocks << [block_rs.begin ... split[0], block_cs, root]
+            blocks << [split[0] ... block_rs.end, block_cs, [split[0], new_root_c, ?^]]
+          else
+            blocks << [block_rs.begin ... split[0], block_cs, [split[0] - 1, new_root_c, ?v]]
+            blocks << [split[0] ... block_rs.end, block_cs, root]
+          end
+        else
+          new_root_r = rand block_rs
+          if split[0] > root[1]
+            blocks << [block_rs, block_cs.begin ... split[0], root]
+            blocks << [block_rs, split[0] ... block_cs.end, [new_root_r, split[0], ?<]]
+          else
+            blocks << [block_rs, block_cs.begin ... split[0], [new_root_r, split[0] - 1, ?>]]
+            blocks << [block_rs, split[0] ... block_cs.end, root]
+          end
+        end
+      end
+
+      Layout.new flow_map
+    end
+
+    def cobsp(w, h)
+      flow_map = [?# * w, *(h - 2).times.map{?# + ?. * (w - 2) + ?#}, ?# * w]
+      blocks = [[1 .. h - 2, 1 .. w - 2, []]]
+
+      until blocks.empty?
+        block_rs, block_cs, exits = blocks.pop
+        si, split_dir = [
+          *([*block_cs].map{|ci| [ci, ?^]} if exits.empty? || exits.include?(?^)),
+          *([*block_rs].map{|ri| [ri, ?>]} if exits.empty? || exits.include?(?>)),
+          *([*block_cs].map{|ci| [ci, ?v]} if exits.empty? || exits.include?(?v)),
+          *([*block_rs].map{|ri| [ri, ?<]} if exits.empty? || exits.include?(?<))
+        ].sample
+        if split_dir == ?< || split_dir == ?>
+          block_cs.each{|ci| flow_map[si][ci] = split_dir}
+          blocks << [block_rs.begin .. si - 1, block_cs, exits | [?v]] unless block_rs.begin == si
+          blocks << [si + 1 .. block_rs.end, block_cs, exits | [?^]] unless si == block_rs.end
+        else
+          block_rs.each{|ri| flow_map[ri][si] = split_dir}
+          blocks << [block_rs, block_cs.begin .. si - 1, exits | [?>]] unless block_cs.begin == si
+          blocks << [block_rs, si + 1 .. block_cs.end, exits | [?<]] unless si == block_cs.end
+        end
+      end
+
+      Layout.new flow_map
+    end
+
     # diagonal binary tree, rooted at the top left corner of the warehouse
     def dbt(w, h)
       Layout.new((0 ... h).map do |ri|
@@ -469,7 +540,7 @@ class Layout
           puts "[]"
         end
       end
-      
+
       candidates = [
         *[*(1 .. w - 2)].map{[1, _1, ?^]},
         *[*(1 .. w - 2)].map{[h - 2, _1, ?v]},
@@ -656,7 +727,7 @@ w, h = case ARGV.length
          exit
        end
 
-layouts = %i{horizontal vertical regular prim pruskal nuskal xyskal frain xyfrain dbt rdbt manhattan}
+layouts = %i{horizontal vertical regular prim pruskal nuskal xyskal bsp cobsp frain xyfrain dbt rdbt manhattan}
 unless ARGV[0] =~ /^((?:frain-|chordless-|tight-)*)(#{layouts.join ?|})$/
     puts "first argument should be #{layouts.join ", "}, or frain-, tight- or chordless- plus one of the preceding"
   exit
@@ -684,7 +755,7 @@ begin
   STDIN.gets
 
   cap = model.layout.capacity
-  cap.times do |id|
+  model.layout.area.times do |id|
     pos = model.suggest_place
     crate = Crate.gradient_alpha2 id, Math.log(layout.subtree_size(pos)) / Math.log(cap)
     model.crates[id] = crate
