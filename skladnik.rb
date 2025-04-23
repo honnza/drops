@@ -147,6 +147,27 @@ class Layout
     Layout.frain(width, height){|ri, ci| subtree_size([ri, ci])}
   end
 
+  def centered
+    [
+      *[*(1 .. width - 2)].map{[1, _1, ?^]},
+      *[*(1 .. width - 2)].map{[height - 2, _1, ?v]},
+      *[*(1 .. height - 2)].map{[_1, 1, ?<]},
+      *[*(1 .. height - 2)].map{[_1, width - 2, ?>]}
+    ].map do |root_ri, root_ci, dir|
+      flow_map = self.flow_map.map(&:dup)
+      path([root_ri, root_ci])[... -1].each_cons(2) do |(ri, ci), (rj, cj)|
+        flow_map[root_ri][root_ci] = dir
+        flow_map[rj][cj] = case
+                           when ri == rj - 1 && ci == cj then ?^
+                           when ri == rj && ci == cj + 1 then ?>
+                           when ri == rj + 1 && ci == cj then ?v
+                           when ri == rj && ci == cj - 1 then ?<
+                           else ?? end
+      end
+      Layout.new(flow_map)
+    end.min_by{|layout| [layout.places.map{layout.depth _1}.sum, rand]}
+  end
+
   # modifies a layout such that a crate always exits towards the neighbor
   # through which most other crates already pass. Implies chordless
   def tight
@@ -736,8 +757,8 @@ w, h = case ARGV.length
        end
 
 layouts = %i{horizontal vertical regular prim pruskal nuskal xyskal bsp cobsp frain xyfrain dbt rdbt manhattan}
-unless ARGV[0] =~ /^((?:frain-|chordless-|tight-)*)(#{layouts.join ?|})$/
-    puts "first argument should be #{layouts.join ", "}, or frain-, tight- or chordless- plus one of the preceding"
+unless ARGV[0] =~ /^((?:frain-|chordless-|tight-|centered-)*)(#{layouts.join ?|})$/
+  puts "first argument should be #{layouts.join ", "}, or frain-, tight-, centered- or chordless- plus one of the preceding"
   exit
 end
 
