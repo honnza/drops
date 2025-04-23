@@ -55,7 +55,7 @@ class Layout
   def exits; @exits_cache ||= (p = places; p.map{prev _1}.uniq - p); end
 
   # calculates the places a crate needs to pass through to exit the warehouse.
-  # Includes both the exit wall and the place the current spot.
+  # Includes both the exit wall and the current spot.
   def path(pt)
     r = [pt]
     loop do
@@ -151,8 +151,8 @@ class Layout
   # through which most other crates already pass. Implies chordless
   def tight
     def compress(str)
-      str = str.gsub(/(?<= |^)(.)\d+(?: \1\d+)+(?=[ .])/) do
-        "#{$1}#{$&.scan(/\d+/).join("/")}"
+      str = str.gsub(/(?<= |^)(.)[\d-]+(?: \1[\d-]+)+(?=[ .])/) do
+        "#{$1}#{$&.scan(/[\d-]+/).join("/")}"
       end
       str = str.gsub(/(?<= |^)(.+?)((?: \1)+)(?=[ .])/) do
         mantissa = $1.include?(" ") ? "(#{$1})" : $1
@@ -204,7 +204,7 @@ class Layout
           new_flow_map = old_layout.flow_map.map(&:dup)
           new_flow_map[ri][ci] = flow_map[ri][ci]
           flow_map = new_flow_map
-          text_line << "AS "
+          text_line << "A- "
         else
           text_line << "A#{diff.length} "
         end
@@ -254,7 +254,7 @@ class Layout
           new_flow_map = old_layout.flow_map.map(&:dup)
           new_flow_map[ri][ci] = flow_map[ri][ci]
           flow_map = new_flow_map
-          text_line << "BS "
+          text_line << "B- "
         else
           text_line << "B#{diff.length} "
         end
@@ -564,6 +564,14 @@ class Layout
         end
         layout = Layout.new flow_map
         [score, rand, ri, ci, dir, layout]
+      end
+      candidates.reject! do |score, _, ri, ci, _, _|
+        leaf_map[ri][ci] && [
+          leaf_map[ri - 1][ci],
+          leaf_map[ri][ci + 1],
+          leaf_map[ri + 1][ci],
+          leaf_map[ri][ci - 1]
+        ].count(false) > 2
       end
       min, max = candidates.map(&:first).minmax
       candidates.each do |score, _, ri, ci, dir, _|
