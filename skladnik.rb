@@ -1,5 +1,39 @@
 require "io/console"
 
+def bucketed_progress_bar progress, text = "", width
+  def bucket_rgb bucket
+    plte = {blank: [0, 0, 0],
+            inode: [255, 0, 0],
+            leaf: [0, 255, 0]}
+    r = 0
+    g = 0
+    b = 0
+    bucket.each {|n| n = plte[n] || n; r += n[0] ** 2; g += n[1] ** 2; b += n[2] ** 2}
+    [((r / bucket.length) ** 0.5).floor,
+     ((g / bucket.length) ** 0.5).floor,
+     ((b / bucket.length) ** 0.5).floor]
+  end
+
+  bucket_volume = Rational(progress.length, 2 * (width - 2)).ceil
+  buckets = progress.each_slice(bucket_volume).to_a
+  bucket_width = 2 * (width - 2) / buckets.length
+  buckets = buckets.flat_map{[_1] * bucket_width}
+
+  text = buckets.each_slice(2).zip(text.chars).map do |(left, right), char|
+    if char
+      rgb = bucket_rgb(left + (right || [:blank]))
+      fg = rgb[1] > 127 ? "30" : "97"
+      bg = "48;2;#{rgb.join ";"}"
+    else
+      char = "\u258c"
+      fg = "38;2;#{bucket_rgb(left).join(";")}"
+      bg = "48;2;#{bucket_rgb(right || [:blank]).join(";")}"
+    end
+    "\e[#{fg};#{bg}m#{char}"
+  end.join
+  "[#{text}\e[0m]"
+end
+
 Crate = Struct.new :ascii, :id, :pos do
   def self.alpha2(id, pos = nil); new((?A..?Z).sample + (?a..?z).sample, id, pos); end
   def self.rgba2(id, pos = nil)
@@ -536,6 +570,7 @@ class Layout
     def frain(w, h, &rng)
       rng ||= ->_{0}
       leaf_map = h.times.map{[false] * w}
+      progress = []
       [*1...h-1].product([*1...w-1]).sort_by{[rng[_1], rand]}.each do |ri, ci|
         leaf_map[ri][ci] = true
         flow_map = [?# * w, *(h - 2).times.map{?# + ?. * (w - 2) + ?#}, ?# * w]
@@ -555,10 +590,18 @@ class Layout
           break unless neighbors.any?{|ri, ci| flow_map[ri][ci] == ?.}
         end
         if neighbors.any?{|ri, ci| flow_map[ri][ci] == ?.}
+          progress << :inode
           leaf_map[ri][ci] = false
         else
-          IO.console.cursor = [ri, ci * 2]
-          puts "[]"
+          progress << :leaf
+          if h <= IO.console.winsize[0] && w <= IO.console.winsize[1] / 2
+            IO.console.cursor = [ri, ci * 2]
+            puts "[]"
+          end
+        end
+        if (h > IO.console.winsize[0] || w > IO.console.winsize[1] / 2) && progress.length % (w - 2) == 0
+          IO.console.cursor = [0, 0]
+          puts bucketed_progress_bar progress + [:blank] * ((h - 2) * (w - 2) - progress.length), IO.console.winsize[1]
         end
       end
 
@@ -595,12 +638,22 @@ class Layout
         ].count(false) > 2
       end
       min, max = candidates.map(&:first).minmax
+      progress = []
       candidates.each do |score, _, ri, ci, dir, _|
-        IO.console.cursor = [ri, ci * 2]
         score = (score - min).fdiv(max - min)
         r, g = [score, 1 - score].map{(_1 ** 0.5 * 256).floor.clamp(0 .. 255)}
         c = leaf_map[ri][ci] ? "[]" : dir * 2
-        print "\e[38;2;#{r};#{score == 0 ? 127 : g};#{score == 0 ? 255 : 0}m#{c}\e[0m"
+        if h <= IO.console.winsize[0] && w <= IO.console.winsize[1] / 2
+          IO.console.cursor = [ri, ci * 2]
+          print "\e[38;2;#{r};#{score == 0 ? 127 : g};#{score == 0 ? 255 : 0}m#{c}\e[0m"
+        else
+          progress << (score == 0 ? [0, 127, 255] : [r, g, 0])
+        end
+      end
+      if (h > IO.console.winsize[0] || w > IO.console.winsize[1] / 2)
+        IO.console.cursor = [0, 0]
+        IO.console.erase_line 2
+        puts bucketed_progress_bar progress, IO.console.winsize[1]
       end
       STDIN.gets
       candidates.min.last
