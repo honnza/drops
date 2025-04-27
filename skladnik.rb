@@ -100,7 +100,17 @@ class Layout
   end
 
   # calculates the distance of a crate spot from a warehouse exit. Depth of 1 is the exit itself.
-  def depth(pt); path(pt).length; end
+  def depth((ri, ci))
+    (1..).each do |r|
+      case flow_map[ri][ci]
+      when '^' then ri -= 1
+      when '>' then ci += 1
+      when 'v' then ri += 1
+      when '<' then ci -= 1
+      else return r
+      end
+    end
+  end
 
   # calculates how many crate exit paths pass through this location
   def subtree_size(pt);
@@ -210,9 +220,13 @@ class Layout
         "#{$1}#{$&.scan(/[\d-]+/).join("/")}"
       end
       str = str.gsub(/(?<= |^)(.+?)((?: \1)+)(?=[ .])/) do
-        mantissa = $1.include?(" ") ? "(#{$1})" : $1
         exponent = $2.length / ($1.length + 1) + 1
-        r = "#{exponent}#{mantissa}"
+        r = "#{exponent}(#{$1})"
+        r.length < $&.length ? r : $&
+      end
+      str = str.gsub(/(?<=[A-Z\/])(.+?)((?:\/\1)+)(?=[ \/])/) do
+        exponent = $2.length / ($1.length + 1) + 1
+        r = "#{exponent}x#{$1}"
         r.length < $&.length ? r : $&
       end
       str[/^(... )?\S+/] = "..." while str.length > IO.console.winsize[1]
