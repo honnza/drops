@@ -46,13 +46,12 @@ Crate = Struct.new :ascii, :id, :pos do
         "\e[48;2;#{rand 0..100};#{rand 0..100};#{rand 0..100}m" +
         "#{rand(0x4e00 .. 0x9fef).chr(Encoding::UTF_8)}\e[0m", id, pos)
   end
-  def self.gradient_alpha2(id, gradient, pos = nil)
-    r, g, b = [0, 2/3r, 4/3r]
-      .map{Math.cos(-_1 * Math::PI + 2 * gradient)}
-      .map{((1 + _1) / 2 ** 0.5 * 256).floor.clamp(0..255)}
+  def self.gradient_alpha2(id, gradient, b = rand)
+    r, g = [0, 2/3r].map{0.5 + Math.cos(-_1 * Math::PI + 2 * gradient) / 2}
+    r, g, b = [r, g, b].map{(_1 ** 0.5 * 256).floor.clamp(0..255)}
 
-    new("\e[30;48;2;#{r};#{g};#{rand 0..255}m" +
-        "#{(?A..?Z).to_a.sample}#{(?a..?z).to_a.sample}\e[0m", id, pos)
+    new("\e[30;48;2;#{r};#{g};#{b}m" +
+        "#{(?A..?Z).to_a.sample}#{(?a..?z).to_a.sample}\e[0m", id, nil)
   end
 end
 
@@ -224,7 +223,7 @@ class Layout
         r = "#{exponent}(#{$1})"
         r.length < $&.length ? r : $&
       end
-      str = str.gsub(/(?<=[A-Z\/])(.+?)((?:\/\1)+)(?=[ \/])/) do
+      str = str.gsub(/(?<=[A-Z\/])(.+?)((?:\/\1)+)(?=[ .\/])/) do
         exponent = $2.length / ($1.length + 1) + 1
         r = "#{exponent}x#{$1}"
         r.length < $&.length ? r : $&
@@ -799,15 +798,16 @@ class Model
     if !(vr === min_r && vr === max_r && vc === min_c && vc === max_c)
       @winsize = IO.console.winsize
       vh = [@layout.height, @winsize[0]].min
-      vr_start = ((min_r + max_r - vh) / 2).clamp(0 .. @layout.height - vh)
+      vr_start = ((min_r + max_r - vh + 1) / 2).clamp(0 .. @layout.height - vh)
       vr = vr_start ... vr_start + vh
 
       vw = [@layout.width, @winsize[1] / 2].min
-      vc_start = ((min_c + max_c - vw) / 2).clamp(0 .. @layout.width - vw)
+      vc_start = ((min_c + max_c - vw + 1) / 2).clamp(0 .. @layout.width - vw)
       vc = vc_start ... vc_start + vw
       @viewport = [vr, vc]
 
-      IO.console.clear_screen
+      IO.console.clear_screen if @layout.height < @winsize[0] || @layout.width < @winsize[1] / 2
+      IO.console.cursor = [0,0]
       print render(vr, vc).join("\n")
     elsif diff.empty?
       IO.console.cursor = [0, 0]
@@ -890,9 +890,11 @@ begin
   cap = model.layout.capacity
   model.layout.area.times do |id|
     pos = model.suggest_place
-    crate = Crate.gradient_alpha2 id, Math.log(layout.subtree_size(pos)) / Math.log(cap)
-    model.crates[id] = crate
     path = model.layout.path pos
+    sts_score = Math.log(layout.subtree_size(pos)) / Math.log(cap)
+    efficiency_score = 1 - ((path[0][0] - path[-1][0]).abs + (path[0][1] - path[-1][1]).abs + 1).fdiv(path.length) ** 2
+    crate = Crate.gradient_alpha2 id, sts_score, efficiency_score
+    model.crates[id] = crate
     model.animate_insert crate, [nil, nil] + path.reverse
     model.animate_worker path[2..]
   end
