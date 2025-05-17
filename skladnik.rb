@@ -542,6 +542,43 @@ class Layout
       Layout.new flow_map
     end
 
+    def wcbsp(w, h)
+      flow_map = [?# * w, *(h - 2).times.map{?# + ?. * (w - 2) + ?#}, ?# * w]
+      blocks = [[1 .. h - 2, 1 .. w - 2, []]]
+
+      until blocks.empty?
+        block_rs, block_cs, exits = blocks.pop
+        inner_cs = block_cs.begin + 1 .. block_cs.end - 1
+        inner_rs = block_rs.begin + 1 .. block_rs.end - 1
+        sample_cs, sample_rs =
+          if inner_cs.size == 0 && inner_rs.size == 0
+            [block_cs, block_rs]
+          else
+            [inner_cs, inner_rs]
+          end
+        si, split_dir = [
+          *([*sample_cs].map{|ci| [ci, ?^]} if exits.empty? || exits.include?(?^)),
+          *([*sample_rs].map{|ri| [ri, ?>]} if exits.empty? || exits.include?(?>)),
+          *([*sample_cs].map{|ci| [ci, ?v]} if exits.empty? || exits.include?(?v)),
+          *([*sample_rs].map{|ri| [ri, ?<]} if exits.empty? || exits.include?(?<))
+        ].sample
+        if split_dir == ?< || split_dir == ?>
+          block_cs.each{|ci| flow_map[si - 1][ci] = ?v} if block_rs.include?(si - 1)
+          block_cs.each{|ci| flow_map[si][ci] = split_dir}
+          block_cs.each{|ci| flow_map[si + 1][ci] = ?^} if block_rs.include?(si + 1)
+          blocks << [block_rs.begin .. si - 2, block_cs, exits | [?v]] if block_rs.begin < si - 1
+          blocks << [si + 2 .. block_rs.end, block_cs, exits | [?^]] if block_rs.end > si + 1
+        else
+          block_rs.each{|ri| flow_map[ri][si - 1] = ?>} if block_cs.include?(si - 1)
+          block_rs.each{|ri| flow_map[ri][si] = split_dir}
+          block_rs.each{|ri| flow_map[ri][si + 1] = ?<} if block_cs.include?(si + 1)
+          blocks << [block_rs, block_cs.begin .. si - 2, exits | [?>]] if block_cs.begin < si - 1
+          blocks << [block_rs, si + 2 .. block_cs.end, exits | [?<]] if block_cs.end > si + 1
+        end
+      end
+
+      Layout.new flow_map
+    end
     # diagonal binary tree, rooted at the top left corner of the warehouse
     def dbt(w, h)
       Layout.new((0 ... h).map do |ri|
@@ -823,7 +860,7 @@ w, h = case ARGV.length
          exit
        end
 
-layouts = %i{horizontal vertical regular prim pruskal nuskal xyskal bsp cobsp frain xyfrain dbt rdbt manhattan}
+layouts = %i{horizontal vertical regular prim pruskal nuskal xyskal bsp cobsp wcbsp frain xyfrain dbt rdbt manhattan}
 unless ARGV[0] =~ /^((?:frain-|chordless-|tight-|centered-)*)(#{layouts.join ?|})$/
   puts "first argument should be #{layouts.join ", "}, or frain-, tight-, centered- or chordless- plus one of the preceding"
   exit
