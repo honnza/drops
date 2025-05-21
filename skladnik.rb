@@ -793,9 +793,18 @@ class Model
     end
 
     @viewport = nil if IO.console.winsize != @winsize
+    if @viewport.nil?
+      IO.console.clear_screen
+    else
+      IO.console.cursor = [0, 0]
+    end
 
     vr, vc = @viewport
-    if !(vr === min_r && vr === max_r && vc === min_c && vc === max_c)
+    if !@viewport ||
+        vr.min >= min_r && min_r > 0 ||
+        vr.max <= max_r && max_r < @layout.height - 1 ||
+        vc.min >= min_c && min_c > 0 ||
+        vc.max <= max_c && max_c < @layout.width - 1
       @winsize = IO.console.winsize
       vh = [@layout.height, @winsize[0]].min
       vr_start = ((min_r + max_r - vh + 1) / 2).clamp(0 .. @layout.height - vh)
@@ -806,11 +815,8 @@ class Model
       vc = vc_start ... vc_start + vw
       @viewport = [vr, vc]
 
-      IO.console.clear_screen if @layout.height < @winsize[0] || @layout.width < @winsize[1] / 2
-      IO.console.cursor = [0,0]
       print render(vr, vc).join("\n")
     elsif diff.empty?
-      IO.console.cursor = [0, 0]
       print render(vr, vc).join("\n")
     else
       diff.compact!
