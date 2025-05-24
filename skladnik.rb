@@ -198,8 +198,9 @@ class Layout
       *[*(1 .. height - 2)].map{[_1, width - 2, ?>]}
     ].map do |root_ri, root_ci, dir|
       flow_map = self.flow_map.map(&:dup)
-      path([root_ri, root_ci])[... -1].each_cons(2) do |(ri, ci), (rj, cj)|
-        flow_map[root_ri][root_ci] = dir
+      flow_map[root_ri][root_ci] = dir
+      path = self.path([root_ri, root_ci])
+      path[... -1].each_cons(2) do |(ri, ci), (rj, cj)|
         flow_map[rj][cj] = case
                            when ri == rj - 1 && ci == cj then ?^
                            when ri == rj && ci == cj + 1 then ?>
@@ -207,8 +208,11 @@ class Layout
                            when ri == rj && ci == cj - 1 then ?<
                            else ?? end
       end
-      Layout.new(flow_map)
-    end.min_by{|layout| [layout.places.map{layout.depth _1}.sum, rand]}
+      score = path.each_cons(2).map.with_index(1) do |((ri, ci), (rj, cj)), i|
+        (subtree_size([ri, ci]) - (subtree_size([rj, cj]) || area)) * (2 * i - path.length + 2)
+      end.sum
+      [score, rand, Layout.new(flow_map)]
+    end.max.last
   end
 
   # modifies a layout such that a crate always exits towards the neighbor
