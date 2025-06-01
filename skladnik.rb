@@ -199,8 +199,8 @@ class Layout
     ].map do |root_ri, root_ci, dir|
       flow_map = self.flow_map.map(&:dup)
       flow_map[root_ri][root_ci] = dir
-      path = self.path([root_ri, root_ci])
-      path[... -1].each_cons(2) do |(ri, ci), (rj, cj)|
+      path = self.path([root_ri, root_ci])[... -1]
+      path.each_cons(2) do |(ri, ci), (rj, cj)|
         flow_map[rj][cj] = case
                            when ri == rj - 1 && ci == cj then ?^
                            when ri == rj && ci == cj + 1 then ?>
@@ -208,8 +208,8 @@ class Layout
                            when ri == rj && ci == cj - 1 then ?<
                            else ?? end
       end
-      score = path.each_cons(2).map.with_index(1) do |((ri, ci), (rj, cj)), i|
-        (subtree_size([ri, ci]) - (subtree_size([rj, cj]) || area)) * (2 * i - path.length + 2)
+      score = ([[0, 0]] + path).each_cons(2).map.with_index(1) do |((ri, ci), (rj, cj)), i|
+        ((subtree_size([ri, ci]) || 0) - subtree_size([rj, cj])) * (2 * i - path.length)
       end.sum
       [score, rand, Layout.new(flow_map)]
     end.max.last
