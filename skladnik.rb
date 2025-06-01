@@ -354,7 +354,11 @@ class Layout
 
       break
     end
-    text_line[-1] = "."
+    if text_line.empty?
+      text_line = "(no change)"
+    else
+      text_line[-1] = "."
+    end
     pif flow_map, text_line
     Layout.new(flow_map)
   end
