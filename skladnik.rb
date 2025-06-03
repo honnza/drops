@@ -801,9 +801,12 @@ class Model
     end
 
     @viewport = nil if IO.console.winsize != @winsize
+    IO.console.cursor = [0, 0]
     if @viewport.nil?
-      IO.console.clear_screen
-    else
+      # hack to erase the screen without scrolling down
+      IO.console.erase_line(2)
+      IO.console.cursor = [1, 0]
+      IO.console.erase_screen(0)
       IO.console.cursor = [0, 0]
     end
 
