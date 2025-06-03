@@ -625,11 +625,12 @@ class Layout
 
     # short for leaf rain - randomly marks places as leaf places such that every place is connected
     # to the exit.through non-leaf places.
-    def frain(w, h, &rng)
+    def frain(w, h, pts = nil, &rng)
       rng ||= ->_{0}
       leaf_map = h.times.map{[false] * w}
       progress = []
-      [*1...h-1].product([*1...w-1]).sort_by{[rng[_1], rand]}.each do |ri, ci|
+      pts ||= [*1...h-1].product([*1...w-1]).sort_by{[rng[_1], rand]}
+      pts.each do |ri, ci|
         leaf_map[ri][ci] = true
         flow_map = [?# * w, *(h - 2).times.map{?# + ?. * (w - 2) + ?#}, ?# * w]
         neighbors = [[ri - 1, ci], [ri, ci + 1], [ri + 1, ci], [ri, ci - 1]]
@@ -746,7 +747,38 @@ class Layout
           [0]
         end
       end
+    end
+
+    def symflattice(w, h); flattice(w, h, true); end
+
+    def flattice(w, h, sym = false)
+      pt_sorted = Array.new(h){Array.new(w, false)}
+      pts = [[rand(1 ... h - 1), rand(1 ... w - 1)]]
+      generators = []
+      generator_pos = []
+      until pts.count == (w - 2) * (h - 2)
+        gi = generator_pos.find_index{_1 < pts.count}
+        if gi.nil?
+          gi = generators.count
+          generators << [rand(-h + 3 .. h - 3), rand(-w + 3 .. w - 3)]
+          generator_pos << 0
+          if sym
+            generators << generators.last.map(&:-@)
+            generator_pos << 0
+          end
+        end
+        gen = generators[gi]
+        old_ri, old_ci = pts[generator_pos[gi]]
+        ri = old_ri + gen[0]
+        ci = old_ci + gen[1]
+        if (1 ... h - 1).include?(ri) && (1 ... w - 1).include?(ci) && !pt_sorted[ri][ci]
+          pts << [ri, ci]
+          pt_sorted[ri][ci] = true
+        end
+        generator_pos[gi] += 1
       end
+      frain w, h, pts
+    end
   end
 end
 
@@ -877,7 +909,7 @@ w, h = case ARGV.length
          exit
        end
 
-layouts = %i{horizontal vertical regular prim pruskal nuskal xyskal bsp cobsp wcbsp frain xyfrain dbt rdbt manhattan}
+layouts = %i{horizontal vertical regular prim pruskal nuskal xyskal bsp cobsp wcbsp frain xyfrain, flattice symflattice manhattan dbt rdbt}
 unless ARGV[0] =~ /^((?:frain-|chordless-|tight-|centered-)*)(#{layouts.join ?|})$/
   puts "first argument should be #{layouts.join ", "}, or frain-, tight-, centered- or chordless- plus one of the preceding"
   exit
