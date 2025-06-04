@@ -806,6 +806,8 @@ class Model
   end
 
   def render(r_range = 0 ... @layout.height, c_range = 0 ... @layout.width)
+    r_range = r_range.min ... @layout.height if r_range.max >= @layout.height
+    c_range = c_range.min ... @layout.width if c_range.max >= @layout.width
     r = @layout.render_cells(r_range, c_range)
     @crates.each_value do |crate|
       ri, ci = crate.pos
@@ -835,11 +837,7 @@ class Model
     @viewport = nil if IO.console.winsize != @winsize
     IO.console.cursor = [0, 0]
     if @viewport.nil?
-      # hack to erase the screen without scrolling down
       IO.console.erase_line(2)
-      IO.console.cursor = [1, 0]
-      IO.console.erase_screen(0)
-      IO.console.cursor = [0, 0]
     end
 
     vr, vc = @viewport
@@ -915,9 +913,10 @@ unless ARGV[0] =~ /^((?:frain-|chordless-|tight-|centered-)*)(#{layouts.join ?|}
   exit
 end
 
+model = nil
 begin
-  puts "\e[?25l"
   IO.console.clear_screen
+  puts "\e[?25l\e[?1049h"
 
   layout = case $2
            when "horizontal" then Layout.regular_3 w, h, :horizontal
@@ -949,5 +948,12 @@ begin
   end
 ensure
   IO.console.cursor = [h, 0]
-  puts "\e[?25h"
+  puts "\e[?25h\e[?1049l"
+  if model
+    n_slices = model.layout.width.fdiv(IO.console.winsize[1] / 2).ceil
+    slice_width = model.layout.width.fdiv(n_slices).ceil
+    (0 ... n_slices).each do |i|
+      puts model.render(0 ... model.layout.height, slice_width * i ... slice_width * (i + 1)).join("\n")
+    end
+  end
 end
