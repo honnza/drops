@@ -45,7 +45,8 @@ def next_move(box, i)
     new_box[i] = box[i + 3]
     new_box[i + 3] = box[i]
   when "W"
-    ([i] + neighbors_4).each{new_box[_1] = box[_1].tr(box[i] + "A", "A" + box[i])}
+    new_box[i] = "A"
+    neighbors_4.each{new_box[_1] = box[_1].tr(box[i] + "A", "A" + box[i])}
   when "Y"
     return if is_n
     new_box[i] = box[i - 3]
