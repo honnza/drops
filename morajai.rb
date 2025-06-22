@@ -2,14 +2,16 @@ def next_move(box, i)
   is_n = i <= 2
   is_e = i % 3 == 2
   is_s = i >= 6
-  is_w = i % 3 == 0 
-  neighbors_4 = [
+  is_w = i % 3 == 0
+  $neighbors_4 ||= []
+  $neighbors_4[i] ||= [
     (i - 3 unless is_n),
     (i + 1 unless is_e),
     (i + 3 unless is_s),
     (i - 1 unless is_w)
   ].compact
-  neighbors_8 = [
+  $neighbors_8 ||= []
+  $neighbors_8[i] ||= [
     (i - 4 unless is_n || is_w),
     (i - 3 unless is_n),
     (i - 2 unless is_n || is_e),
@@ -31,13 +33,14 @@ def next_move(box, i)
     row = i - i % 3
     new_box[row, 3] = box[row + 2] + box[row, 2]
   when "O"
-    tally = neighbors_4.map{box[_1]}.tally
+    tally = $neighbors_4[i].map{box[_1]}.tally
     max = tally.values.max
     return if tally.values.count(max) > 1
     new_box[i] = tally.invert[max]
   when "P"
-    new_neighbors = neighbors_8[1 ...] + neighbors_8[... 1]
-    neighbors_8.each_index{new_box[new_neighbors[_1]] = box[neighbors_8[_1]]}
+    $new_neighbors ||= []
+    $new_neighbors[i] ||= $neighbors_8[i][1 ...] + $neighbors_8[i][... 1]
+    $neighbors_8[i].each_index{new_box[$new_neighbors[i][_1]] = box[$neighbors_8[i][_1]]}
   when "R"
     new_box.tr!("KW", "RK")
   when "V"
@@ -46,7 +49,7 @@ def next_move(box, i)
     new_box[i + 3] = box[i]
   when "W"
     new_box[i] = "A"
-    neighbors_4.each{new_box[_1] = box[_1].tr(box[i] + "A", "A" + box[i])}
+    $neighbors_4[i].each{new_box[_1] = box[_1].tr(box[i] + "A", "A" + box[i])}
   when "Y"
     return if is_n
     new_box[i] = box[i - 3]
