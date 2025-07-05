@@ -749,11 +749,14 @@ class Layout
       end
     end
 
-    def symflattice(w, h); flattice(w, h, true); end
+    def flattice(w, h); lattice(w, h, method: :frain, sym: false); end
+    def lattiskal(w, h); lattice(w, h, method: :pruskal, sym: false); end
+    def symflattice(w, h); lattice(w, h, method: :frain, sym: true); end
 
-    def flattice(w, h, sym = false)
-      pt_sorted = Array.new(h){Array.new(w, false)}
+    def lattice(w, h, method: , sym: false)
+      pt_ix = Array.new(h){Array.new(w, nil)}
       pts = [[rand(1 ... h - 1), rand(1 ... w - 1)]]
+      pt_ix[pts[0][0]][pts[0][1]] = 0
       generators = []
       generator_pos = []
       until pts.count == (w - 2) * (h - 2)
@@ -771,13 +774,17 @@ class Layout
         old_ri, old_ci = pts[generator_pos[gi]]
         ri = old_ri + gen[0]
         ci = old_ci + gen[1]
-        if (1 ... h - 1).include?(ri) && (1 ... w - 1).include?(ci) && !pt_sorted[ri][ci]
+        if (1 ... h - 1).include?(ri) && (1 ... w - 1).include?(ci) && pt_ix[ri][ci].nil?
+          pt_ix[ri][ci] = pts.count
           pts << [ri, ci]
-          pt_sorted[ri][ci] = true
         end
         generator_pos[gi] += 1
       end
-      frain w, h, pts
+
+      case method
+      when :frain then frain(w, h){|ri, ci| pt_ix[ri][ci]}
+      when :pruskal then pruskal(w, h){|(ri, ci), (rj, cj)| [ri.nil? ? 0 : -pt_ix[ri][ci], -pt_ix[rj][cj]].sort}
+      end
     end
   end
 end
@@ -815,7 +822,7 @@ class Model
       r[ri - r_range.first][ci - c_range.first] = crate.ascii
     end
     ri, ci = @worker_pos
-    r[ri - r_range.first][ci - c_range.first] = "👷" unless ri.nil?
+    r[ri - r_range.first][ci - c_range.first] = "👷" if r_range.include?(ri) && c_range.include?(ci)
     r.map(&:join)
   end
 
@@ -907,7 +914,7 @@ w, h = case ARGV.length
          exit
        end
 
-layouts = %i{horizontal vertical regular prim pruskal nuskal xyskal bsp cobsp wcbsp frain xyfrain, flattice symflattice manhattan dbt rdbt}
+layouts = %i{horizontal vertical regular prim pruskal nuskal xyskal bsp cobsp wcbsp frain xyfrain, flattice symflattice lattiskal manhattan dbt rdbt}
 unless ARGV[0] =~ /^((?:frain-|chordless-|tight-|centered-)*)(#{layouts.join ?|})$/
   puts "first argument should be #{layouts.join ", "}, or frain-, tight-, centered- or chordless- plus one of the preceding"
   exit
