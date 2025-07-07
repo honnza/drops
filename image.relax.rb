@@ -16,8 +16,11 @@ def display w, h, buf
   end
 end
 
+wrapping = ARGV.include? "-w"
+ARGV.delete "-w"
+
 if ARGV.length != 2 || !%w{normal linear}.include?(ARGV[0])
-  puts "usage: ruby image-relax [filename] [method]"
+  puts "usage: ruby image-relax [-w] [filename] [method]"
   exit
 end
 
@@ -32,45 +35,46 @@ buf = img.pixels.flat_map do
 end
 diff_buf = buf.dup
 
+
 begin
   puts "\e[?25l\e[?1049h"
-  loop do
+  (0 ..).each do |t|
     diff_buf.map!{0.0}
     case ARGV[0]
     when "normal"
-      (0 ... img.height - 1).each do |ri|
+      (0 ... img.height - (wrapping ? 0 : 1)).each do |ri|
         (0 ... img.width).each do |ci|
           (0 ... 3).each do |ch|
             err = buf[3 * (img.width * ri + ci) + ch] -
-                  buf[3 * (img.width * (ri + 1) + ci) + ch]
+                  buf[3 * (img.width * ((ri + 1) % img.height) + ci) + ch]
             diff_buf[3 * (img.width * ri + ci) + ch] -= err
-            diff_buf[3 * (img.width * (ri + 1) + ci) + ch] += err
+            diff_buf[3 * (img.width * ((ri + 1) % img.height) + ci) + ch] += err
           end
         end
       end
       (0 ... img.height).each do |ri|
-        (0 ... img.width - 1).each do |ci|
+        (0 ... img.width - (wrapping ? 0 : 1)).each do |ci|
           (0 ... 3).each do |ch|
             err = buf[3 * (img.width * ri + ci) + ch] -
-                  buf[3 * (img.width * ri + (ci + 1)) + ch]
+                  buf[3 * (img.width * ri + ((ci + 1) % img.width)) + ch]
             diff_buf[3 * (img.width * ri + ci) + ch] -= err
-            diff_buf[3 * (img.width * ri + (ci + 1)) + ch] += err
+            diff_buf[3 * (img.width * ri + ((ci + 1) % img.width)) + ch] += err
           end
         end
       end
     when "linear"
-      (0 ... img.height - 1).each do |ri|
-        (0 ... img.width - 1).each do |ci|
+      (0 ... img.height - (wrapping ? 0 : 1)).each do |ri|
+        (0 ... img.width - (wrapping ? 0 : 1)).each do |ci|
           (0 ... 3).each do |ch|
             err = buf[3 * (img.width * ri + ci) + ch] -
-                  buf[3 * (img.width * (ri + 1) + ci) + ch] -
-                  buf[3 * (img.width * ri + (ci + 1)) + ch] +
-                  buf[3 * (img.width * (ri + 1) + (ci + 1)) + ch]
+                  buf[3 * (img.width * ((ri + 1) % img.height) + ci) + ch] -
+                  buf[3 * (img.width * ri + ((ci + 1) % img.width)) + ch] +
+                  buf[3 * (img.width * ((ri + 1) % img.height) + ((ci + 1) % img.width)) + ch]
 
             diff_buf[3 * (img.width * ri + ci) + ch] -= err
-            diff_buf[3 * (img.width * (ri + 1) + ci) + ch] += err
-            diff_buf[3 * (img.width * ri + (ci + 1)) + ch] += err
-            diff_buf[3 * (img.width * (ri + 1) + (ci + 1)) + ch] -= err
+            diff_buf[3 * (img.width * ((ri + 1) % img.height) + ci) + ch] += err
+            diff_buf[3 * (img.width * ri + ((ci + 1) % img.width)) + ch] += err
+            diff_buf[3 * (img.width * ((ri + 1) % img.height) + ((ci + 1) % img.width)) + ch] -= err
           end
         end
       end
@@ -82,7 +86,7 @@ begin
       end
     end
     IO.console.cursor = [0, 0]
-    display img.width, img.height, buf
+    display img.width, img.height, buf if t % 16 == 0
   end
 rescue Interrupt
 ensure
