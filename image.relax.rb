@@ -1,14 +1,15 @@
 require "io/console"
 require "chunky_png"
 
-def display w, h, buf
+def display w, h, buf, gamma
+  igamma = 1 / gamma
   (0 ... (h + 1)/2).each do |hri|
     (0 ... w).each do |ci|
-      top_r, top_g, top_b = buf[3 * (w * 2 * hri + ci), 3]
+      top_r, top_g, top_b = buf[3 * (w * 2 * hri + ci), 3].map{_1 ** igamma}
       bot_r, bot_g, bot_b = if hri * 2 + 1 == h
                               [0, 0, 0]
                             else 
-                              buf[3 * (w * (2 * hri + 1) + ci), 3]
+                              buf[3 * (w * (2 * hri + 1) + ci), 3].map{_1 ** igamma}
                             end
       print "\e[38;2;%d;%d;%d;48;2;%d;%d;%dm\u2580" % [top_r, top_g, top_b, bot_r, bot_g, bot_b]
     end
@@ -18,19 +19,24 @@ end
 
 wrapping = ARGV.include? "-w"
 ARGV.delete "-w"
+gamma = ARGV.find{/-g(\d+(?:\.\d+)?)/ =~ _1}
+ARGV.delete gamma
+gamma = gamma.nil? ? 1.0 : $1.to_f
 
-if ARGV.length != 2 || !%w{normal linear}.include?(ARGV[0])
-  puts "usage: ruby image-relax [-w] [filename] [method]"
+if ARGV.length != 2 || gamma == 0.0 || !%w{normal linear}.include?(ARGV[0])
+  puts "usage: ruby image-relax [-g1.0] [-w] [method] [filename]"
+  puts "-g sets the exponent for gamma correction"
+  puts "-w sets wrapping mode on"
   exit
 end
 
 img = ChunkyPNG::Canvas.from_file ARGV[1]
 mask = img.pixels.map{_1 & 255 > 127}
-buf = img.pixels.flat_map do
-  if _1 & 255 > 127
-    [_1 >> 24 & 255, _1 >> 16 & 255, _1 >> 8 & 255].map &:to_f
+buf = img.pixels.flat_map do |c|
+  if c & 255 > 127
+    [c >> 24 & 255, c >> 16 & 255, c >> 8 & 255].map{_1.to_f ** gamma}
   else
-    [rand * 255, rand * 255, rand * 255]
+    [127 ** gamma] * 3
   end
 end
 diff_buf = buf.dup
@@ -79,17 +85,18 @@ begin
         end
       end
     end
+    max = 255 ** gamma
     buf.each_index do
       unless mask[_1 / 3]
         buf[_1] += diff_buf[_1] / 8
-        buf[_1] = buf[_1].clamp(0.0, 255.0)
+        buf[_1] = buf[_1].clamp(0.0, max)
       end
     end
     IO.console.cursor = [0, 0]
-    display img.width, img.height, buf if t % 16 == 0
+    display img.width, img.height, buf, gamma if t % 16 == 0
   end
 rescue Interrupt
 ensure
   puts "\e[?25h\e[?1049l"
-  display img.width, img.height, buf
+  display img.width, img.height, buf, gamma
 end
