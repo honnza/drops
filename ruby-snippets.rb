@@ -959,7 +959,7 @@ def bar(x, n: :n4, f: 0.1, modes: [0, 1, 2], eigen: true)
        .scan(/.{10}/).join("/")
   p x
   if eigen
-    r = relax_rescale_eigen(x, n:).lazy
+    r = relax_rescale_eigen(x, n:).lazy.map{sleep 1 if _1[:delta_1] > 1e-10; _1}
   else
     r = []
     until r.select{_1[:delta_1] > 1e-10}.length > modes.max + 1
