@@ -18,19 +18,21 @@ def progress_bar progress, text = "", width = IO.console.winsize[1] - 1
   end
 end
 
-def display_buf w, h, buf, gamma
-  igamma = 1 / gamma
+def render_fn w, h, &fn
   (0 ... (h + 1)/2).each do |hri|
     (0 ... w).each do |ci|
-      top_r, top_g, top_b = buf[3 * (w * 2 * hri + ci), 3].map{_1 ** igamma}
-      bot_r, bot_g, bot_b = if hri * 2 + 1 == h
-                              [0, 0, 0]
-                            else 
-                              buf[3 * (w * (2 * hri + 1) + ci), 3].map{_1 ** igamma}
-                            end
+      top_r, top_g, top_b = fn[hri * 2, ci]
+      bot_r, bot_g, bot_b = hri * 2 + 1 == h ? [0, 0, 0] : fn[hri * 2 + 1, ci]
       print "\e[38;2;%d;%d;%d;48;2;%d;%d;%dm\u2580" % [top_r, top_g, top_b, bot_r, bot_g, bot_b]
     end
     puts "\e[0m"
+  end
+end
+
+def display_buf w, h, buf, gamma
+  igamma = 1 / gamma
+  render_fn w, h do |ri, ci|
+    buf[3 * (w * ri + ci), 3].map{_1 ** igamma}
   end
 end
 
