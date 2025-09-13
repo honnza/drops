@@ -23,7 +23,8 @@ def render_fn w, h, &fn
     (0 ... w).each do |ci|
       top_r, top_g, top_b = fn[hri * 2, ci]
       bot_r, bot_g, bot_b = hri * 2 + 1 == h ? [0, 0, 0] : fn[hri * 2 + 1, ci]
-      print "\e[38;2;%d;%d;%d;48;2;%d;%d;%dm\u2580" % [top_r, top_g, top_b, bot_r, bot_g, bot_b]
+      print "\e[38;2;%d;%d;%d;48;2;%d;%d;%dm\u2580" %
+        [top_r, top_g, top_b, bot_r, bot_g, bot_b].map{_1.clamp(0..255)}
     end
     puts "\e[0m"
   end
@@ -32,12 +33,22 @@ end
 def display_buf w, h, buf, gamma
   igamma = 1 / gamma
   render_fn w, h do |ri, ci|
-    buf[3 * (w * ri + ci), 3].map{_1 ** igamma}
+    buf[3 * (w * ri + ci), 3].map{_1.clamp(0..) ** igamma}
+  end
+end
+
+def display_diff w, h, buf, gamma
+  buf_max = buf.lazy.map{_1.abs}.max
+  igamma = 1 / gamma
+  render_fn w, h do |ri, ci|
+    buf[3 * (w * ri + ci), 3].map{(_1 / buf_max + 1) / 2 ** igamma * 256}
   end
 end
 
 wrapping = ARGV.include? "-w"
 ARGV.delete "-w"
+clamp = ARGV.include? "-c"
+ARGV.delete "-c"
 gamma = ARGV.find{/-g(\d+(?:\.\d+)?)/ =~ _1}
 ARGV.delete gamma
 gamma = gamma.nil? ? 1.0 : $1.to_f
@@ -107,15 +118,21 @@ begin
     max = 255 ** gamma
     max_diff = 0.0
     buf.each_index do
-      unless mask[_1 / 3]
-        buf[_1] += diff_buf[_1] / 8
-        buf[_1] = buf[_1].clamp(0.0, max)
-        max_diff = diff_buf[_1].abs if max_diff < diff_buf[_1].abs
+      if mask[_1 / 3]
+        diff_buf[_1] = 0
       end
     end
+    buf.each_index do
+      buf[_1] += diff_buf[_1] / 8
+      buf[_1] = buf[_1].clamp(0.0, max) if clamp
+      diff_buf[_1] = 0 if buf[_1] == 0 || buf[_1] == max
+      max_diff = diff_buf[_1].abs if max_diff < diff_buf[_1].abs
+    end
     IO.console.cursor = [0, 0]
-    if t % 16 == 0
+    if t % 64 == 0
       display_buf img.width, img.height, buf, gamma
+      puts
+      display_diff img.width, img.height, diff_buf, gamma
       puts progress_bar Math::log(max_diff / max, Float::EPSILON), max_diff.to_s
     end
   end
