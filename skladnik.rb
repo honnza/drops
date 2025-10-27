@@ -751,9 +751,11 @@ class Layout
 
     def flattice(w, h); lattice(w, h, method: :frain, sym: false); end
     def lattiskal(w, h); lattice(w, h, method: :pruskal, sym: false); end
+    def xylattiskal(w, h); lattice(w, h, method: :xy, sym: false); end
     def symflattice(w, h); lattice(w, h, method: :frain, sym: true); end
 
     def lattice(w, h, method: , sym: false)
+      method = [:x, :y].sample if method == :xy
       pt_ix = Array.new(h){Array.new(w, nil)}
       pts = [[rand(1 ... h - 1), rand(1 ... w - 1)]]
       pt_ix[pts[0][0]][pts[0][1]] = 0
@@ -763,7 +765,16 @@ class Layout
         gi = generator_pos.find_index{_1 < pts.count}
         if gi.nil?
           gi = generators.count
-          generators << [rand(-h + 3 .. h - 3), rand(-w + 3 .. w - 3)]
+          generators <<
+            case method
+            when :x
+              method = :y
+              [rand(4 .. h - 3) * [-1, 1].sample, 0]
+            when :y
+              method = :x
+              [0, rand(4 .. w - 3) * [-1, 1].sample]
+            when :frain, :pruskal then [rand(-h + 3 .. h - 3), rand(-w + 3 .. w - 3)]
+            end
           generator_pos << 0
           if sym
             generators << generators.last.map(&:-@)
@@ -783,7 +794,7 @@ class Layout
 
       case method
       when :frain then frain(w, h){|ri, ci| pt_ix[ri][ci]}
-      when :pruskal then pruskal(w, h){|(ri, ci), (rj, cj)| [ri.nil? ? 0 : -pt_ix[ri][ci], -pt_ix[rj][cj]].sort}
+      when :pruskal, :x, :y then pruskal(w, h){|(ri, ci), (rj, cj)| [ri.nil? ? 0 : -pt_ix[ri][ci], -pt_ix[rj][cj]].sort}
       end
     end
   end
@@ -914,7 +925,7 @@ w, h = case ARGV.length
          exit
        end
 
-layouts = %i{horizontal vertical regular prim pruskal nuskal xyskal bsp cobsp wcbsp frain xyfrain, flattice symflattice lattiskal manhattan dbt rdbt}
+layouts = %i{horizontal vertical regular prim pruskal nuskal xyskal bsp cobsp wcbsp frain xyfrain flattice xylattiskal symflattice lattiskal manhattan dbt rdbt}
 unless ARGV[0] =~ /^((?:frain-|chordless-|tight-|centered-)*)(#{layouts.join ?|})$/
   puts "first argument should be #{layouts.join ", "}, or frain-, tight-, centered- or chordless- plus one of the preceding"
   exit
