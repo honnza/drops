@@ -119,10 +119,10 @@ class Triangle
                 when z_gap > z_metric[@ns[1], @ns[2]] && z_gap > z_metric[@ns[2], @ns[0]] then 2
                 else nil
                 end
-    @priority = [ # not 1x1; maximize gradient; minimize perimeter; top to bottom
+    @priority = [ # not 1x1; maximize gradient; maximize perimeter; top to bottom
       (@es[0].dot(@es[0]) < 3 && @es[1].dot(@es[1]) < 3 && @es[2].dot(@es[2]) < 3) ? 0 : 1,
       z_gap,  
-      (z_gap > 0 ? -1 : 1) * @es.map(&:norm).sum,
+      @es.map(&:norm).sum,
       pts.sort.flatten.map(&:-@)
     ]
     puts self
