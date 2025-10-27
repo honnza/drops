@@ -182,18 +182,37 @@ class Triangle
   def inspect; to_s; end
 end
 
+def srgb2oklab(r, g, b)
+  r = (r / 255.0) ** 2.2; g = (g / 255.0) ** 2.2; b = (b / 255.0) ** 2.2
+  l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b
+  m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b
+  s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b
+  l **= 1/3r; m **= 1/3r; s **= 1/3r
+  [
+    0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+    1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+    0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s
+  ]
+end
 
 def voronoi_subdivide(xs, ys, reflexive = false, z_metric: -> a, b {(a - b).abs})
 
   z_metric = case z_metric
              when :discrete then -> x, y {x == y ? 0 : 1}
              when :linear then -> x, y {(x-y).abs}
-             when :rgb then lambda do |x, y|
+             when :srgb then lambda do |x, y|
                a, b, c, *_ = x.digits(1000) + [0, 0]
                d, e, f, *_ = y.digits(1000) + [0, 0]
                (a - d) ** 2 + (b - e) ** 2 + (c - f) ** 2
              end
-             when :pcd_rgb then lambda do |x, y|
+             when :oklab then lambda do |x, y|
+               a, b, c, *_ = x.digits(1000) + [0, 0]
+               d, e, f, *_ = y.digits(1000) + [0, 0]
+               a, b, c = srgb2oklab(a, b, c)
+               d, e, f = srgb2oklab(d, e, f)
+               (a - d) ** 2 + (b - e) ** 2 + (c - f) ** 2
+             end
+             when :redmean then lambda do |x, y|
                a, b, c, *_ = x.digits(1000) + [0, 0]
                d, e, f, *_ = y.digits(1000) + [0, 0]
                rm = (a + d) / 512.0
@@ -381,7 +400,7 @@ if __FILE__ == $0
         exit
       end
       w, h = md[1..].to_a.map{_1&.to_i}
-      unless %w{discrete linear pcd_rgb rgb xxyy}.include?(ARGV[2])
+      unless %w{discrete linear srgb redmean oklab xxyy}.include?(ARGV[2])
         puts "#{ARGV[2]} isn't a recognized z metric method"
         exit
       end
@@ -401,8 +420,9 @@ gen (method) (w)x(h)/(bh)x(bw) - shuffle a (bw)x(bh) square grid, then prints th
 sample voronoi (method) (w)x(h) - start at the four corners of a (w)x(h) rectangle. Prompt the z value for each. Repeatedly pick and prompt points in the middle of the greatest z gap between nearby points. If height is not specifiecd, start at the three corners of a (w)x(w) upper diagonal triagle instead.
     discrete - any two distinct z values are considered equally distinct
     linear - z values are interpreted as decimal values on a linear scale.
-    rgb - z values are interpreted as triples of three-digit numbers and their distance is measured using the Euclidean metric.
-    pcd_rgb - z values arre interpreted as RGB triplets, but human perception is taken into account when determining distance.
+    srgb - z values are interpreted as triples of three-digit numbers and their distance is measured using the Euclidean metric.
+    redmean - z values are interpreted as RGB triplets, and their distance is measured using a simple metric.
+    oklab - z values are interpreted as RGB triplets, and their distance is measured in the oklab color space.
     xxyy - zvalues are interpreted as pairs of two-digit numbers in base 8 and their distance is measured using the Euclidean metric.
 sample shuffle (w)x(h) - all pairs of a (w)x(h) rectangle / (w)x(w) triangle are taken in random order
 sample smooth (w)x(h) - pairs are taken in random order, but priority is taken to endpoints that have been used fewer times already
