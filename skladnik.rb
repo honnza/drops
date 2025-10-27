@@ -134,7 +134,7 @@ class Layout
 
   def render_cells(r_range, c_range)
     r = @flow_map[r_range].map do |row|
-      row[c_range].chars.map{|cell| cell == "#" ? "\e[47m  \e[0m" : ".."}
+      row[c_range].chars.map{|cell| cell == "#" ? "\e[100m  \e[0m" : ".."}
     end
     exits.each do |ri, ci|
       next unless r_range.include?(ri) && c_range.include?(ci)
