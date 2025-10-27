@@ -953,10 +953,18 @@ def foo(x, limit = nil, filter: nil, n: :n4, f: 0.1, grid: nil, hicolor: false, 
 end
 
 def bar(x, n: :n4, f: 0.1, modes: [0, 1, 2], eigen: true)
-  x = x.gsub(/([0-9a-v]{2})([A-J])/){$1 * ($2.ord - "A".ord + 1)}
-       .gsub(/[0-9a-v]/){"%05b" % _1.to_i(32)}
-       .tr("01", " ?")
-       .scan(/.{10}/).join("/")
+  x = x
+    .gsub(/([LBR])([0-9a-vC-J]+)/){
+      case $1
+      when "L" then $2.gsub /[0-9a-v]/, '\&v'
+      when "B" then $2
+      when "R" then $2.gsub /[0-9a-v]/, 'v\&'
+      end
+    }
+    .gsub(/([0-9a-v]{2})([C-J])/){$1 * ($2.ord - "A".ord + 1)}
+    .gsub(/[0-9a-v]/){"%05b" % _1.to_i(32)}
+    .tr("01", " ?")
+    .scan(/.{10}/).join("/")
   p x
   if eigen
     r = relax_rescale_eigen(x, n:).lazy.map{sleep 1 if _1[:delta_1] > 1e-10; _1}
