@@ -201,20 +201,20 @@ def voronoi_subdivide(xs, ys, reflexive = false, z_metric: -> a, b {(a - b).abs}
              when :discrete then -> x, y {x == y ? 0 : 1}
              when :linear then -> x, y {(x-y).abs}
              when :srgb then lambda do |x, y|
-               a, b, c, *_ = x.digits(1000) + [0, 0]
-               d, e, f, *_ = y.digits(1000) + [0, 0]
+               c, b, a, *_ = x.digits(1000) + [0, 0]
+               f, e, d, *_ = y.digits(1000) + [0, 0]
                (a - d) ** 2 + (b - e) ** 2 + (c - f) ** 2
              end
              when :oklab then lambda do |x, y|
-               a, b, c, *_ = x.digits(1000) + [0, 0]
-               d, e, f, *_ = y.digits(1000) + [0, 0]
+               c, b, a, *_ = x.digits(1000) + [0, 0]
+               f, e, d, *_ = y.digits(1000) + [0, 0]
                a, b, c = srgb2oklab(a, b, c)
                d, e, f = srgb2oklab(d, e, f)
                (a - d) ** 2 + (b - e) ** 2 + (c - f) ** 2
              end
              when :redmean then lambda do |x, y|
-               a, b, c, *_ = x.digits(1000) + [0, 0]
-               d, e, f, *_ = y.digits(1000) + [0, 0]
+               c, b, a, *_ = x.digits(1000) + [0, 0]
+               f, e, d, *_ = y.digits(1000) + [0, 0]
                rm = (a + d) / 512.0
                (2 + rm) * (a - d) ** 2 + 4 * (b - e) ** 2 + (3 - rm) * (c - f) ** 2
              end
