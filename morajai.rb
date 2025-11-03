@@ -124,6 +124,7 @@ exit if solvable.empty?
 puts "solution length: #{solve_cost[start]}"
 
 node = start
+solution = ""
 loop do
   puts node.scan(/.../).join("/")
   if solve_cost[node] == 0
@@ -133,5 +134,8 @@ loop do
     i = (0 .. 8).find{|i| solve_cost[next_move(node, i)] == solve_cost[node] - 1}
     puts fancy_box(node, i)
     node = next_move(node, i)
+    solution += "#{i + 1}"
+    sleep 2
   end
 end
+puts "solution: #{solution}"
