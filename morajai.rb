@@ -119,7 +119,7 @@ solvable.each do |to|
   end
 end
 
-puts "solvable states: #{solvable.count}"
+puts "solvable states: #{solvable.count} (#{"%.2f" % (100.0 * solvable.count / reachable.count)}%)"
 exit if solvable.empty?
 puts "solution length: #{solve_cost[start]}"
 
