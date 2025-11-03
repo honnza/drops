@@ -42,7 +42,8 @@ def next_move(box, i)
     $new_neighbors[i] ||= $neighbors_8[i][1 ...] + $neighbors_8[i][... 1]
     $neighbors_8[i].each_index{new_box[$new_neighbors[i][_1]] = box[$neighbors_8[i][_1]]}
   when "R"
-    new_box.tr!("KW", "RK")
+    new_box.tr!("K", box[i])
+    new_box.tr!("W", "K")
   when "V"
     return if is_s
     new_box[i] = box[i + 3]
