@@ -103,10 +103,12 @@ end
 puts "reachable states: #{reachable.count}"
 
 solve_cost = {}
+solve_count = {}
 solvable = []
 reachable.each do |box|
   if box[0] == goal[0] && box[2] == goal[1] && box[6] == goal[2] && box[8] == goal[3]
     solve_cost[box] = 0
+    solve_count[box] = 1
     solvable << box
   end
 end
@@ -114,14 +116,17 @@ solvable.each do |to|
   prev_nodes[to].each do |from|
     unless solve_cost[from]
       solve_cost[from] = solve_cost[to] + 1
+      solve_count[from] = 0
       solvable << from
     end
+    solve_count[from] += solve_count[to] if solve_cost[from] == solve_cost[to] + 1
   end
 end
 
 puts "solvable states: #{solvable.count} (#{"%.2f" % (100.0 * solvable.count / reachable.count)}%)"
 exit if solvable.empty?
 puts "solution length: #{solve_cost[start]}"
+puts "minimum length solutions: #{solve_count[start]}"
 
 node = start
 solution = ""
