@@ -98,39 +98,41 @@ reachable.each.with_index do |from, t|
       reachable << to unless to.nil?
       prev_nodes[to] = []
     end
-    prev_nodes[to] << from
+    prev_nodes[to] << [from, i]
   end
 end
-puts "reachable states: #{reachable.count}"
+puts "#{reachable.count} reachable states"
 
 solve_cost = {}
-solve_count = {}
+solutions = {}
 solvable = []
 reachable.each do |box|
   if box[0] == goal[0] && box[2] == goal[1] && box[6] == goal[2] && box[8] == goal[3]
     solve_cost[box] = 0
-    solve_count[box] = 1
+    solutions[box] = [""]
     solvable << box
   end
 end
 solvable.each do |to|
-  prev_nodes[to].each do |from|
+  prev_nodes[to].each do |from, i|
     unless solve_cost[from]
       solve_cost[from] = solve_cost[to] + 1
-      solve_count[from] = 0
+      solutions[from] = []
       solvable << from
     end
-    solve_count[from] += solve_count[to] if solve_cost[from] == solve_cost[to] + 1
+    solutions[from] += solutions[to].map{(i + 1).to_s + _1} if solve_cost[from] == solve_cost[to] + 1
   end
 end
 
-puts "solvable states: #{solvable.count} (#{"%.2f" % (100.0 * solvable.count / reachable.count)}%)"
+puts "#{solvable.count} solvable states (#{"%.2f" % (100.0 * solvable.count / reachable.count)}%)"
 exit if solvable.empty?
 puts "solution length: #{solve_cost[start]}"
-puts "minimum length solutions: #{solve_count[start]}"
+puts
+puts "#{solutions[start].count} minimum length solutions:"
+puts solutions[start]
+STDIN.gets
 
 node = start
-solution = ""
 loop do
   puts node.scan(/.../).join("/")
   if solve_cost[node] == 0
@@ -140,8 +142,6 @@ loop do
     i = (0 .. 8).find{|i| solve_cost[next_move(node, i)] == solve_cost[node] - 1}
     puts fancy_box(node, i)
     node = next_move(node, i)
-    solution += "#{i + 1}"
     sleep 2
   end
 end
-puts "solution: #{solution}"
