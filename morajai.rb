@@ -73,6 +73,14 @@ def fancy_box(box, i)
   end.join("\n\n")
 end
 
+def solution_score(solution)
+  solution.chars.each_cons(2).map do |a, b|
+    a = a.to_i - 1
+    b = b.to_i - 1
+    ((a / 3 - b / 3) ** 2 + (a % 3 - b % 3) ** 2) ** 0.5
+  end.sum
+end
+
 begin
   raise "expected exactly one argument" unless ARGV.count == 1
   unless %r{^(?<goal>([ABGKOPRVWY]|[ABGKOPRVWY]{4}))(?<start>(?:/[ABGKOPRVWY]{3}){3})$}i =~ ARGV[0]
@@ -129,7 +137,7 @@ exit if solvable.empty?
 puts "solution length: #{solve_cost[start]}"
 puts
 puts "#{solutions[start].count} minimum length solutions:"
-puts solutions[start]
+solutions[start].each {puts "%s | score: %2.2f" % [_1, solution_score(_1)]}
 STDIN.gets
 
 node = start
