@@ -150,7 +150,7 @@ puts "solution length: #{solve_cost[start]}"
 STDIN.gets
 solutions.sort_by!{[solution_score(_1), _1]}.reverse!
 solutions.each {puts "%s | score: %2.2f" % [_1, solution_score(_1)]}
-puts "#{solutions.count} minimum length solutions"
+puts "#{solutions.count} minimum length solution#{solutions.count == 1 ? "" : "s"}"
 STDIN.gets
 
 node = start
