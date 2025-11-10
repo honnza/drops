@@ -121,7 +121,8 @@ reachable.each do |box|
     solvable << box
   end
 end
-solvable.each do |to|
+solvable.each.with_index do |to, t|
+  puts "%d/%d %2.2f%%" % [t, solvable.count, t.to_f / solvable.count * 100] if t % 4096 == 0 && t > 0
   prev_nodes[to].each do |from, i|
     unless solve_cost[from]
       solve_cost[from] = solve_cost[to] + 1
