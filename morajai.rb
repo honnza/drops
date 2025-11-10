@@ -135,21 +135,21 @@ end
 puts "#{solvable.count} solvable states (#{"%.2f" % (100.0 * solvable.count / reachable.count)}%)"
 exit if solvable.empty?
 puts "solution length: #{solve_cost[start]}"
-puts
-puts "#{solutions[start].count} minimum length solutions:"
+STDIN.gets
+solutions[start].sort_by!{[solution_score(_1), _1]}.reverse!
 solutions[start].each {puts "%s | score: %2.2f" % [_1, solution_score(_1)]}
+puts "#{solutions[start].count} minimum length solutions"
 STDIN.gets
 
 node = start
-loop do
+solutions[start].last.chars.each do |i|
+  puts
   puts node.scan(/.../).join("/")
-  if solve_cost[node] == 0
-    puts fancy_box(node, nil)
-    break
-  else
-    i = (0 .. 8).find{|i| solve_cost[next_move(node, i)] == solve_cost[node] - 1}
-    puts fancy_box(node, i)
-    node = next_move(node, i)
-    sleep 2
-  end
+  i = i.to_i - 1
+  puts fancy_box(node, i)
+  node = next_move(node, i)
+  sleep 2
 end
+puts
+puts node.scan(/.../).join("/")
+puts fancy_box(node, nil)
