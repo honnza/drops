@@ -60,16 +60,6 @@ def next_move(box, i)
   new_box unless new_box == box
 end
 
-begin
-  raise "expected exactly one argument" unless ARGV.count == 1
-  unless %r{^(?<goal>([ABGKOPRVWY]|[ABGKOPRVWY]{4}))(?<start>(?:/[ABGKOPRVWY]{3}){3})$}i =~ ARGV[0]
-    raise "expected format: goal/top row/middle row/bottom row, all left to right"
-  end
-rescue
-  puts $!
-  exit
-end
-
 PLTE = {?A => [127, 127, 127], ?B => [0, 127, 255],   ?G => [0, 255, 0],
         ?O => [255, 128, 0],   ?P => [255, 127, 255], ?R => [255, 0, 0],
         ?V => [127, 0, 255],   ?W => [255, 255, 255], ?Y => [255, 255, 0],
@@ -81,6 +71,16 @@ def fancy_box(box, i)
       row + col == i ? "[#{tile}]" : " #{tile} "
     end.join
   end.join("\n\n")
+end
+
+begin
+  raise "expected exactly one argument" unless ARGV.count == 1
+  unless %r{^(?<goal>([ABGKOPRVWY]|[ABGKOPRVWY]{4}))(?<start>(?:/[ABGKOPRVWY]{3}){3})$}i =~ ARGV[0]
+    raise "expected format: goal/top row/middle row/bottom row, all left to right"
+  end
+rescue
+  puts $!
+  exit
 end
 
 start.tr!("/", "").upcase!
