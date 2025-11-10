@@ -106,44 +106,55 @@ reachable.each.with_index do |from, t|
       reachable << to unless to.nil?
       prev_nodes[to] = []
     end
-    prev_nodes[to] << [from, i]
+    prev_nodes[to] << from
   end
 end
 puts "#{reachable.count} reachable states"
 
 solve_cost = {}
-solutions = {}
 solvable = []
 reachable.each do |box|
   if box[0] == goal[0] && box[2] == goal[1] && box[6] == goal[2] && box[8] == goal[3]
     solve_cost[box] = 0
-    solutions[box] = [""]
     solvable << box
   end
 end
 solvable.each.with_index do |to, t|
-  puts "%d/%d %2.2f%%" % [t, solvable.count, t.to_f / solvable.count * 100] if t % 4096 == 0 && t > 0
-  prev_nodes[to].each do |from, i|
+  puts "%d/%d %2.2f%%" % [t, solvable.count, t.to_f / solvable.count * 100] if t % 15536 == 0 && t > 0
+  prev_nodes[to].each do |from|
     unless solve_cost[from]
       solve_cost[from] = solve_cost[to] + 1
-      solutions[from] = []
       solvable << from
     end
-    solutions[from] += solutions[to].map{(i + 1).to_s + _1} if solve_cost[from] == solve_cost[to] + 1
   end
 end
+
+def enumerate_solutions(node, path, solve_cost, solutions)
+  if solve_cost[node] == 0
+    solutions << path
+  else
+    (0..8).each do |i|
+      next_node = next_move(node, i)
+      if solve_cost[next_node] == solve_cost[node] - 1
+        enumerate_solutions(next_node, path + (i + 1).to_s, solve_cost, solutions)
+      end
+    end
+  end
+end
+solutions = []
+enumerate_solutions(start, "", solve_cost, solutions)
 
 puts "#{solvable.count} solvable states (#{"%.2f" % (100.0 * solvable.count / reachable.count)}%)"
 exit if solvable.empty?
 puts "solution length: #{solve_cost[start]}"
 STDIN.gets
-solutions[start].sort_by!{[solution_score(_1), _1]}.reverse!
-solutions[start].each {puts "%s | score: %2.2f" % [_1, solution_score(_1)]}
-puts "#{solutions[start].count} minimum length solutions"
+solutions.sort_by!{[solution_score(_1), _1]}.reverse!
+solutions.each {puts "%s | score: %2.2f" % [_1, solution_score(_1)]}
+puts "#{solutions.count} minimum length solutions"
 STDIN.gets
 
 node = start
-solutions[start].last.chars.each do |i|
+solutions.last.chars.each do |i|
   puts
   puts node.scan(/.../).join("/")
   i = i.to_i - 1
