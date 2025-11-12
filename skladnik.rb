@@ -828,11 +828,12 @@ class Model
     r_range = r_range.min ... @layout.height if r_range.max >= @layout.height
     c_range = c_range.min ... @layout.width if c_range.max >= @layout.width
     r = @layout.render_cells(r_range, c_range)
-    @crates.each_value do |crate|
-      ri, ci = crate.pos
-      next unless r_range.include?(ri) && c_range.include?(ci)
-      r[ri - r_range.first][ci - c_range.first] = crate.ascii
+    r.each.with_index(r_range.min) do |row, ri|
+      row.each.with_index(c_range.min) do |_, ci|
+        r[ri - r_range.first][ci - c_range.first] = @crate_at[ri][ci].ascii if @crate_at[ri][ci]
+      end
     end
+
     ri, ci = @worker_pos
     r[ri - r_range.first][ci - c_range.first] = "👷" if r_range.include?(ri) && c_range.include?(ci)
     r.map(&:join)
