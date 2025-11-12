@@ -804,6 +804,7 @@ class Model
   def initialize(layout, crates = [])
     @layout = layout
     @crates = {}
+    @crate_at = Array.new(layout.height){Array.new(layout.height)}
     @worker_pos = nil
     crates.each {@crates[_1.id] = _1}
   end
@@ -886,12 +887,22 @@ class Model
     end
   end
 
+  def move_crate(crate, pos)
+    @crate_at[crate.pos[0]][crate.pos[1]] = nil if crate.pos
+    crate.pos = pos
+    @crate_at[crate.pos[0]][crate.pos[1]] = crate if crate.pos
+  end
+
+  def move_worker(pos)
+    @worker_pos = pos
+  end
+
   # moves a crate along the specified path, with the worker following after it
   def animate_insert(crate, path)
     path.each_cons(2) do |p1, p2|
       p0 = @worker_pos
-      @worker_pos = p1
-      crate.pos = p2
+      move_worker p1
+      move_crate crate, p2
       render_frame(p0, p1, p2)
     end
   end
@@ -900,7 +911,7 @@ class Model
   def animate_worker(path)
     path.each do |p1|
       p0 = @worker_pos
-      @worker_pos = p1
+      move_worker p1
       render_frame(p0, p1)
     end
   end
@@ -909,8 +920,8 @@ class Model
   def animate_extract(crate, path)
     path.each_cons(2) do |p1, p2|
       p0 = crate.pos
-      crate.pos = p1
-      @worker_pos = p2
+      move_crate crate, p1
+      move_worker p2
       render_frame(p0, p1, p2)
     end
   end
