@@ -773,7 +773,12 @@ class Layout
             when :y
               method = :x
               [0, rand(4 .. w - 3) * [-1, 1].sample]
-            when :frain, :pruskal then [rand(-h + 3 .. h - 3), rand(-w + 3 .. w - 3)]
+            when :frain, :pruskal
+              x1 = rand(-h + 3 .. h - 3)
+              y1 = rand(-w + 3 .. w - 3)
+              x2 = rand(-h + 3 .. h - 3)
+              y2 = rand(-w + 3 .. w - 3)
+              x1 * x1 + y1 * y1 > x2 * x2 + y2 * y2 ? [x2, y2] : [x1, y1]
             end
           generator_pos << 0
           if sym
