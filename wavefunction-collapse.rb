@@ -499,8 +499,9 @@ end
 
 def prompt_tiles(ruleset, name)
   def prompt_tile(name, rotated, mirrored)
-    puts "tile #{name} appearance (use #bbbbbb/ffffff; to set background and foreground color,"
-    puts "#bbbbbb; to set only the background, or #; to reset both; use empty line to end input/:"
+    puts
+    puts "tile #{name} appearance (use #bbbbbb/ffffff; or #bbb/fff to set background and foreground color,"
+    puts "#bbbbbb; or #bbb; to set only the background, or #; to reset both; use empty line to end input/:"
     ascii = []
     until (line = gets.chomp).empty?
       line.gsub!(/\#(?:(\h{6})(?:\/(\h{6}))?)?\;/) do
@@ -510,6 +511,15 @@ def prompt_tiles(ruleset, name)
           "\e[48;2;%d;%d;%dm" % $1.scan(/../).map{_1.to_i(16)}
         else
           "\e[48;2;%d;%d;%dm\e[38;2;%d;%d;%dm" % ($1 + $2).scan(/../).map{_1.to_i(16)}
+        end
+      end
+      line.gsub!(/\#(?:(\h{3})(?:\/(\h{3}))?)?\;/) do
+        if $1.nil?
+          "\e[0m"
+        elsif $2.nil?
+          "\e[48;2;%d;%d;%dm" % $1.scan(/./).map{17 * _1.to_i(16)}
+        else
+          "\e[48;2;%d;%d;%dm\e[38;2;%d;%d;%dm" % ($1 + $2).scan(/./).map{17 * _1.to_i(16)}
         end
       end
       ascii << line
