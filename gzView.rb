@@ -204,11 +204,11 @@ def show_parse_header bit_reader
 
     puts
     puts "flags:"
-    puts "#{ftext} - text file?"
-    puts "#{fhcrc} - CRC16 present?"
-    puts "#{fextra} - extra fields present?"
-    puts "#{fname} - file name set?"
-    puts "#{fcomment} - comment present?"
+    puts "#{ftext} - #{"not a " if ftext == 0}text file"
+    puts "#{fhcrc} - #{"no " if fhcrc == 0}CRC16 present"
+    puts "#{fextra} - #{"no " if fextra == 0}extra fields present"
+    puts "#{fname} - #{"no " if fname == 0}file name set"
+    puts "#{fcomment} - #{"no " if fcomment == 0}comment present"
     puts
 
     puts "#{to_bytes_str header[4..7]} - time modified (#{Time.at(header[4..7].bytes_to_int)})"
