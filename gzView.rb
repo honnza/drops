@@ -505,7 +505,7 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
 end
 
 def check_scan(str, scan_to) # hack :-(
-  scan_to.nil? || str =~ /^[\h ]*@(\d+)/ && $1.to_i > scan_to.to_i
+  scan_to.nil? || str =~ /^(?:\e[^m]*m|[\h ])*@(\d+)/ && $1.to_i > scan_to.to_i
 end
 
 def define_more(scan_to)
