@@ -829,6 +829,45 @@ class Model
     end
   end
 
+  # find the shortest path from one place to another through empty spaces. To and from may be
+  # occuped or an exit. Starts search from the destination.
+  def bfs_path(from, to)
+    flow_map = layout.flow_map
+    distances = flow_map.map{[]}
+    dyn_flow = flow_map.map{[]}
+    bfs_queue = [to]
+    dyn_flow[to[0]][to[1]] = "#"
+    bfs_queue.each do |node|
+      ri, ci = node
+      [
+        ["v", ri - 1, ci],
+        [">", ri, ci - 1],
+        ["^", ri + 1, ci],
+        ["<", ri, ci + 1]
+      ].shuffle.each do |dir, rj, cj|
+        next if rj < 0 || cj < 0 || rj >= layout.height || cj >= layout.width || dyn_flow[rj][cj]
+        dyn_flow[rj][cj] = dir
+        next if @crate_at[rj][cj] || flow_map[rj][cj] == "#"
+        bfs_queue << [rj, cj]
+      end
+      break if dyn_flow[from[0]][from[1]]
+    end
+
+    ri, ci = from
+    path = [from]
+    loop do
+      case dyn_flow[ri][ci]
+      when "v" then ri += 1
+      when ">" then ci += 1
+      when "^" then ri -= 1
+      when "<" then ci -= 1
+      else break
+      end
+      path << [ri, ci]
+    end
+    path
+  end
+
   def render(r_range = 0 ... @layout.height, c_range = 0 ... @layout.width)
     r_range = r_range.min ... @layout.height if r_range.max >= @layout.height
     c_range = c_range.min ... @layout.width if c_range.max >= @layout.width
@@ -971,9 +1010,10 @@ begin
   STDIN.gets
 
   cap = model.layout.capacity
+  root = model.layout.exits[0]
   model.layout.area.times do |id|
     pos = model.suggest_place
-    path = model.layout.path pos
+    path = model.bfs_path pos, root
     sts_score = Math.log(layout.subtree_size(pos)) / Math.log(cap)
     efficiency_score = 1 - ((path[0][0] - path[-1][0]).abs + (path[0][1] - path[-1][1]).abs + 1).fdiv(path.length) ** 2
     crate = Crate.gradient_alpha2 id, sts_score, efficiency_score
