@@ -788,7 +788,8 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
         end
         stats[new_rule.id] = 0
         if quiet < 1
-          puts "\nnew rule #{new_rule.summary}; now at #{ruleset.rules.count} rules"
+          puts "\nnew #{new_rule.summary}; now at #{ruleset.rules.count} rules"
+          puts "#{rsr_undo_log.length} rule#{"s" unless rsr_undo_log.length == 1} recently removed as singular" unless rsr_undo_log.empty?
           puts new_rule
           puts "rule stats:"
           puts vwrap stats.to_a
@@ -801,7 +802,7 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
         new_stats = stats.dup
         conflict = apply_ruleset ruleset, new_board, new_stats, nil, nil, true, &render
         stats[new_rule.id] = :gone
-        if new_stats[new_rule.id] == 1 && seeded == :rsr
+        if new_stats[new_rule.id] == 1 && seeded == :rsr && !rsr_undo_log.any?{|_, r| r == new_rule}
           ruleset.rules.reject!{_1.id == new_rule.id || _1.source == [:symm, new_rule.id]}
           randomization.delete [x, y, t]
           randomization << [x, y, t]
