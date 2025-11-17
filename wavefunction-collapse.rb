@@ -146,7 +146,7 @@ Rule = Struct.new(
     max_y = board.length - tiles.length
     sparse.map do |dx, dy, tile|
       rx = diff_x - dx; ry = diff_y - dy
-      [rx, ry] if rx >= 0 && ry >= 0 && rx <= max_x && ry <= max_y 
+      [rx, ry] if rx >= 0 && ry >= 0 && rx <= max_x && ry <= max_y
     end.compact
   end
 
@@ -251,7 +251,7 @@ Rule = Struct.new(
         else
           "#{k}*#{a.length}"
         end
-      end.join " " 
+      end.join " "
     end.chunk{_1}.map{|k, a| a.length == 1 ? k : "#{k}**#{a.length}"}.join "\n"
 
     [h, d].join "\n"
@@ -341,7 +341,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   #   starting from least constrained tiles, working in toward the origin point
   # fourth, for each remaining tile, we remove it from the new rule, apply all other rules fully,
   #   and then find the smallest set of constraints that still generates a conflict
-  
+
   # phase one: trace the undo log
 
   new_rule_tiles = Hash.new{0}
@@ -584,7 +584,7 @@ def prompt_tiles(ruleset, name)
   tile_by_mirror[i3.mirrored] = i3.name
 
   if symm_m.nil?
-    return [i0, i1, i2, i3].uniq 
+    return [i0, i1, i2, i3].uniq
   end
 
   if [i0, i1, i2, i3].map{tile_by_name.include? _1.mirrored}.uniq.count != 1
@@ -628,7 +628,7 @@ def vwrap tbl
   end.join "\n"
 end
 
-def progress_bar progress, text = "", width 
+def progress_bar progress, text = "", width
   on_cells = ((width - 2) * progress.clamp(0 .. 1))
   if on_cells > text.length
     text = text.ljust(width - 2)
@@ -645,7 +645,7 @@ def progress_bar progress, text = "", width
   end
 end
 
-def bucketed_progress_bar progress, text = "", width 
+def bucketed_progress_bar progress, text = "", width
   def bucket_rgb bucket
     plte = {blank: [0, 0, 0],
             removed: [255, 255, 0],
@@ -796,7 +796,7 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
           puts "press enter to continue"
           gets
         end
-        
+
         new_board = board.map(&:dup)
         new_stats = stats.dup
         conflict = apply_ruleset ruleset, new_board, new_stats, nil, nil, true, &render
@@ -834,7 +834,7 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
     end
 
     unless stats.values.include? :back
-      rules_deleted = ruleset.rules.select do 
+      rules_deleted = ruleset.rules.select do
         _1.source[0] == :conflict && stats[_1.id] == 0
       end.each do |to_delete, _|
         ruleset.rules.select{_1.source[0] == :conflict && _1.source.include?(to_delete.id)}.each do |child_rule|
