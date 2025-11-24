@@ -844,7 +844,7 @@ class Model
         [">", ri, ci - 1],
         ["^", ri + 1, ci],
         ["<", ri, ci + 1]
-      ].shuffle.each do |dir, rj, cj|
+      ].sort_by{|dir, _, _| [dir == dyn_flow[ri][ci] ? 0 : 1, rand]}.each do |dir, rj, cj|
         next if rj < 0 || cj < 0 || rj >= layout.height || cj >= layout.width || dyn_flow[rj][cj]
         dyn_flow[rj][cj] = dir
         next if @crate_at[rj][cj] || flow_map[rj][cj] == "#"
