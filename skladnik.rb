@@ -820,9 +820,10 @@ class Model
   # suggests an empty place. Places that block fewest other places are preferred,
   # then the closest one.
   def suggest_place
-    (@layout.places - @crates.values.map(&:pos)).min_by do |pos|
+    @suggestions ||= @layout.places.sort_by do |pos|
       [@layout.subtree_size(pos), @layout.depth(pos), rand]
     end
+    @suggestions.find{|ri, ci| @crate_at[ri][ci].nil?}
   end
 
   # find the shortest path from one place to another through empty spaces. To and from may be
