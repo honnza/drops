@@ -1050,7 +1050,7 @@ begin
     pos = model.suggest_place
     path = model.bfs_path pos, root
     sts_score = Math.log(layout.subtree_size(pos)) / Math.log(cap)
-    efficiency_score = 1 - ((path[0][0] - path[-1][0]).abs + (path[0][1] - path[-1][1]).abs + 1).fdiv(path.length) ** 2
+    efficiency_score = 1 - ((path[0][0] - path[-1][0]).abs + (path[0][1] - path[-1][1]).abs + 1).fdiv(path.length) ** (2 ** 0.5)
     crate = Crate.gradient_alpha2 id, sts_score, efficiency_score
     model.crates[id] = crate
     model.animate_insert crate, [nil, nil] + path.reverse
