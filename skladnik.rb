@@ -819,9 +819,47 @@ class Model
 
   # suggests an empty place. Places that block fewest other places are preferred,
   # then the closest one.
+    # is shortcut =
+    #    >1 edge is leaf && (
+    #       two opposite walls nonleaf ||
+    #       >1 corner leaf && !{
+    #          corner nonleaf across 2 edge leaves ||
+    #          2 corner nonleaves across edge leaf
+    #    }
   def suggest_place
+    def shortcut?(layout, (ri, ci))
+      (nw, n, ne), (w, c, e), (sw, s, se) = [-1, 0, 1].map do |dri|
+        [-1, 0, 1].map do |dci|
+          sts = layout.subtree_size([ri + dri, ci + dci])
+          sts.nil? || sts == 1
+        end
+      end
+      case
+      when !c || [n, e, s, w].count(true) > 2
+        false # if we have more than two adjacent leaves, it's not a shortcut
+      when n && s || e && w
+        ne || se || sw || nw # if we have two adjacent leaves opposite each other, it is a shortcut
+      when !n && !e && !s && !w
+        # if all four adjacent places are non-leaf, we need two corners to make this a shortcut
+        [ne, se, sw, nw].count(true) > 1
+      else
+        # otherwise,a corner leaf between two nonleaves makes a shortcut
+        !n && ne && !e || !e && se && !s || !s && sw && !w || !w && nw && !n
+      end
+    end
     @suggestions ||= @layout.places.sort_by do |pos|
-      [@layout.subtree_size(pos), @layout.depth(pos), rand]
+      if @layout.subtree_size(pos) == 1
+        exit = @layout.path(pos).last
+        direct_distance = (pos[0] - exit[0]).abs + (pos[1] - exit[1]).abs 
+        ri, ci = pos
+        if shortcut?(@layout, pos)
+          [1, 1, -direct_distance]
+        else
+          [1, 0, direct_distance]
+        end
+      else
+        [@layout.subtree_size(pos), 0, @layout.depth(pos), rand]
+      end
     end
     @suggestions.find{|ri, ci| @crate_at[ri][ci].nil?}
   end
