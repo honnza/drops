@@ -834,18 +834,7 @@ class Model
           sts.nil? || sts == 1
         end
       end
-      case
-      when !c || [n, e, s, w].count(true) > 2
-        false # if we have more than two adjacent leaves, it's not a shortcut
-      when n && s || e && w
-        ne || se || sw || nw # if we have two adjacent leaves opposite each other, it is a shortcut
-      when !n && !e && !s && !w
-        # if all four adjacent places are non-leaf, we need two corners to make this a shortcut
-        [ne, se, sw, nw].count(true) > 1
-      else
-        # otherwise,a corner leaf between two nonleaves makes a shortcut
-        !n && ne && !e || !e && se && !s || !s && sw && !w || !w && nw && !n
-      end
+      c && (n && !e && s && !w || !n && e && !s && w) && (ne || se || sw || nw)
     end
     @suggestions ||= @layout.places.sort_by do |pos|
       if @layout.subtree_size(pos) == 1
