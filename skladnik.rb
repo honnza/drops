@@ -825,37 +825,31 @@ class Model
   # lists the places not occupied by a crate
   def free_places; @layout.places - crates.values.map{_1.pos}; end
 
+  def shortcut?(layout, (ri, ci))
+    (nw, n, ne), (w, c, e), (sw, s, se) = [-1, 0, 1].map do |dri|
+      [-1, 0, 1].map do |dci|
+        sts = layout.subtree_size([ri + dri, ci + dci])
+        sts.nil? || sts == 1
+      end
+    end
+    c && (n && !e && s && !w || !n && e && !s && w) && (ne || se || sw || nw)
+  end
+
   # suggests an empty place. Places that block fewest other places are preferred,
   # then the closest one.
-    # is shortcut =
-    #    >1 edge is leaf && (
-    #       two opposite walls nonleaf ||
-    #       >1 corner leaf && !{
-    #          corner nonleaf across 2 edge leaves ||
-    #          2 corner nonleaves across edge leaf
-    #    }
   def suggest_place
-    def shortcut?(layout, (ri, ci))
-      (nw, n, ne), (w, c, e), (sw, s, se) = [-1, 0, 1].map do |dri|
-        [-1, 0, 1].map do |dci|
-          sts = layout.subtree_size([ri + dri, ci + dci])
-          sts.nil? || sts == 1
-        end
-      end
-      c && (n && !e && s && !w || !n && e && !s && w) && (ne || se || sw || nw)
-    end
     @suggestions ||= @layout.places.sort_by do |pos|
+      exit = @layout.path(pos).last
+      ri, ci = pos
+      direct_distance = (ri - exit[0]).abs + (ci - exit[1]).abs 
       if @layout.subtree_size(pos) == 1
-        exit = @layout.path(pos).last
-        direct_distance = (pos[0] - exit[0]).abs + (pos[1] - exit[1]).abs 
-        ri, ci = pos
         if shortcut?(@layout, pos)
-          [1, 1, -direct_distance]
+          [1, 1, -direct_distance, -@layout.depth(pos), rand]
         else
-          [1, 0, direct_distance]
+          [1, 0, direct_distance, -@layout.depth(pos), rand]
         end
       else
-        [@layout.subtree_size(pos), 0, @layout.depth(pos), rand]
+        [@layout.subtree_size(pos), @layout.depth(pos), direct_distance, rand]
       end
     end
     @suggestions.find{|ri, ci| @crate_at[ri][ci].nil?}
