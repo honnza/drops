@@ -761,6 +761,7 @@ class Layout
       pt_ix[pts[0][0]][pts[0][1]] = 0
       generators = []
       generator_pos = []
+      generator_stats = []
       until pts.count == (w - 2) * (h - 2)
         gi = generator_pos.find_index{_1 < pts.count}
         if gi.nil?
@@ -777,9 +778,11 @@ class Layout
               [rand(-h + 3 .. h - 3), rand(-w + 3 .. w - 3)]
             end
           generator_pos << 0
+          generator_stats << 0
           if sym
             generators << generators.last.map(&:-@)
             generator_pos << 0
+            generator_stats << 0
           end
         end
         gen = generators[gi]
@@ -789,9 +792,14 @@ class Layout
         if (1 ... h - 1).include?(ri) && (1 ... w - 1).include?(ci) && pt_ix[ri][ci].nil?
           pt_ix[ri][ci] = pts.count
           pts << [ri, ci]
+          generator_stats[gi] += 1
         end
         generator_pos[gi] += 1
       end
+
+      generators.zip(generator_stats).reject{|k, v| v == 0}.each{p _1}
+      STDIN.gets
+      IO.console.clear_screen
 
       case method
       when :frain then frain(w, h){|ri, ci| pt_ix[ri][ci]}
