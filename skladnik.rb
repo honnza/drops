@@ -760,7 +760,7 @@ class Layout
       end
     end
 
-    def lattice(w, h, method:, sym:, xy:)
+    def lattice(w, h, method:, re: , sym:, xy:)
       xy = [:x, :y].sample if xy
       pt_ix = Array.new(h){Array.new(w, nil)}
       pts = [[rand(1 ... h - 1), rand(1 ... w - 1)]]
@@ -801,11 +801,23 @@ class Layout
           generator_stats[gi] += 1
         end
         generator_pos[gi] += 1
+        if pts.count == (w - 2) * (h - 2)
+          generators.zip(generator_stats).reject{|k, v| v == 0}.each{p _1}
+          if re && generator_stats.each_cons(2).any?{_2 > _1}
+            puts
+            generators.sort_by!.with_index{|_, i| [-generator_stats[i], i]}
+            generator_pos.map!{0}
+            generator_stats.map!{0}
+            pt_ix.each{_1.map!{nil}}
+            pt_ix[pts[0][0]][pts[0][1]] = 0
+            pts[1..] = []
+          else
+            STDIN.gets
+            IO.console.clear_screen
+            break
+          end
+        end
       end
-
-      generators.zip(generator_stats).reject{|k, v| v == 0}.each{p _1}
-      STDIN.gets
-      IO.console.clear_screen
 
       case method
       when :frain then frain(w, h){|ri, ci| pt_ix[ri][ci]}
@@ -1003,7 +1015,7 @@ w, h = case ARGV.length
          exit
        end
 
-layouts = %i{horizontal vertical regular prim pruskal nuskal xyskal bsp cobsp wcbsp frain xyfrain (sym)?(xy)?latti(frain|skal) manhattan dbt rdbt}
+layouts = %i{horizontal vertical regular prim pruskal nuskal xyskal bsp cobsp wcbsp frain xyfrain (re)?(sym)?(xy)?latti(frain|skal) manhattan dbt rdbt}
 unless ARGV[0] =~ /^((?:frain-|chordless-|tight-|centered-)*)(#{layouts.join ?|})$/
   puts "first argument should be #{layouts.join ", "}, or frain-, tight-, centered- or chordless- plus one of the preceding"
   exit
@@ -1020,8 +1032,12 @@ begin
            when "horizontal" then Layout.regular_3 w, h, :horizontal
            when "vertical" then Layout.regular_3 w, h, :vertical
            when "regular" then Layout.regular_3 w, h, :auto
-           when /(sym)?(xy)?latti(frain|skal)/
-             Layout.lattice(w, h, sym: !$1.nil?, xy: !$2.nil?, method: $3 == "frain" ? :frain : :pruskal)
+           when /(re)?(sym)?(xy)?latti(frain|skal)/
+             Layout.lattice(
+               w, h,
+               re: !$1.nil?, sym: !$2.nil?, xy: !$3.nil?,
+               method: $4 == "frain" ? :frain : :pruskal
+             )
            else Layout.send layout, w, h
            end
 
