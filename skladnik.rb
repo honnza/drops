@@ -161,11 +161,22 @@ class Layout
       (0 .. width - 1).map do |ci|
         case
         when @flow_map[ri][ci] == ?# then "\e[47m  \e[0m"
-        when subtree_size([ri, ci]) == 1 then "\e[100m#{@flow_map[ri][ci] * 2}\e[0m"
-        else @flow_map[ri][ci] * 2
+        when subtree_size([ri, ci]) > 1 then @flow_map[ri][ci] * 2
+        when shortcut?([ri, ci]) then "\e[48;2;64;64;64m#{@flow_map[ri][ci] * 2}\e[0m"
+        else "\e[100m#{@flow_map[ri][ci] * 2}\e[0m"
         end
       end.join
     end
+  end
+
+  def shortcut?((ri, ci))
+    (nw, n, ne), (w, c, e), (sw, s, se) = [-1, 0, 1].map do |dri|
+      [-1, 0, 1].map do |dci|
+        sts = subtree_size([ri + dri, ci + dci])
+        sts.nil? || sts == 1
+      end
+    end
+    c && (n && !e && s && !w || !n && e && !s && w) && (ne || se || sw || nw)
   end
 
 
@@ -825,16 +836,6 @@ class Model
   # lists the places not occupied by a crate
   def free_places; @layout.places - crates.values.map{_1.pos}; end
 
-  def shortcut?(layout, (ri, ci))
-    (nw, n, ne), (w, c, e), (sw, s, se) = [-1, 0, 1].map do |dri|
-      [-1, 0, 1].map do |dci|
-        sts = layout.subtree_size([ri + dri, ci + dci])
-        sts.nil? || sts == 1
-      end
-    end
-    c && (n && !e && s && !w || !n && e && !s && w) && (ne || se || sw || nw)
-  end
-
   # suggests an empty place. Places that block fewest other places are preferred,
   # then the closest one.
   def suggest_place
@@ -843,7 +844,7 @@ class Model
       ri, ci = pos
       direct_distance = (ri - exit[0]).abs + (ci - exit[1]).abs 
       if @layout.subtree_size(pos) == 1
-        if shortcut?(@layout, pos)
+        if @layout.shortcut?(pos)
           [1, 1, -direct_distance, -@layout.depth(pos), rand]
         else
           [1, 0, direct_distance, -@layout.depth(pos), rand]
