@@ -162,7 +162,7 @@ class Layout
         case
         when @flow_map[ri][ci] == ?# then "\e[47m  \e[0m"
         when subtree_size([ri, ci]) > 1 then @flow_map[ri][ci] * 2
-        when shortcut?([ri, ci]) then "\e[48;2;64;64;64m#{@flow_map[ri][ci] * 2}\e[0m"
+        when shortcut?([ri, ci]) then "\e[48;2;99;99;99m#{@flow_map[ri][ci] * 2}\e[0m"
         else "\e[100m#{@flow_map[ri][ci] * 2}\e[0m"
         end
       end.join
