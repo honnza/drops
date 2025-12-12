@@ -760,13 +760,8 @@ class Layout
       end
     end
 
-    def flattice(w, h); lattice(w, h, method: :frain, sym: false); end
-    def lattiskal(w, h); lattice(w, h, method: :pruskal, sym: false); end
-    def xylattiskal(w, h); lattice(w, h, method: :xy, sym: false); end
-    def symflattice(w, h); lattice(w, h, method: :frain, sym: true); end
-
-    def lattice(w, h, method: , sym: false)
-      method = [:x, :y].sample if method == :xy
+    def lattice(w, h, method:, sym:, xy:)
+      xy = [:x, :y].sample if xy
       pt_ix = Array.new(h){Array.new(w, nil)}
       pts = [[rand(1 ... h - 1), rand(1 ... w - 1)]]
       pt_ix[pts[0][0]][pts[0][1]] = 0
@@ -778,14 +773,14 @@ class Layout
         if gi.nil?
           gi = generators.count
           generators <<
-            case method
+            case xy
             when :x
-              method = :y
+              xy = :y
               [rand(4 .. h - 3) * [-1, 1].sample, 0]
             when :y
-              method = :x
+              xy = :x
               [0, rand(4 .. w - 3) * [-1, 1].sample]
-            when :frain, :pruskal
+            when false
               [rand(-h + 3 .. h - 3), rand(-w + 3 .. w - 3)]
             end
           generator_pos << 0
@@ -814,7 +809,7 @@ class Layout
 
       case method
       when :frain then frain(w, h){|ri, ci| pt_ix[ri][ci]}
-      when :pruskal, :x, :y then pruskal(w, h){|(ri, ci), (rj, cj)| [ri.nil? ? 0 : -pt_ix[ri][ci], -pt_ix[rj][cj]].sort}
+      when :pruskal then pruskal(w, h){|(ri, ci), (rj, cj)| [ri.nil? ? 0 : -pt_ix[ri][ci], -pt_ix[rj][cj]].sort}
       end
     end
   end
@@ -1008,7 +1003,7 @@ w, h = case ARGV.length
          exit
        end
 
-layouts = %i{horizontal vertical regular prim pruskal nuskal xyskal bsp cobsp wcbsp frain xyfrain flattice xylattiskal symflattice lattiskal manhattan dbt rdbt}
+layouts = %i{horizontal vertical regular prim pruskal nuskal xyskal bsp cobsp wcbsp frain xyfrain (sym)?(xy)?latti(frain|skal) manhattan dbt rdbt}
 unless ARGV[0] =~ /^((?:frain-|chordless-|tight-|centered-)*)(#{layouts.join ?|})$/
   puts "first argument should be #{layouts.join ", "}, or frain-, tight-, centered- or chordless- plus one of the preceding"
   exit
@@ -1019,14 +1014,18 @@ begin
   IO.console.clear_screen
   puts "\e[?25l\e[?1049h"
 
-  layout = case $2
+  mods = $1
+  layout = $2
+  layout = case layout
            when "horizontal" then Layout.regular_3 w, h, :horizontal
            when "vertical" then Layout.regular_3 w, h, :vertical
            when "regular" then Layout.regular_3 w, h, :auto
-           else Layout.send $2, w, h
+           when /(sym)?(xy)?latti(frain|skal)/
+             Layout.lattice(w, h, sym: !$1.nil?, xy: !$2.nil?, method: $3 == "frain" ? :frain : :pruskal)
+           else Layout.send layout, w, h
            end
 
-  $1&.split("-")&.reverse_each do |lad|
+  mods&.split("-")&.reverse_each do |lad|
     layout = layout.send lad
   end
 
