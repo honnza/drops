@@ -1014,7 +1014,7 @@ def bar(x, n: :n4, f: 0.1, modes: [0, 1, 2], eigen: true)
   end
 end
 
-def gen_palette n_colors, adjacencies
+def gen_palette n_colors, adjacencies, collinearities
   # using redmean from https://en.m.wikipedia.org/wiki/Color_difference#sRGB
   # caused unstability. Switched to constant weights instead.
   c = n_colors.times.map{[rand - 0.5, rand - 0.5, rand - 0.5]}
@@ -1035,9 +1035,34 @@ def gen_palette n_colors, adjacencies
       end
     end
     adjacencies.each do |i, j|
-      diff_c = c[i][0] - c[j][0]; deltas[i][0] -= diff_c / 2; deltas[j][0] += diff_c / 2
-      diff_c = c[i][1] - c[j][1]; deltas[i][1] -= diff_c / 2; deltas[j][1] += diff_c / 2
-      diff_c = c[i][2] - c[j][2]; deltas[i][2] -= diff_c / 2; deltas[j][2] += diff_c / 2
+      diff_c = c[i][0] - c[j][0]
+      deltas[i][0] -= diff_c / 2
+      deltas[j][0] += diff_c / 2
+
+      diff_c = c[i][1] - c[j][1]
+      deltas[i][1] -= diff_c / 2
+      deltas[j][1] += diff_c / 2
+
+      diff_c = c[i][2] - c[j][2]
+      deltas[i][2] -= diff_c / 2
+      deltas[j][2] += diff_c / 2
+    end
+    collinearities.each do |i, j, k, l|
+      diff_c = c[i][0] - c[j][0] + c[k][0] - c[l][0]
+      deltas[i][0] -= diff_c / 4
+      deltas[j][0] += diff_c / 4
+      deltas[k][0] -= diff_c / 4
+      deltas[l][0] += diff_c / 4
+      diff_c = c[i][1] - c[j][1] + c[k][1] - c[l][1]
+      deltas[i][1] -= diff_c / 4
+      deltas[j][1] += diff_c / 4
+      deltas[k][1] -= diff_c / 4
+      deltas[l][1] += diff_c / 4
+      diff_c = c[i][2] - c[j][2] + c[k][2] - c[l][2]
+      deltas[i][2] -= diff_c / 4
+      deltas[j][2] += diff_c / 4
+      deltas[k][2] -= diff_c / 4
+      deltas[l][2] += diff_c / 4
     end
     max_c = 0
     (0 ... n_colors).each do |i|
