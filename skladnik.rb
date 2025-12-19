@@ -760,6 +760,31 @@ class Layout
       end
     end
 
+    def manyhattan(w, h)
+      scores = (0 ... h).map do |ri|
+        (0 ... w).map do |ci|
+          0 if ri > 0 && ri < h - 1 && ci > 0 && ci < w - 1
+        end
+      end
+      while scores.flatten.compact.tally.any?{|k, v| v > 1}
+        row_period = [rand(4 .. h / 2), rand(4 .. h / 2)].min
+        row_offset = rand(0 ... row_period)
+        road_rows = (1 .. h - 2).select{_1 % row_period == row_offset}
+
+        col_period = [rand(4 .. w / 2), rand(4 .. w/ 2)].min
+        col_offset = rand(0 ... col_period)
+        road_cols = (1 .. w - 2).select{_1 % col_period == col_offset}
+
+        (1 ... h - 1).each do |ri|
+          (1 ... w - 1).each do |ci|
+            scores[ri][ci] *= 2
+            scores[ri][ci] += 1 if road_rows.include?(ri) || road_cols.include?(ci)
+          end
+        end
+      end
+      frain(w, h){|ri, ci| scores[ri][ci]}
+    end
+
     def lattice(w, h, method:, re: , sym:, xy:)
       xy = [:x, :y].sample if xy
       pt_ix = Array.new(h){Array.new(w, nil)}
@@ -1015,7 +1040,7 @@ w, h = case ARGV.length
          exit
        end
 
-layouts = %i{horizontal vertical regular prim pruskal nuskal xyskal bsp cobsp wcbsp frain xyfrain (re)?(sym)?(xy)?latti(frain|skal) manhattan dbt rdbt}
+layouts = %i{horizontal vertical regular prim pruskal nuskal xyskal bsp cobsp wcbsp frain xyfrain (re)?(sym)?(xy)?latti(frain|skal) manhattan manyhattan dbt rdbt}
 unless ARGV[0] =~ /^((?:frain-|chordless-|tight-|centered-)*)(#{layouts.join ?|})$/
   puts "first argument should be #{layouts.join ", "}, or frain-, tight-, centered- or chordless- plus one of the preceding"
   exit
