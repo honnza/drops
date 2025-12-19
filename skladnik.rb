@@ -828,9 +828,18 @@ class Layout
         generator_pos[gi] += 1
         if pts.count == (w - 2) * (h - 2)
           generators.zip(generator_stats).reject{|k, v| v == 0}.each{p _1}
-          if re && generator_stats.each_cons(2).any?{_2 > _1}
+          if re && (!xy && generator_stats.each_cons(2).any?{_2 > _1} || generator_stats.each_cons(3).any?{_3 > _1})
+            generators = generators.zip(0..)
+            generators = if xy
+              generators << nil if generators.count.odd?
+              generators.each_slice(2).to_a.transpose
+            else
+              [generators]
+            end
+            generators.each{|row| row.sort_by!{|k, i| i.nil? ? [0, 0] : [-generator_stats[i], i]}}
+            generators = generators.transpose.flatten(1).compact.map(&:first)
+
             puts
-            generators.sort_by!.with_index{|_, i| [-generator_stats[i], i]}
             generator_pos.map!{0}
             generator_stats.map!{0}
             pt_ix.each{_1.map!{nil}}
