@@ -170,13 +170,24 @@ class Layout
   end
 
   def shortcut?((ri, ci))
+    def end?((ri, ci))
+      (nw, n, ne), (w, c, e), (sw, s, se) = [-1, 0, 1].map do |dri|
+        [-1, 0, 1].map do |dci|
+          sts = subtree_size([ri + dri, ci + dci])
+          sts.nil? || sts == 1
+        end
+      end
+      c && !ne && !se && !sw && !nw && [n, e, s, w].count(true) == 1
+    end
+
     (nw, n, ne), (w, c, e), (sw, s, se) = [-1, 0, 1].map do |dri|
       [-1, 0, 1].map do |dci|
         sts = subtree_size([ri + dri, ci + dci])
         sts.nil? || sts == 1
       end
     end
-    c && (n && !e && s && !w || !n && e && !s && w) && (ne || se || sw || nw)
+    c && (n && !e && s && !w || !n && e && !s && w) && (ne || se || sw || nw) &&
+      ![[ri - 1, ci], [ri, ci + 1], [ri + 1, ci], [ri, ci - 1]].any?{end? _1}
   end
 
 
