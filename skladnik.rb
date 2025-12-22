@@ -112,17 +112,31 @@ class Layout
   end
 
   # calculates how many crate exit paths pass through this location
-  def subtree_size(pt);
+  def subtree_size(ri, ci);
+    return 0 if ri <= 0 || ci <= 0 || ri >= height || ci >= width
     unless @subtree_size_cache
-      @subtree_size_cache = {}
-      places.each do |place|
-        path(place).each do |pos|
-          @subtree_size_cache[pos] ||= 0
-          @subtree_size_cache[pos] += 1
+      @subtree_size_cache = Array.new(height){[]}
+      (1 ... height - 1).each do |rj|
+        (1 ... width - 1).each do |cj|
+          next if @subtree_size_cache[rj][cj]
+          rk = rj
+          ck = cj
+          loop do
+            nexts = [
+              [rk - 1, ck, ?v],
+              [rk, ck + 1, ?<],
+              [rk + 1, ck, ?^],
+              [rk, ck - 1, ?>]
+            ].select{|rk, ck, dir| @flow_map[rk][ck] == dir}
+            break if nexts.any?{|rl, cl| @subtree_size_cache[rl][cl].nil?}
+            @subtree_size_cache[rk][ck] = nexts.map{|rl, cl| @subtree_size_cache[rl][cl]}.sum + 1
+            rk, ck = prev([rk, ck])
+            break if @flow_map[rk][ck] == '#'
+          end
         end
       end
     end
-    @subtree_size_cache[pt]
+    @subtree_size_cache[ri][ci]
   end
 
   # calculates the amount of space within the warehouse,
@@ -161,7 +175,7 @@ class Layout
       (0 .. width - 1).map do |ci|
         case
         when @flow_map[ri][ci] == ?# then "\e[47m  \e[0m"
-        when subtree_size([ri, ci]) > 1 then @flow_map[ri][ci] * 2
+        when subtree_size(ri, ci) > 1 then @flow_map[ri][ci] * 2
         when shortcut?([ri, ci]) then "\e[48;2;99;99;99m#{@flow_map[ri][ci] * 2}\e[0m"
         else "\e[100m#{@flow_map[ri][ci] * 2}\e[0m"
         end
@@ -173,7 +187,7 @@ class Layout
     def end?((ri, ci))
       (nw, n, ne), (w, c, e), (sw, s, se) = [-1, 0, 1].map do |dri|
         [-1, 0, 1].map do |dci|
-          sts = subtree_size([ri + dri, ci + dci])
+          sts = subtree_size(ri + dri, ci + dci)
           sts.nil? || sts == 1
         end
       end
@@ -182,7 +196,7 @@ class Layout
 
     (nw, n, ne), (w, c, e), (sw, s, se) = [-1, 0, 1].map do |dri|
       [-1, 0, 1].map do |dci|
-        sts = subtree_size([ri + dri, ci + dci])
+        sts = subtree_size(ri + dri, ci + dci)
         sts.nil? || sts == 1
       end
     end
@@ -209,7 +223,7 @@ class Layout
   end
 
   def frain
-    Layout.frain(width, height){|ri, ci| subtree_size([ri, ci])}
+    Layout.frain(width, height){|ri, ci| subtree_size(ri, ci)}
   end
 
   def centered
@@ -231,7 +245,7 @@ class Layout
                            else ?? end
       end
       score = ([[0, 0]] + path).each_cons(2).map.with_index(1) do |((ri, ci), (rj, cj)), i|
-        ((subtree_size([ri, ci]) || 0) - subtree_size([rj, cj])) * (2 * i - path.length)
+        ((subtree_size(ri, ci) || 0) - subtree_size(rj, cj)) * (2 * i - path.length)
       end.sum
       [score, rand, Layout.new(flow_map)]
     end.max.last
@@ -279,10 +293,10 @@ class Layout
       places.each do |ri, ci|
         if depth([ri, ci]) > 2
           flow_map[ri][ci] = [
-            [old_layout.subtree_size([ri - 1, ci]), old_layout.depth([ri - 1, ci]), rand, ?^],
-            [old_layout.subtree_size([ri, ci + 1]), old_layout.depth([ri, ci + 1]), rand, ?>],
-            [old_layout.subtree_size([ri + 1, ci]), old_layout.depth([ri + 1, ci]), rand, ?v],
-            [old_layout.subtree_size([ri, ci - 1]), old_layout.depth([ri, ci - 1]), rand, ?<],
+            [old_layout.subtree_size(ri - 1, ci), old_layout.depth([ri - 1, ci]), rand, ?^],
+            [old_layout.subtree_size(ri, ci + 1), old_layout.depth([ri, ci + 1]), rand, ?>],
+            [old_layout.subtree_size(ri + 1, ci), old_layout.depth([ri + 1, ci]), rand, ?v],
+            [old_layout.subtree_size(ri, ci - 1), old_layout.depth([ri, ci - 1]), rand, ?<],
           ].reject{_1.first.nil?}.max.last
         end
       end
@@ -318,9 +332,9 @@ class Layout
           [
             [ri - 1, ci, ?^], [ri, ci + 1, ?>], [ri + 1, ci, ?v], [ri, ci - 1, ?<]
           ].each do |rj, cj, djr|
-            score = old_layout.subtree_size([rj, cj])
+            score = old_layout.subtree_size(rj, cj)
             next if score.nil?
-            score -= old_layout.subtree_size([ri, ci]) if dir == djr
+            score -= old_layout.subtree_size(ri, ci) if dir == djr
             if old_layout.depth([rj, cj]) < old_layout.depth([ri, ci])
               candidates << [score, dir == djr ? 0 : 1, rand, rj, cj, djr]
             end
@@ -895,14 +909,14 @@ class Model
       exit = @layout.path(pos).last
       ri, ci = pos
       direct_distance = (ri - exit[0]).abs + (ci - exit[1]).abs
-      if @layout.subtree_size(pos) == 1
+      if @layout.subtree_size(ri, ci) == 1
         if @layout.shortcut?(pos)
           [1, 1, -direct_distance, -@layout.depth(pos), rand]
         else
           [1, 0, direct_distance, -@layout.depth(pos), rand]
         end
       else
-        [@layout.subtree_size(pos), @layout.depth(pos), direct_distance, rand]
+        [@layout.subtree_size(ri, ci), @layout.depth(pos), direct_distance, rand]
       end
     end
     @suggestions.find{|ri, ci| @crate_at[ri][ci].nil?}
@@ -1101,7 +1115,7 @@ begin
   model.layout.area.times do |id|
     pos = model.suggest_place
     path = model.bfs_path pos, root
-    sts_score = Math.log(layout.subtree_size(pos)) / Math.log(cap)
+    sts_score = Math.log(layout.subtree_size(*pos)) / Math.log(cap)
     efficiency_score = 1 - ((path[0][0] - path[-1][0]).abs + (path[0][1] - path[-1][1]).abs + 1).fdiv(path.length) ** (2 ** 0.5)
     crate = Crate.gradient_alpha2 id, sts_score, efficiency_score
     model.crates[id] = crate
