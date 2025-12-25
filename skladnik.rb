@@ -908,7 +908,7 @@ class Model
     @suggestions ||= @layout.places.sort_by do |pos|
       exit = @layout.path(pos).last
       ri, ci = pos
-      direct_distance = (ri - exit[0]).abs + (ci - exit[1]).abs
+      direct_distance = (ri - exit[0]) ** 2 + (ci - exit[1]) ** 2
       if @layout.subtree_size(ri, ci) == 1
         if @layout.shortcut?(pos)
           [1, 1, -direct_distance, -@layout.depth(pos), rand]
