@@ -129,6 +129,11 @@ solvable.each.with_index do |to, t|
   end
 end
 
+if solve_cost[start].nil?
+  puts "no solutions"
+  exit
+end
+
 def enumerate_solutions(node, path, solve_cost, solutions)
   if solve_cost[node] == 0
     solutions << path
@@ -145,7 +150,6 @@ solutions = []
 enumerate_solutions(start, "", solve_cost, solutions)
 
 puts "#{solvable.count} solvable states (#{"%.2f" % (100.0 * solvable.count / reachable.count)}%)"
-exit if solvable.empty?
 puts "solution length: #{solve_cost[start]}"
 STDIN.gets
 solutions.sort_by!{[solution_score(_1), _1]}.reverse!
