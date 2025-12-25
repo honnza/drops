@@ -113,7 +113,7 @@ class Layout
 
   # calculates how many crate exit paths pass through this location
   def subtree_size(ri, ci);
-    return 0 if ri <= 0 || ci <= 0 || ri >= height || ci >= width
+    return nil if ri <= 0 || ci <= 0 || ri >= height || ci >= width
     unless @subtree_size_cache
       @subtree_size_cache = Array.new(height){[]}
       (1 ... height - 1).each do |rj|
