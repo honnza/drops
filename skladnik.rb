@@ -817,7 +817,7 @@ class Layout
       frain(w, h){|ri, ci| scores[ri][ci]}
     end
 
-    def lattice(w, h, method:, re: , sym:, xy:)
+    def lattice(w, h, method:, anti:, re: , sym:, xy:)
       xy = [:x, :y].sample if xy
       pt_ix = Array.new(h){Array.new(w, nil)}
       pts = [[rand(1 ... h - 1), rand(1 ... w - 1)]]
@@ -885,6 +885,7 @@ class Layout
         end
       end
 
+      pt_ix.each{|row| row.map!{_1&.-@}} if anti
       case method
       when :frain then frain(w, h){|ri, ci| pt_ix[ri][ci]}
       when :pruskal then pruskal(w, h){|(ri, ci), (rj, cj)| [ri.nil? ? 0 : -pt_ix[ri][ci], -pt_ix[rj][cj]].sort}
@@ -1081,7 +1082,7 @@ w, h = case ARGV.length
          exit
        end
 
-layouts = %i{horizontal vertical regular prim pruskal nuskal xyskal bsp cobsp wcbsp frain xyfrain (re)?(sym)?(xy)?latti(frain|skal) manhattan manyhattan dbt rdbt}
+layouts = %i{horizontal vertical regular prim pruskal nuskal xyskal bsp cobsp wcbsp frain xyfrain (anti)?(re)?(sym)?(xy)?latti(frain|skal) manhattan manyhattan dbt rdbt}
 unless ARGV[0] =~ /^((?:frain-|chordless-|tight-|centered-)*)(#{layouts.join ?|})$/
   puts "first argument should be #{layouts.join ", "}, or frain-, tight-, centered- or chordless- plus one of the preceding"
   exit
@@ -1098,10 +1099,10 @@ begin
            when "horizontal" then Layout.regular_3 w, h, :horizontal
            when "vertical" then Layout.regular_3 w, h, :vertical
            when "regular" then Layout.regular_3 w, h, :auto
-           when /(re)?(sym)?(xy)?latti(frain|skal)/
+           when /(anti)?(re)?(sym)?(xy)?latti(frain|skal)/
              Layout.lattice(
                w, h,
-               re: !$1.nil?, sym: !$2.nil?, xy: !$3.nil?,
+               anti: !$1.nil?, re: !$2.nil?, sym: !$3.nil?, xy: !$4.nil?,
                method: $4 == "frain" ? :frain : :pruskal
              )
            else Layout.send layout, w, h
