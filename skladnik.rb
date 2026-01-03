@@ -139,6 +139,9 @@ class Layout
     @subtree_size_cache[ri][ci]
   end
 
+  def leaf?(ri, ci); subtree_size(ri, ci) == 1; end
+  def corridor?(ri, ci); subtree_size(ri, ci)&.> 1; end
+
   # calculates the amount of space within the warehouse,
   # including space reserved to extract crates through.
   def area; places.count; end
@@ -184,11 +187,10 @@ class Layout
   end
 
   def shortcut?((ri, ci))
-    def end?((ri, ci))
+    def end?(ri, ci)
       (nw, n, ne), (w, c, e), (sw, s, se) = [-1, 0, 1].map do |dri|
         [-1, 0, 1].map do |dci|
-          sts = subtree_size(ri + dri, ci + dci)
-          sts.nil? || sts == 1
+          !corridor?(ri + dri, ci + dci)
         end
       end
       c && !ne && !se && !sw && !nw && [n, e, s, w].count(true) == 1
@@ -196,14 +198,19 @@ class Layout
 
     (nw, n, ne), (w, c, e), (sw, s, se) = [-1, 0, 1].map do |dri|
       [-1, 0, 1].map do |dci|
-        sts = subtree_size(ri + dri, ci + dci)
-        sts.nil? || sts == 1
+        !corridor?(ri + dri, ci + dci)
       end
     end
-    c && (n && !e && s && !w || !n && e && !s && w) && (ne || se || sw || nw) &&
-      ![[ri - 1, ci], [ri, ci + 1], [ri + 1, ci], [ri, ci - 1]].any?{end? _1}
-  end
+    nn = !corridor?(ri - 2, ci)
+    ee = !corridor?(ri, ci + 2)
+    ss = !corridor?(ri + 2, ci)
+    ww = !corridor?(ri, ci - 2)
 
+    c && (ne || se || sw || nw) && (
+      n && !e && s && !w && !(ee && ww) && !end?(ri - 1, ci) && !end?(ri + 1, ci) ||
+      !n && e && !s && w && !(nn && ss) && !end?(ri, ci + 1) && !end?(ri, ci - 1)
+    )
+  end
 
   # modifies a layout such that a crate's path doesn't touch itself orthogonally
   def chordless
