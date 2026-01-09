@@ -42,7 +42,27 @@ Ruleset = Struct.new(
   :tileset,   # list of tiles that can appear in the world
   :rules) do
 
+  # list of tiles defined by the tileset
   def all_tiles; 2 ** tileset.size - 1; end
+
+  # list of tiles permitted by the ruleset, or nil if the ruleset permits no tiles
+  def possible_tiles
+    tiles = all_tiles
+    loop do
+      new_tiles = tiles
+      rules.each do |rule|
+        diff = rule.apply_homogenous new_tiles
+        if diff
+          p [new_tiles, rule.to_s, diff]
+          new_tiles &= ~diff
+          p [new_tiles, rule.to_s, diff]
+        end
+      end
+      return nil if new_tiles == 0
+      return p tiles if new_tiles == tiles
+      tiles = new_tiles
+    end
+  end
 
   # converts an array of tile objects or indices into its packed representation
   def pack_tiles tiles
@@ -119,8 +139,8 @@ Rule = Struct.new(
   end
 
   # returns [x, y, c] if the pattern matches at [dx, dy], meaning no c can occur at x, y, or nil if the rule doesn't apply there.
-  # # A rule is considered matching if its pattern occurs fully within the board, except for up to one cell.
-  # If all cells match, any of them is returned.
+  # A rule is considered matching if its pattern occurs fully within the board, except for up to one cell.
+  # If all cells match, an arbitrary one of them is returned.
   def apply_at(board, x, y)
     r = nil
     sparse.each do |dx, dy, tile|
@@ -133,11 +153,24 @@ Rule = Struct.new(
       end
     end
 
-    if r.nil?
-      [x, y, board[y][x]]
-    else
-      r
+    r || [x, y, board[y][x]]
+  end
+
+  # if the pattern matches on a board composed entirely of one set of tiles, it returns the set of tiles ruled out
+  # by this pattern from tme board. Returns 0 otherwise.
+  def apply_homogenous(board)
+    r = nil
+    sparse.each do |_, _, tile|
+      if board & tile != 0
+        if r.nil? && board & ~tile != 0
+          r = board & ~tile
+        else
+          return nil
+        end
+      end
     end
+
+    r || board
   end
 
   # returns every poosition where this rule may need to be reevaluated after a change at the given coordinates.
@@ -747,14 +780,15 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
       end
     end
 
-    board = Array.new(h){Array.new(w){ruleset.all_tiles}}
-    stats = Hash[ruleset.rules.select{_1.source[0] != :symm}.map{[_1.id, 0]}]
-    stats[:g] = 0
-    rsr_undo_log = []
-    if apply_ruleset ruleset, board, stats, nil, nil, true, &render
+    possible_tiles = ruleset.possible_tiles
+    if possible_tiles.nil?
       puts "no solution"
       return
     end
+    board = Array.new(h){Array.new(w){possible_tiles}}
+    stats = Hash[ruleset.rules.select{_1.source[0] != :symm}.map{[_1.id, 0]}]
+    stats[:g] = 0
+    rsr_undo_log = []
 
     loop do
       x, y, t = randomization.select{|x, y, t| board[y][x] & ~t != 0 && board[y][x] & t != 0}.min_by do |x, y, t|
