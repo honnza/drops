@@ -792,7 +792,9 @@ class Layout
       end
     end
 
-    def manyhattan(w, h)
+    def manyhattanskal(w, h); manyhattan(w, h, method: :nuskal); end
+
+    def manyhattan(w, h, method: :frain)
       scores = (0 ... h).map do |ri|
         (0 ... w).map do |ci|
           0 if ri > 0 && ri < h - 1 && ci > 0 && ci < w - 1
@@ -814,7 +816,16 @@ class Layout
           end
         end
       end
-      frain(w, h){|ri, ci| scores[ri][ci]}
+      if method == :frain
+        frain(w, h){|ri, ci| scores[ri][ci]}
+      else
+        pruskal(w, h) do |(ri, ci), (rj, cj)|
+          [
+            ri.nil? ? 0 : -scores[ri][ci],
+            rj.nil? ? 0 : -scores[rj][cj]
+          ].sort
+        end
+      end
     end
 
     def lattice(w, h, method:, anti:, re: , sym:, xy:)
@@ -1082,7 +1093,7 @@ w, h = case ARGV.length
          exit
        end
 
-layouts = %i{horizontal vertical regular prim pruskal nuskal xyskal bsp cobsp wcbsp frain xyfrain (anti)?(re)?(sym)?(xy)?latti(frain|skal) manhattan manyhattan dbt rdbt}
+layouts = %i{horizontal vertical regular prim pruskal nuskal xyskal bsp cobsp wcbsp frain xyfrain (anti)?(re)?(sym)?(xy)?latti(frain|skal) manhattan manyhattan manyhattanskal dbt rdbt}
 unless ARGV[0] =~ /^((?:frain-|chordless-|tight-|centered-)*)(#{layouts.join ?|})$/
   puts "first argument should be #{layouts.join ", "}, or frain-, tight-, centered- or chordless- plus one of the preceding"
   exit
