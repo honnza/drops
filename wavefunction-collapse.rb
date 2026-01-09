@@ -409,8 +409,9 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   end
   board[origin_y][origin_x] = ruleset.all_tiles
   apply_ruleset(ruleset, board, Hash.new(0), origin_x, origin_y, true) {}
-  inferred_tiles = inferred_tiles.to_a.sort_by.with_index do |((origin_x, origin_y), origin_c), ix|
-    [rule_bitmap[origin_y - new_rule_min_y][origin_x - new_rule_min_x].digits(2).count(1), ix]
+  inferred_tiles = inferred_tiles.to_a
+  inferred_tiles[... -1] = inferred_tiles[... -1].select do |(origin_x, origin_y), origin_c|
+    rule_bitmap[origin_y - new_rule_min_y][origin_x - new_rule_min_x].digits(2).count(1) <= 2
   end
   (origin_x, origin_y), origin_c = inferred_tiles.find.with_index do |((origin_x, origin_y), origin_c), ix|
     renderer.call rule_bitmap, ix, inferred_tiles.length
