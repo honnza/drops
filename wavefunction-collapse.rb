@@ -527,8 +527,8 @@ class String
 end
 
 def normalize_tiles(tileset)
-  h = p tileset.map{|x| x.ascii.length}.max
-  w = p tileset.flat_map{|x| x.ascii.map{_1.display_length}}.max
+  h = tileset.map{|x| x.ascii.length}.max
+  w = tileset.flat_map{|x| x.ascii.map{_1.display_length}}.max
   w = 1 if w == 0
   tileset.each do |tile|
     tile.ascii.each{_1 << ' ' until _1.display_length == w; _1 << "\e[0m" unless _1.end_with? "\e[0m"}
