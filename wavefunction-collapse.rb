@@ -46,20 +46,17 @@ Ruleset = Struct.new(
   def all_tiles; 2 ** tileset.size - 1; end
 
   # list of tiles permitted by the ruleset, or nil if the ruleset permits no tiles
-  def possible_tiles
+  def possible_tiles stats = nil
     tiles = all_tiles
     loop do
       new_tiles = tiles
       rules.each do |rule|
         diff = rule.apply_homogenous new_tiles
-        if diff
-          p [new_tiles, rule.to_s, diff]
-          new_tiles &= ~diff
-          p [new_tiles, rule.to_s, diff]
-        end
+        new_tiles &= ~diff if diff
+        stats[rule.id] += diff.digits(2).count(1) if diff && stats
       end
       return nil if new_tiles == 0
-      return p tiles if new_tiles == tiles
+      return tiles if new_tiles == tiles
       tiles = new_tiles
     end
   end
@@ -781,14 +778,14 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
       end
     end
 
-    possible_tiles = ruleset.possible_tiles
+    stats = Hash[ruleset.rules.select{_1.source[0] != :symm}.map{[_1.id, 0]}]
+    stats[:g] = 0
+    possible_tiles = ruleset.possible_tiles(stats)
     if possible_tiles.nil?
       puts "no solution"
       return
     end
     board = Array.new(h){Array.new(w){possible_tiles}}
-    stats = Hash[ruleset.rules.select{_1.source[0] != :symm}.map{[_1.id, 0]}]
-    stats[:g] = 0
     rsr_undo_log = []
 
     loop do
