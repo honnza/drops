@@ -394,9 +394,13 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   new_rule_min_y, new_rule_max_y = (new_rule_tiles.keys.map{|_, y| y} + [origin_y]).minmax
   rule_bitmap = [*new_rule_min_y .. new_rule_max_y].map{[*new_rule_min_x .. new_rule_max_x].map{ruleset.all_tiles}}
   new_rule_tiles.keys.each{|x, y| rule_bitmap[y - new_rule_min_y][x - new_rule_min_x] &= board[y][x]}
-  renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length
 
   # phase two: find the last conflict
+
+  possible_tiles = ruleset.possible_tiles
+  n_possible_tiles = possible_tiles.digits(2).count(1)
+  rule_bitmap.each{|row| row.map!{_1 == possible_tiles ? ruleset.all_tiles : _1}}
+  renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length
 
   inferred_tiles[[origin_x, origin_y]] = ruleset.all_tiles & ~board[origin_y][origin_x]
   rule_bitmap[origin_y - new_rule_min_y][origin_x - new_rule_min_x] = ruleset.all_tiles
@@ -427,7 +431,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   # phase three: discard full tiles
 
   coord_iter = [*0 ... rule_bitmap.length].product([*0 ... rule_bitmap[0].length])
-    .select{|y, x| rule_bitmap[y][x].digits(2).count(1) < ruleset.tileset.count}
+    .select{|y, x| rule_bitmap[y][x].digits(2).count(1) < n_possible_tiles}
     .sort_by{|y, x| [
       rule_bitmap[y][x].digits(2).count(1),
       (origin_x - x) ** 2 + (origin_y - y) ** 2,
@@ -437,7 +441,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   head_at = ruleset.tileset.length - 1
 
   renderer.call rule_bitmap, progress_bar, rule_bitmap.length * rule_bitmap[0].length,
-    [origin_x, origin_x,origin_y, origin_y], hl: true
+    [origin_x, origin_x, origin_y, origin_y], hl: true
   coord_iter.each.with_index do |(y, x), ix|
     y, x = coord_iter[ix]
     while head_at != rule_bitmap[y][x].digits(2).count(1)
@@ -462,7 +466,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   # phase four: discard individual constraints
 
   coord_iter = [*0 ... rule_bitmap.length].product([*0 ... rule_bitmap[0].length])
-    .select{|y, x| rule_bitmap[y][x].digits(2).count(1) < ruleset.tileset.count - 1}
+    .select{|y, x| rule_bitmap[y][x].digits(2).count(1) < n_possible_tiles - 1}
     .sort_by{|y, x| [
       rule_bitmap[y][x].digits(2).count(1),
       origin_x == x && origin_y == y ? 1 : 0,
