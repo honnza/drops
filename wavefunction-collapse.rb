@@ -53,7 +53,8 @@ Ruleset = Struct.new(
       rules.each do |rule|
         diff = rule.apply_homogenous new_tiles
         new_tiles &= ~diff if diff
-        stats[rule.id] += diff.digits(2).count(1) if diff && stats
+        stat_rule = rule.source[0] == :symm ? rule.source[1] : rule.id
+        stats[stat_rule] += diff.digits(2).count(1) if diff && stats
       end
       return nil if new_tiles == 0
       return tiles if new_tiles == tiles
