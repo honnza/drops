@@ -817,6 +817,12 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
         break
       end
 
+      possible_tiles = ruleset.possible_tiles(stats)
+      if possible_tiles.nil?
+        puts "no solution"
+        return
+      end
+
       new_stats = stats.dup
       new_stats[:g] += (board[y][x] & ~t).digits(2).count(1)
       new_board = board.map(&:dup)
