@@ -53,10 +53,10 @@ Ruleset = Struct.new(
       rules.each do |rule|
         diff = rule.apply_homogenous new_tiles
         new_tiles &= ~diff if diff
+        return nil if new_tiles == 0
         stat_rule = rule.source[0] == :symm ? rule.source[1] : rule.id
         stats[stat_rule] += diff.digits(2).count(1) if diff && stats
       end
-      return nil if new_tiles == 0
       return tiles if new_tiles == tiles
       tiles = new_tiles
     end
@@ -410,7 +410,9 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
     raise "bug: there shouldn't be a conflict here"
   end
   board[origin_y][origin_x] = ruleset.all_tiles
-  apply_ruleset(ruleset, board, Hash.new(0), origin_x, origin_y, true) {}
+  if apply_ruleset(ruleset, board, Hash.new(0), origin_x, origin_y, true) {}
+    raise "bug: there shouldn't be a conflict here either"
+  end
   inferred_tiles = inferred_tiles.to_a
   inferred_tiles[... -1] = inferred_tiles[... -1].select do |(origin_x, origin_y), origin_c|
     rule_bitmap[origin_y - new_rule_min_y][origin_x - new_rule_min_x].digits(2).count(1) <= 2
@@ -817,11 +819,7 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
         break
       end
 
-      possible_tiles = ruleset.possible_tiles(stats)
-      if possible_tiles.nil?
-        puts "no solution"
-        return
-      end
+      break if ruleset.possible_tiles(stats) != possible_tiles
 
       new_stats = stats.dup
       new_stats[:g] += (board[y][x] & ~t).digits(2).count(1)
