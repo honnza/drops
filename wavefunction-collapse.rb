@@ -426,6 +426,12 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
     new_bitmap[origin_y - new_rule_min_y][origin_x - new_rule_min_x] &= ~origin_c
     apply_ruleset(ruleset, new_bitmap, Hash.new(0), origin_x - new_rule_min_x, origin_y - new_rule_min_y, true) {}
   end
+  if origin_x.nil?
+    puts "bug: conflict before any inferrence?"
+    p inferred_tiles
+    (origin_x, origin_y), origin_c = inferred_tiles.last
+    gets
+  end
   origin_x -= new_rule_min_x
   origin_y -= new_rule_min_y
   rule_bitmap[origin_y][origin_x] &= ~origin_c
