@@ -52,10 +52,10 @@ Ruleset = Struct.new(
       new_tiles = tiles
       rules.each do |rule|
         diff = rule.apply_homogenous new_tiles
+        stat_rule = rule.source[0] == :symm ? rule.source[1] : rule.id
+        stats[stat_rule] += (new_tiles & diff).digits(2).count(1) if diff && stats
         new_tiles &= ~diff if diff
         return nil if new_tiles == 0
-        stat_rule = rule.source[0] == :symm ? rule.source[1] : rule.id
-        stats[stat_rule] += diff.digits(2).count(1) if diff && stats
       end
       return tiles if new_tiles == tiles
       tiles = new_tiles
@@ -427,10 +427,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
     apply_ruleset(ruleset, new_bitmap, Hash.new(0), origin_x - new_rule_min_x, origin_y - new_rule_min_y, true) {}
   end
   if origin_x.nil?
-    puts "bug: conflict before any inferrence?"
-    p inferred_tiles
     (origin_x, origin_y), origin_c = inferred_tiles.last
-    gets
   end
   origin_x -= new_rule_min_x
   origin_y -= new_rule_min_y
