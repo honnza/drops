@@ -20,12 +20,12 @@ end
 class String
   def display_length; gsub(/\e.*?m/,"").length; end
   def ljust_d(len); self + " " * [len - display_length, 0].max; end
-  def bytes_to_glyphs
+  def bytes_to_glyphs(space_color = "90", color = "0")
     self.force_encoding(Encoding::UTF_8)
         .chars.map do |c|
           case 
           when c == "\0" then "\e[7m \e[27m"
-          when !$binary && c == " " then "•"
+          when !$binary && c == " " then "\e[#{space_color}m•\e[#{color}m"
           when !$binary && c.valid_encoding? && c.ord > 0x20 then c
           else 
             bits = c.bytes[0]
@@ -33,7 +33,11 @@ class String
                     bits[6] << 1 | bits[2] << 4 |
                     bits[5] << 2 | bits[1] << 5 |
                     bits[4] << 6 | bits[0] << 7
-            (0x2800 + dots).chr(Encoding::UTF_8)
+            if c.ord < 0x20
+              "\e[7;#{space_color}m#{(0x40 + c.ord).chr}\e[27;#{color}m"
+            else
+              "\e[7m#{(0x2800 + dots).chr(Encoding::UTF_8)}\e[27m"
+            end
           end
     end
   end
@@ -494,9 +498,9 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
         "repeat" +
         " #{NEW_STR if stats[:block_counts][code] == 1}#{length}" +
         " #{NEW_STR if stats[:offset_counts][ocode] == 1}#{offset}",
-        "\e[31m#{out_buf[... buf_start].rtake(15).bytes_to_glyphs.rtake(5)&.join}\e[0m" +
+        "\e[31m#{out_buf[... buf_start].rtake(15).bytes_to_glyphs(31, 31).rtake(5)&.join}\e[0m" +
         "#{out_buf[buf_start ... buf_end].bytes_to_glyphs.join}" +
-        "\e[31m#{out_buf[buf_end ...].take(15).bytes_to_glyphs.take(5)&.join}\e[0m"
+        "\e[31m#{out_buf[buf_end ...].take(15).bytes_to_glyphs(31, 31).take(5)&.join}\e[0m"
       ]
       stats[:rep_blocks] += 1
     end
