@@ -565,6 +565,30 @@ def word_wrap words, width = IO.console.winsize[1] - 1
   end
 end
 
+def word_wrap_heights words, max_width = IO.console.winsize[1] - 1
+  words = words.split(" ") if words.is_a? String
+  word_lengths = words.map &:display_length
+  [nil] + (1 .. max_width).map do |width|
+    n_lines = 1
+    last_line_width = 0
+    word_lengths.each do |word_length|
+      if word_length > width
+        n_lines -= 1 if last_line_width == 0
+        n_lines += word_length / width + 1
+        last_line_width = word_length % width
+      else
+        last_line_width += 1 if last_line_width > 0
+        last_line_width += word_length
+        if last_line_width > width
+          n_lines += 1
+          last_line_width = word_length
+        end
+      end
+    end
+    last_line_width == 0 ? n_lines - 1 : n_lines
+  end
+end
+
 def list_wrap ary
   word_wrap ary[0 .. -2].map{|e| e + ","} + ary[-1 .. -1]
 end
@@ -581,8 +605,6 @@ class Table
   end
 
   def recalc_widths
-    #todo: minimize total height instead of dividing widths equally
-    #todo: redistribute rounding errors in the meantime?
     @col_styles.filter{_1[:nowrap]}.each{_1[:width] = _1[:opt_width]}
     fixed_total = @col_styles.filter{_1[:fixed] || _1[:nowrap]}.map{_1[:width]}.sum
     auto_cols = @col_styles.reject{_1[:fixed] || _1[:nowrap]}
@@ -599,13 +621,13 @@ class Table
 
     p auto_cols
     max_key = auto_cols.map{[_1[:opt_width], auto_total].min}
-    cell_heights_by_ix_width = Hash.new do |hash, (ix, width)|
-      hash[[ix, width]] = @data.map{|row| word_wrap(row[ix], width).count}
+    cell_heights_by_ix_width = @col_styles.each_index.map do |ix|
+      @data.map{|row| word_wrap_heights row[ix]}.transpose
     end
     height = lambda do
       @col_styles
-        .map.with_index{|s, ix| cell_heights_by_ix_width[[ix, s[:width]]]}
-        .transpose.map{_1.max}.sum
+        .map.with_index{|s, ix| cell_heights_by_ix_width[ix][s[:width]]}
+        .compact.transpose.map{_1.max}.sum
     end
     key_fold = (0 ... auto_cols.length).map do |ix|
       Hash.new do |hash, k_i|
@@ -634,7 +656,7 @@ class Table
         redo
       end
       old_key = to_expand_by_val[old_val].pop
-      if old_key.sum == auto_total
+      if old_key.sum <= auto_total
         auto_cols.zip(old_key).each{_1[:width] = _2}
         print "found widths: #{old_key.inspect} => #{height[]}\n"
         return
