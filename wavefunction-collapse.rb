@@ -133,11 +133,8 @@ Ruleset = Struct.new(
       next if old_rule.source[0] == :symm
       id_map[old_rule.id] = []
       new_syms = []
-      p [:old_rule, old_rule.id]
       old_rule.all_syms.each do |old_sym|
-        p [:old_sym, old_sym.id]
         unless new_syms.include? old_sym.tiles
-          p [:new]
           Rule.new(
             new_ruleset,
             (new_ruleset.rules.map(&:id).max || -1) + 1,
