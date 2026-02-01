@@ -96,6 +96,69 @@ Ruleset = Struct.new(
       end
     })
   end
+
+  def reduce_sym new_sym
+    new_ruleset = Ruleset.new(new_sym, tile_symm, tileset.map(&:dup), [])
+    old_rotation, old_mirror = symmetry.chars
+    new_rotation, new_mirror = new_sym.chars
+
+    # step one: align primary mirror. Must be a mirror symmetry in the old ruleset.
+    if new_mirror.nil?
+      new_ruleset.tileset.each{_1.mirrored = nil}
+    elsif old_mirror.nil?
+      raise "tried to add mirror symmetry"
+    else
+      mirror_rotation = (%w{| / - \\}.index(new_mirror) - %w{| / - \\}.index(old_mirror)) % 4
+      raise "tried to rotate mirror symmetry" if mirror_rotation * old_rotation.to_i % 4 != 0
+      (mirror_rotation * old_rotation.to_i / 4).times do
+        new_ruleset.tileset.each{_1.mirrored = tileset[_1.mirrored].rotated}
+      end
+    end
+    
+    # step two: reduce rotational symmetry
+    if new_rotation > old_rotation
+      raise "tried to add rotational symmetry"
+    elsif new_rotation == old_rotation
+      nil
+    elsif new_rotation == "1"
+      new_ruleset.tileset.each{_1.rotated = nil}
+    else
+      new_ruleset.tileset.each{_1.rotated = tileset[_1.rotated].rotated}
+    end
+
+    # step three: copy old rules, keeping track of new IDs. For each symmetry of an old rule,
+    # if it isn't a symmetry of an existing new rule, add a new new rule.
+    id_map = {}
+    rules.each do |old_rule|
+      next if old_rule.source[0] == :symm
+      id_map[old_rule.id] = []
+      new_syms = []
+      p [:old_rule, old_rule.id]
+      old_rule.all_syms.each do |old_sym|
+        p [:old_sym, old_sym.id]
+        unless new_syms.include? old_sym.tiles
+          p [:new]
+          Rule.new(
+            new_ruleset,
+            (new_ruleset.rules.map(&:id).max || -1) + 1,
+            old_rule.source,
+            old_sym.tiles
+          ).all_syms.each do
+            new_ruleset.rules << _1
+            new_syms << _1.tiles
+            id_map[old_rule.id] << _1.id
+          end
+        end
+      end
+    end
+
+    # step four: remap IDs in conflict rules
+    new_ruleset.rules.each do |new_rule|
+      next if new_rule.source != :conflict
+      new_rule.source = [:conflict] + new_rule.source[1..].flat_map(*id_map)
+    end
+    new_ruleset
+  end
 end
 
 def Ruleset.from_json str
@@ -940,7 +1003,7 @@ if $0 == __FILE__
       else
         puts "#{error.inspect} already defined, discarding #{tiles.count} tiles"
       end
-    when /^add symmetry (.+)$/
+    when /^add tile symmetry (.+)$/
       begin
         new_symm = $1.split(" ").map do |cycle_str|
           cycle = cycle_str.split("/").map do |tile_str|
@@ -963,6 +1026,8 @@ if $0 == __FILE__
         p $!
         p $@
       end
+    when /^reduce symmetry ([124][-\\|\/]?)$/
+      ruleset = ruleset.reduce_sym $1
     when /^add rule(?: (.+))?$/
       begin
         raise "no tiles defined" if ruleset.nil? || ruleset.tileset.empty?
@@ -1086,7 +1151,8 @@ if $0 == __FILE__
 available commands:
 new ruleset [124][/-\\|]? - reset all rules and tiles and set the rotation symmetry order and mirror plane for all rules.
 add tile (name) - create a tile with a given name. If rules have symmetry, asks for the transformed versions of the tile.
-add symmetry (permutation) - define a set of tile substitutions that leave the rules unchanged. Separate tiles within a cycle with /. Separate cycles in a set by spaces.
+add tile symmetry (permutation) - define a set of tile substitutions that leave the rules unchanged. Separate tiles within a cycle with /. Separate cycles in a set by spaces.
+reduce symmetry - changes the ruleset symmetry to a specificed one. Must be a subset of the current symmetry.
 add rule - define a pattern that may not appear in the generated pattern. Follow by a list of tile names. Separate multiple tiles an the same position with /. Type / followed by a list to include all tiles except the ones listed. Type only / to include all tiles at that position. Use (tiles)*(number) to duplicate that tile in the pattern. Use (row)**(number) to duplicate an entire row. Use // to separate multiple rows of rule pattern in one row of input.
 add rule (rule) - as above, but only one line of input.
 
