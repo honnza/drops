@@ -1035,8 +1035,8 @@ if $0 == __FILE__
           strs = [$1]
         end
         strs = strs
-          .flat_map{|str| str.split %r"(?<!/)//(?!/)"}
-          .flat_map{|str| str =~ /^(.+)\*\*(\d+)$/ ? [$1] * $2.to_i : [str]}
+          .flat_map{|str| str.split(%r"(?<!/)//(?!/)")}
+          .flat_map{|str| str.strip =~ /^(.+)\*\*(\d+)$/ ? [$1] * $2.to_i : [str]}
         raise "rule must include at least one tile" if strs.empty?
         rule_tiles = strs.map do |row_str|
           row_str.gsub!(/(\S+)\*(\d+)/){([$1] * $2.to_i).join " "}
