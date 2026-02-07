@@ -1025,6 +1025,7 @@ if $0 == __FILE__
       end
     when /^reduce symmetry ([124][-\\|\/]?)$/
       ruleset = ruleset.reduce_sym $1
+      puts "ok"
     when /^add rule(?: (.+))?$/
       begin
         raise "no tiles defined" if ruleset.nil? || ruleset.tileset.empty?
@@ -1069,6 +1070,25 @@ if $0 == __FILE__
       rescue
         puts $!.message
       end
+    when /^add period (-?\d+) (-?\d+)$/
+      if $1.to_i == 0 && $2.to_i = 0
+        puts "period cannot be zero"
+        break
+      end
+      ruleset.unpack_tiles(ruleset.possible_tiles).each do |tile|
+      rule_tiles = Array.new($2.to_i.abs + 1){Array.new($1.to_i.abs + 1){ruleset.all_tiles}}
+        if ($1.to_i < 0) == ($2.to_i < 0)
+          rule_tiles[0][0] = ruleset.pack_tiles([tile])
+          rule_tiles[-1][-1] = ruleset.pack_tiles(ruleset.tileset - [tile])
+        else
+          rule_tiles[0][-1] = ruleset.pack_tiles([tile])
+          rule_tiles[-1][0] = ruleset.pack_tiles(ruleset.tileset - [tile])
+        end
+        rule = Rule.new(ruleset, (ruleset.rules.map(&:id).max || -1) + 1, [:axiom], rule_tiles)
+        new_rules = rule.all_syms
+        ruleset.rules += new_rules
+      end
+      puts "ok"
     when /^delete (cascade )?rule (\d+)$/
       delete_stack = [$2.to_i]
       until delete_stack.empty?
@@ -1152,6 +1172,7 @@ add tile symmetry (permutation) - define a set of tile substitutions that leave 
 reduce symmetry - changes the ruleset symmetry to a specificed one. Must be a subset of the current symmetry.
 add rule - define a pattern that may not appear in the generated pattern. Follow by a list of tile names. Separate multiple tiles an the same position with /. Type / followed by a list to include all tiles except the ones listed. Type only / to include all tiles at that position. Use (tiles)*(number) to duplicate that tile in the pattern. Use (row)**(number) to duplicate an entire row. Use // to separate multiple rows of rule pattern in one row of input.
 add rule (rule) - as above, but only one line of input.
+add period (number) (number) - add rule that requires the board repeats with a given offset. Negate one number to indicate offset along the rising diagonal.
 
 Ruleset must be defined before tiles, tiles must be defined before tile symmetries that use them, symmetries must be defined before rules.
 
