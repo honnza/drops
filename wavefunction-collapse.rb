@@ -849,6 +849,7 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
     end
 
     stats = Hash[ruleset.rules.select{_1.source[0] != :symm}.map{[_1.id, 0]}]
+    last_old_rule = stats.keys.max
     stats[:g] = 0
     possible_tiles = ruleset.possible_tiles(stats)
     if possible_tiles.nil?
@@ -890,11 +891,18 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
       new_board[y][x] &= t
       new_rule = apply_ruleset ruleset, new_board, new_stats, x, y, &render
       if new_rule
-        ruleset.rules += new_rule.all_syms
+        new_rules = new_rule.all_syms
+        new_rules.each{_1.source = new_rule.source} if seeded == :split_sym
+        ruleset.rules += new_rules
+
         ruleset.rules.sort_by!.with_index do |rule, ix|
           [(rule.source[0] == :symm ? -stats[rule.source[1]] : -stats[rule.id] rescue -stats.values.select{_1.is_a? Numeric}.max - 1), rule.source[0], ix]
         end
-        stats[new_rule.id] = 0
+        if seeded == :split_sym
+          new_rules.each{stats[_1.id] = 0}
+        else
+          stats[new_rule.id] = 0
+        end
         if quiet < 1
           puts "\nnew #{new_rule.summary}; now at #{ruleset.rules.count} rules"
           puts "#{rsr_undo_log.length} rule#{"s" unless rsr_undo_log.length == 1} recently removed as singular" unless rsr_undo_log.empty?
@@ -944,7 +952,7 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
 
     unless stats.values.include? :back
       rules_deleted = ruleset.rules.select do
-        _1.source[0] == :conflict && stats[_1.id] == 0
+        _1.id <= last_old_rule && (_1.source[0] == :conflict && stats[_1.id] == 0)
       end.each do |to_delete, _|
         ruleset.rules.select{_1.source[0] == :conflict && _1.source.include?(to_delete.id)}.each do |child_rule|
           child_rule.source = child_rule.source - [to_delete.id] | to_delete.source[1..]
@@ -1118,7 +1126,7 @@ if $0 == __FILE__
           puts rule
         end
       end
-    when /^(q?q?)(gen(?: rsr)?|genus|gense|generate(?: seeded| unseeded| rsr)?) (drizzle|rain|pour|wfc[rpl]|lex)(?: (\d+)x(\d+))?(?: (\S+))?$/
+    when /^(q?q?)(gen(?: rsr)?|genus|gense|gensess|generate(?: seeded| unseeded| rsr)?) (drizzle|rain|pour|wfc[rpl]|lex)(?: (\d+)x(\d+))?(?: (\S+))?$/
       if ruleset.nil? || ruleset.tileset.empty?
         puts "at least one tile required"
         next
@@ -1126,6 +1134,7 @@ if $0 == __FILE__
       seeded = case $2
                when "gen", "generate" then nil
                when "gense", "generate seeded" then :seeded
+               when "gensess" then :split_sym
                when "genus", "generate unseeded" then :unseeded
                when "gen rsr", "generate rsr" then :rsr
                else raise "error parsing command. This is a bug."
@@ -1179,7 +1188,7 @@ Ruleset must be defined before tiles, tiles must be defined before tile symmetri
 delete (cascade)? rule (id) - delete a rule. Must not be referenced by other rules. If cascade is set, delete refererrers instead.
 show (all)? rules - list all rules in the ruleset. Omits symmetric images of other rules unless specified.
 
-(q|qq)?(gen|genus|gense|generate) (rsr|seeded|unseeded)? (drizzle|rain|pour|wfc) (wxh)? (tile)? - generates a pattern using the ruleset or finds and adds a rule non-trivially implied by existing rules. Uses the screen size if unspecified. If q (quiet mode) is set, no stats are shown after each new rule. If superquiet is set, do not show stats when resetting the board either. If gense/seeded is set, it attemts to generate the board again with the same RNG if unsuccessful. If rsr is set, if a new rule only applies once, it is removed and the randomizzation is adjusted. If genus/unseeded is set, it retries with a different RNG. If neither is set, aborts after one attempt. If tile is specified, it tries to place that tile in the selected position.
+(q|qq)?(gen|genus|gense|gensess|generate) (rsr|seeded|unseeded)? (drizzle|rain|pour|wfc) (wxh)? (tile)? - generates a pattern using the ruleset or finds and adds a rule non-trivially implied by existing rules. Uses the screen size if unspecified. If q (quiet mode) is set, no stats are shown after each new rule. If superquiet is set, do not show stats when resetting the board either. If gense/seeded is set, it attemts to generate the board again with the same RNG if unsuccessful. If gensess (split-symmetry) is set, each symmetic aspect of a rule is treated separately for more aggressive rule pruning. If rsr is set, if a new rule only applies once, it is removed and the randomizzation is adjusted. If genus/unseeded is set, it retries with a different RNG. If neither is set, aborts after one attempt. If tile is specified, it tries to place that tile in the selected position.
   drizzle - at each step, select a random position and remove one possible tile from it
   rain - at each step, select a random position and select one tile for that position
   pour - at each step, sulect an unresolved position closest to the middle and select one tile for that position
