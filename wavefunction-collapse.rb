@@ -1079,7 +1079,7 @@ if $0 == __FILE__
         puts $!.message
       end
     when /^add period (-?\d+) (-?\d+)$/
-      if $1.to_i == 0 && $2.to_i = 0
+      if $1.to_i == 0 && $2.to_i == 0
         puts "period cannot be zero"
         break
       end
