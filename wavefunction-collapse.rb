@@ -950,7 +950,7 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
       [(rule.source[0] == :symm ? -stats[rule.source[1]] : -stats[rule.id] rescue -stats.values.select{_1.is_a? Numeric}.max - 1), rule.source[0], ix]
     end
 
-    unless stats.values.include? :back
+    unless stats.values.include?(:back) || stats[:g] == 0
       rules_deleted = ruleset.rules.select do
         _1.id <= last_old_rule && (_1.source[0] == :conflict && stats[_1.id] == 0)
       end.each do |to_delete, _|
