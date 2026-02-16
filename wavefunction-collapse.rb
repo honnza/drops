@@ -540,7 +540,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
       y, x
     ]}.reverse
   progress_bar = []
-  progress_bar_length = coord_iter.length * (ruleset.tileset.length + 1)
+  progress_bar_length = coord_iter.length * (n_possible_tiles + 1)
 
   coord_iter.each.with_index do |(y, x), ix|
     renderer.call rule_bitmap, progress_bar, progress_bar_length, [x, x, y, y], hl: true
@@ -554,6 +554,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
     # tile_iter = (0 ... ruleset.tileset.count).select{|tile| rule_bitmap[y][x] & 2 ** tile == 0}
     progress_bar << :head
     (0 ... ruleset.tileset.count).each do |tile|
+      next if possible_tiles & 2 ** tile == 0
       renderer.call rule_bitmap, progress_bar, progress_bar_length, [x, x, y, y], hl: true
       if rule_bitmap[y][x] & 2 ** tile == 0
         new_bitmap = bitmap_without.map(&:dup)
