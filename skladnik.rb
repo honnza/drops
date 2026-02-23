@@ -46,12 +46,16 @@ Crate = Struct.new :ascii, :id, :pos do
         "\e[48;2;#{rand 0..100};#{rand 0..100};#{rand 0..100}m" +
         "#{rand(0x4e00 .. 0x9fef).chr(Encoding::UTF_8)}\e[0m", id, pos)
   end
-  def self.gradient_alpha2(id, gradient, b = rand)
-    r, g = [0, 2/3r].map{0.5 + Math.cos(-_1 * Math::PI + 2 * gradient) / 2}
-    r, g, b = [r, g, b].map{(_1 ** 0.5 * 256).floor.clamp(0..255)}
+  def self.rgb_alpha2(id, r, g, b)
+    r, g, b = [r, g, b].map{(_1.clamp(0..) ** 0.5 * 256).floor.clamp(..255)}
 
     new("\e[30;48;2;#{r};#{g};#{b}m" +
         "#{(?A..?Z).to_a.sample}#{(?a..?z).to_a.sample}\e[0m", id, nil)
+  end
+  def self.gradient_alpha2(id, gradient, b = rand)
+    r = 1 - gradient ** 2.0
+    g = 1 - (1 - gradient) ** 2.0
+    rgb_alpha2(id, r, g, b)
   end
 end
 
@@ -1131,12 +1135,20 @@ begin
 
   cap = model.layout.capacity
   root = model.layout.exits[0]
+  path_scores = Array.new(layout.height){Array.new(layout.width, 0)}
+
   model.layout.area.times do |id|
     pos = model.suggest_place
     path = model.bfs_path pos, root
+    if layout.subtree_size(*pos) == 1
+      path.each{|ri, ci| path_scores[ri][ci] += 1}
+    end
+
+    path_score = Math.log(path_scores[pos[0]][pos[1]]) / Math.log(cap)
     sts_score = Math.log(layout.subtree_size(*pos)) / Math.log(cap)
     efficiency_score = 1 - ((path[0][0] - path[-1][0]).abs + (path[0][1] - path[-1][1]).abs + 1).fdiv(path.length) ** (2 ** 0.5)
-    crate = Crate.gradient_alpha2 id, sts_score, efficiency_score
+
+    crate = Crate.rgb_alpha2 id, 1 - efficiency_score, path_score, sts_score
     model.crates[id] = crate
     model.animate_insert crate, [nil, nil] + path.reverse
     model.animate_worker path[2..]
