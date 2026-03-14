@@ -893,17 +893,12 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
       new_rule = apply_ruleset ruleset, new_board, new_stats, x, y, &render
       if new_rule
         new_rules = new_rule.all_syms
-        new_rules.each{_1.source = new_rule.source} if seeded == :split_sym
         ruleset.rules += new_rules
 
         ruleset.rules.sort_by!.with_index do |rule, ix|
           [(rule.source[0] == :symm ? -stats[rule.source[1]] : -stats[rule.id] rescue -stats.values.select{_1.is_a? Numeric}.max - 1), rule.source[0], ix]
         end
-        if seeded == :split_sym
-          new_rules.each{stats[_1.id] = 0}
-        else
-          stats[new_rule.id] = 0
-        end
+        stats[new_rule.id] = 0
         if quiet < 1
           puts "\nnew #{new_rule.summary}; now at #{ruleset.rules.count} rules"
           puts "#{rsr_undo_log.length} rule#{"s" unless rsr_undo_log.length == 1} recently removed as singular" unless rsr_undo_log.empty?
@@ -934,6 +929,17 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
             return
           else
             puts "conflict; retrying"
+            if seeded == :split_sym
+              ruleset.rules.each do |rule|
+                if rule.source[0] == :symm
+                  parent_rule = ruleset.rules.find{_1.id == rule.source[1]}
+                  if parent_rule.source[0] == :conflict && parent_rule.id <= last_old_rule && stats[parent_rule.id] == 1
+                    rule.source = parent_rule.source
+                    stats[rule.id] = :new
+                  end
+                end
+              end
+            end
             break
           end
         else
