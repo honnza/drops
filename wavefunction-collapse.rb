@@ -796,6 +796,8 @@ def bucketed_progress_bar progress, text = "", width
   "[#{text}\e[0m]"
 end
 
+Pline = Struct.new(:x, :y)
+
 def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
   render = proc do |board, n, d, diff = nil, hl: false|
     print "\e[H\e[?25l"
@@ -865,6 +867,7 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
         case method
           when :drizzle, :rain then 0
           when :pour then (2 * x - w + 1) ** 2 + (2 * y - h + 1) ** 2
+          when Pline then ((2 * x - w + 1) * method.y - (2 * y - h + 1) * method.x).abs
           when :lex then [-y, x]
           when :wfcr then board[y][x].digits(2).count(1)
           when :wfcp then [board[y][x].digits(2).count(1), (2 * x - w + 1) ** 2 + (2 * y - h + 1) ** 2]
@@ -1133,12 +1136,18 @@ if $0 == __FILE__
           puts rule
         end
       end
-    when /^(q?q?)(gen(?: rsr)?|genus|gense|gensess|generate(?: seeded| unseeded| rsr)?) (drizzle|rain|pour|wfc[rpl]|lex)(?: (\d+)x(\d+))?(?: (\S+))?$/
+    when /
+      ^(?<q>q?q?)(?<g>gen( rsr)?|genus|gense|gensess|generate( seeded| unseeded| rsr)?)\ 
+      (?<m>drizzle|rain|pour|wfc[rpl]|lex|(?<mn>pline)\((?<mx>-?\d+)\ (?<my>-?\d+)\))
+      (\ (?<h>\d+)x(?<w>\d+))?
+      (\ (?<t>\S+))?$
+    /x
       if ruleset.nil? || ruleset.tileset.empty?
         puts "at least one tile required"
         next
       end
-      seeded = case $2
+      method = $~[:mn] == "pline" ? Pline.new($~[:mx].to_i, $~[:my].to_i) : $~[:m].to_sym
+      seeded = case $~[:g]
                when "gen", "generate" then nil
                when "gense", "generate seeded" then :seeded
                when "gensess" then :split_sym
@@ -1147,16 +1156,16 @@ if $0 == __FILE__
                else raise "error parsing command. This is a bug."
                end
       normalize_tiles ruleset.tileset
-      h = $4&.to_i || (IO.console.winsize[0] - 1) / ruleset.tileset[0].ascii.length
-      w = $5&.to_i || IO.console.winsize[1] / ruleset.tileset[0].ascii[0].display_length
-      tile = ruleset.tileset.find{_1.name == $6}
-      if $6 && !tile
-        puts "couldn't find tile #{$6}"
+      h = $~[:h]&.to_i || (IO.console.winsize[0] - 1) / ruleset.tileset[0].ascii.length
+      w = $~[:w]&.to_i || IO.console.winsize[1] / ruleset.tileset[0].ascii[0].display_length
+      tile = ruleset.tileset.find{_1.name == $~[:t]}
+      if $~[:t] && !tile
+        puts "couldn't find tile #{$~[:t]}"
         next
       end
       StackProf.start(mode: :cpu)
       begin
-        generate ruleset, $3.to_sym, w, h, seeded, $1.length, tile
+        generate ruleset, method, w, h, seeded, $~[:q].length, tile
       rescue Interrupt
         p $!
       end
@@ -1198,7 +1207,8 @@ show (all)? rules - list all rules in the ruleset. Omits symmetric images of oth
 (q|qq)?(gen|genus|gense|gensess|generate) (rsr|seeded|unseeded)? (drizzle|rain|pour|wfc) (wxh)? (tile)? - generates a pattern using the ruleset or finds and adds a rule non-trivially implied by existing rules. Uses the screen size if unspecified. If q (quiet mode) is set, no stats are shown after each new rule. If superquiet is set, do not show stats when resetting the board either. If gense/seeded is set, it attemts to generate the board again with the same RNG if unsuccessful. If gensess (split-symmetry) is set, each symmetic aspect of a rule is treated separately for more aggressive rule pruning. If rsr is set, if a new rule only applies once, it is removed and the randomizzation is adjusted. If genus/unseeded is set, it retries with a different RNG. If neither is set, aborts after one attempt. If tile is specified, it tries to place that tile in the selected position.
   drizzle - at each step, select a random position and remove one possible tile from it
   rain - at each step, select a random position and select one tile for that position
-  pour - at each step, sulect an unresolved position closest to the middle and select one tile for that position
+  pour - at each step, select an unresolved position closest to the middle and select one tile for that position
+  pline - at each step, select an unresolved position closest to the specified line and select one tile for that position. Same order as the add period command.
   lex - resolve tiles from left to right, then bottom to top
   wfc(r|p|l) - wavefunction collapse classic. At each step, randomly choose a tile with the fewest possibilities and resolve it. The variant decides the order in which tiles with equal number of possibilities are chosen.
 
