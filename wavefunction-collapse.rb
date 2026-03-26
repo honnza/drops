@@ -496,6 +496,12 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
 
   # phase three: discard full tiles
 
+  new_bitmap = rule_bitmap.map{|row| row.map{|tile| tile & (tile - 1) == 0 ? tile : ruleset.all_tiles}}
+  if apply_ruleset(ruleset, new_bitmap, Hash.new(0), nil, nil, true) {}
+    rule_bitmap.each{|row| row.map!{|tile| tile & (tile - 1) == 0 ? tile : ruleset.all_tiles}}
+    renderer.call rule_bitmap, 0, 1
+  end
+
   coord_iter = [*0 ... rule_bitmap.length].product([*0 ... rule_bitmap[0].length])
     .select{|y, x| rule_bitmap[y][x].digits(2).count(1) < n_possible_tiles}
     .sort_by{|y, x| [
