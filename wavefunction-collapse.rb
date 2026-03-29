@@ -559,6 +559,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
     rule_bitmap[y][x] |= ruleset.all_tiles & ~bitmap_without[y][x]
     # tile_iter = (0 ... ruleset.tileset.count).select{|tile| rule_bitmap[y][x] & 2 ** tile == 0}
     progress_bar << :head
+    (possible_tiles & rule_bitmap[y][x]).digits(2).count(1).times{progress_bar << :skipped}
     (0 ... ruleset.tileset.count).each do |tile|
       next if possible_tiles & 2 ** tile == 0
       renderer.call rule_bitmap, progress_bar, progress_bar_length, [x, x, y, y], hl: true
@@ -573,8 +574,6 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
         else
           progress_bar << :kept
         end
-      else
-        progress_bar << :skipped
       end
     end
     renderer.call rule_bitmap, progress_bar, progress_bar_length, [x, x, y, y], hl: false
