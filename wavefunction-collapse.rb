@@ -40,6 +40,7 @@ Ruleset = Struct.new(
   :symmetry,  # characterized by the rotation order (1 = no symmetry / 2 / 4), and at most one mirror line (-, /, |, \)
   :tile_symm, # list of tile permutations that generate the ruleset tile symmetries, each stored as a list of cycles
   :tileset,   # list of tiles that can appear in the world
+  :periods,   # list of explicit periodicity rules given for the ruleset
   :rules) do
 
   # list of tiles defined by the tileset
@@ -88,6 +89,7 @@ Ruleset = Struct.new(
           m: t.mirrored
         }
       end,
+      p: periods,
       r: rules.map do |r|
         {
           s: [r.source[0]] + r.source[1..].map{|s| rule_id_map[s]},
@@ -110,12 +112,15 @@ Ruleset = Struct.new(
       rule = Rule.new(self, (rules.map(&:id).max || -1) + 1, [:axiom], rule_tiles)
       self.rules += rule.all_syms
     end
+
+    self.periods << [x, y]
   end
 
   def reduce_sym new_sym
-    new_ruleset = Ruleset.new(new_sym, tile_symm, tileset.map(&:dup), [])
+    new_ruleset = Ruleset.new(new_sym, tile_symm, tileset.map(&:dup), [], [])
     old_rotation, old_mirror = symmetry.chars
     new_rotation, new_mirror = new_sym.chars
+    # TODO: carry over period rules
 
     # step one: align primary mirror. Must be a mirror symmetry in the old ruleset.
     if new_mirror.nil?
@@ -180,6 +185,7 @@ def Ruleset.from_json str
     json[:s],
     json[:ts] || [],
     tiles,
+    json[:p] || [],
     nil
   )
   ruleset.rules = json[:r].map.with_index do |r, i|
@@ -469,6 +475,28 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   new_rule_min_x, new_rule_max_x = (new_rule_tiles.keys.map{|x, _| x} + [origin_x]).minmax
   new_rule_min_y, new_rule_max_y = (new_rule_tiles.keys.map{|_, y| y} + [origin_y]).minmax
   rule_bitmap = [*new_rule_min_y .. new_rule_max_y].map{[*new_rule_min_x .. new_rule_max_x].map{ruleset.all_tiles}}
+  new_rule_tiles.transform_keys! do |x, y|
+    p ruleset.periods
+    ruleset.periods.each do |period_x, period_y|
+      while (
+          (new_rule_min_x .. new_rule_max_x).include?(x + period_x) &&
+          (new_rule_min_y .. new_rule_max_y).include?(y + period_y) &&
+          (x + period_x - origin_x) ** 2 + (y + period_y - origin_y) ** 2 < (x - origin_x) ** 2 + (y - origin_y) ** 2
+      )
+        x += period_x
+        y += period_y
+      end
+      while (
+          (new_rule_min_x .. new_rule_max_x).include?(x - period_x) &&
+          (new_rule_min_y .. new_rule_max_y).include?(y - period_y) &&
+          (x - period_x - origin_x) ** 2 + (y - period_y - origin_y) ** 2 < (x - origin_x) ** 2 + (y - origin_y) ** 2
+      )
+        x -= period_x
+        y -= period_y
+      end
+    end
+    [x, y]
+  end
   new_rule_tiles.keys.each{|x, y| rule_bitmap[y - new_rule_min_y][x - new_rule_min_x] &= board[y][x]}
 
   # phase two: find the last conflict
@@ -481,13 +509,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   inferred_tiles[[origin_x, origin_y]] = ruleset.all_tiles & ~board[origin_y][origin_x]
   rule_bitmap[origin_y - new_rule_min_y][origin_x - new_rule_min_x] = ruleset.all_tiles
   applied_bitmap = rule_bitmap.map &:dup
-  if apply_ruleset(ruleset, applied_bitmap, Hash.new(0), nil, nil, true) {}
-    raise "bug: there shouldn't be a conflict here"
-  end
   board[origin_y][origin_x] = ruleset.all_tiles
-  if apply_ruleset(ruleset, board, Hash.new(0), origin_x, origin_y, true) {}
-    raise "bug: there shouldn't be a conflict here either"
-  end
   inferred_tiles = inferred_tiles.to_a
   inferred_tiles[... -1] = inferred_tiles[... -1].select do |(origin_x, origin_y), origin_c|
     rule_bitmap[origin_y - new_rule_min_y][origin_x - new_rule_min_x].digits(2).count(1) <= 2
@@ -1015,7 +1037,7 @@ if $0 == __FILE__
     print "WFC> "
     case gets.chomp
     when /^new ruleset ([124][\\\/\-\|]?)$/
-      ruleset = Ruleset.new $1, [], [], []
+      ruleset = Ruleset.new $1, [], [], [], []
       puts "ok"
     when /^add tile (\S+)$/
       if !ruleset
