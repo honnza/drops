@@ -97,6 +97,21 @@ Ruleset = Struct.new(
     })
   end
 
+  def add_period(x, y)
+    unpack_tiles(possible_tiles).each do |tile|
+      rule_tiles = Array.new(y + 1){Array.new(x.abs + 1){all_tiles}}
+      if (x < 0) == (y < 0)
+        rule_tiles[0][0] = pack_tiles([tile])
+        rule_tiles[-1][-1] = pack_tiles(tileset - [tile])
+      else
+        rule_tiles[0][-1] = pack_tiles([tile])
+        rule_tiles[-1][0] = pack_tiles(ruleset.tileset - [tile])
+      end
+      rule = Rule.new(self, (rules.map(&:id).max || -1) + 1, [:axiom], rule_tiles)
+      self.rules += rule.all_syms
+    end
+  end
+
   def reduce_sym new_sym
     new_ruleset = Ruleset.new(new_sym, tile_symm, tileset.map(&:dup), [])
     old_rotation, old_mirror = symmetry.chars
@@ -1098,19 +1113,7 @@ if $0 == __FILE__
         puts "period cannot be zero"
         break
       end
-      ruleset.unpack_tiles(ruleset.possible_tiles).each do |tile|
-      rule_tiles = Array.new($2.to_i.abs + 1){Array.new($1.to_i.abs + 1){ruleset.all_tiles}}
-        if ($1.to_i < 0) == ($2.to_i < 0)
-          rule_tiles[0][0] = ruleset.pack_tiles([tile])
-          rule_tiles[-1][-1] = ruleset.pack_tiles(ruleset.tileset - [tile])
-        else
-          rule_tiles[0][-1] = ruleset.pack_tiles([tile])
-          rule_tiles[-1][0] = ruleset.pack_tiles(ruleset.tileset - [tile])
-        end
-        rule = Rule.new(ruleset, (ruleset.rules.map(&:id).max || -1) + 1, [:axiom], rule_tiles)
-        new_rules = rule.all_syms
-        ruleset.rules += new_rules
-      end
+      ruleset.add_period($1.to_i, $2.to_i)
       puts "ok"
     when /^delete (cascade )?rule (\d+)$/
       delete_stack = [$2.to_i]
