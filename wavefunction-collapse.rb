@@ -476,7 +476,6 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   new_rule_min_y, new_rule_max_y = (new_rule_tiles.keys.map{|_, y| y} + [origin_y]).minmax
   rule_bitmap = [*new_rule_min_y .. new_rule_max_y].map{[*new_rule_min_x .. new_rule_max_x].map{ruleset.all_tiles}}
   new_rule_tiles.transform_keys! do |x, y|
-    p ruleset.periods
     ruleset.periods.each do |period_x, period_y|
       while (
           (new_rule_min_x .. new_rule_max_x).include?(x + period_x) &&
