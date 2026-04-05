@@ -546,17 +546,20 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
       y, x
     ]}.reverse
   progress_bar = []
-  head_at = ruleset.tileset.length - 1
+  progress_bar_length = coord_iter.length + n_possible_tiles
+  head_at = n_possible_tiles - 1
 
-  renderer.call rule_bitmap, progress_bar, rule_bitmap.length * rule_bitmap[0].length,
+  renderer.call rule_bitmap, progress_bar, progress_bar_length,
     [origin_x, origin_x, origin_y, origin_y], hl: true
   coord_iter.each.with_index do |(y, x), ix|
     y, x = coord_iter[ix]
-    while head_at != rule_bitmap[y][x].digits(2).count(1)
+    cell_bits = rule_bitmap[y][x].digits(2).count(1)
+    if head_at != cell_bits
       progress_bar << :head
-      head_at -= 1
+      progress_bar_length -= head_at - cell_bits - 1
+      head_at = cell_bits
     end
-    renderer.call rule_bitmap, progress_bar, coord_iter.length + ruleset.tileset.length, [x, x, y, y], hl: true
+    renderer.call rule_bitmap, progress_bar, progress_bar_length, [x, x, y, y], hl: true
     new_bitmap = rule_bitmap.map{|row| row.dup}
     new_bitmap[y][x] = ruleset.all_tiles
     r = apply_ruleset(ruleset, new_bitmap, Hash.new(0),
@@ -567,7 +570,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
     else
       progress_bar << :kept
     end
-    renderer.call rule_bitmap, progress_bar, coord_iter.length + ruleset.tileset.length,
+    renderer.call rule_bitmap, progress_bar, progress_bar_length,
                   [x, x, y, y], hl: x == origin_x && y == origin_y
   end
 
