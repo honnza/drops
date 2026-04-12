@@ -149,6 +149,9 @@ if __FILE__ == $0
       when "\x7F"
         IO.console.clear_screen
         input[-1] = "" unless input.empty?
+      when "\x03", "\x1A"
+        print "\e[?25h"
+        exit
       when "\r"
         case input
         when /^new ([0-9]{1,2})x([0-9]{1,2})$/
@@ -172,14 +175,13 @@ if __FILE__ == $0
           end
           grid.cells[y][x].send method, arg
           grid.fuse_region x, y if $1 == "merge"
+        when /^shuffle$/
+          grid.cells.each{|row| row.each{_1.r = rand; _1.g = rand; _1.b = rand}}
         else
           puts "unknown command"
         end
         IO.console.clear_screen
         input = ""
-      when "\x00" .. "\x1f"
-        print "\e[?25h"
-        exit
       else input += byte
       end
     end
