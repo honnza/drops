@@ -157,24 +157,30 @@ if __FILE__ == $0
         when /^new ([0-9]{1,2})x([0-9]{1,2})$/
           IO.console.clear_screen
           grid = Grid.checker(0.1, 0.002, 0.001, $1.to_i, $2.to_i)
-        when /^(join|merge|split) ([a-z])([0-9]{1,2}) ([neswurdl^>v<])$/
+        when /^(join|merge|split) ([a-z])([0-9]{1,2}) ((?:\d?[neswurdl^>v<])*)$/
           arg = $1 != "split"
+          merge = $1 == "merge"
           x = $2.ord - "a".ord
           y = grid.cells.length - $3.to_i
-          case $4
-          when "n", "u", "^"
-            y -= 1
-            method = :join_s=
-          when "e", "r", ">"
-            method = :join_e=
-          when "s", "d", "v"
-            method = :join_s=
-          when "w", "l", "<"
-            x -= 1
-            method = :join_e=
+          $4.scan(/(\d*)(\D)/).each do |count, dir|
+            (count.empty? ? 1 : count.to_i).times do
+              case dir
+              when "n", "u", "^"
+                y -= 1
+                grid.cells[y][x].join_s = arg
+              when "e", "r", ">"
+                grid.cells[y][x].join_e = arg
+                x += 1
+              when "s", "d", "v"
+                grid.cells[y][x].join_s = arg
+                y += 1
+              when "w", "l", "<"
+                x -= 1
+                grid.cells[y][x].join_e = arg
+              end
+            end
           end
-          grid.cells[y][x].send method, arg
-          grid.fuse_region x, y if $1 == "merge"
+          grid.fuse_region x, y if merge
         when /^shuffle$/
           grid.cells.each{|row| row.each{_1.r = rand; _1.g = rand; _1.b = rand}}
         else
