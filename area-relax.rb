@@ -103,8 +103,8 @@ Grid = Struct.new(
     (0..).each do |i|
       break if region.size == i
       x, y = region[i]
-      region |= [[x + 1, y]] if cells[y][x].join_e
-      region |= [[x, y + 1]] if cells[y][x].join_s
+      region |= [[x + 1, y]] if x < cells[y].length && cells[y][x].join_e
+      region |= [[x, y + 1]] if y < cells.length && cells[y][x].join_s
       region |= [[x - 1, y]] if x > 0 && cells[y][x - 1].join_e
       region |= [[x, y - 1]] if y > 0 && cells[y - 1][x].join_s
     end
