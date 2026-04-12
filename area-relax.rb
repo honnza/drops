@@ -4,7 +4,7 @@ Cell = Struct.new(
   :r, :g, :b, # floats going from 0.0 to 1.0
   :dr, :dg, :db, # accumulated difference from applied forces
   :fixed?, # fixed cells are immune to forces
-  :join_e?, :join_s?, # false for repulsive force, true for attractive force
+  :join_e, :join_s, # false for repulsive force, true for attractive force
 )
 
 Grid = Struct.new(
@@ -29,7 +29,7 @@ Grid = Struct.new(
         dg = cell_w.g - cell_e.g
         db = cell_w.b - cell_e.b
         d2 = dr ** 2 + dg ** 2 + db ** 2
-        if cell_w.join_e?
+        if cell_w.join_e
           f_mult = - d2 ** 0.5 * f_join
         else
           f_mult = d2 ** -0.5 * f_split
@@ -48,7 +48,7 @@ Grid = Struct.new(
         dg = cell_n.g - cell_s.g
         db = cell_n.b - cell_s.b
         d2 = dr ** 2 + dg ** 2 + db ** 2
-        if cell_n.join_s?
+        if cell_n.join_s
           f_mult = - d2 ** 0.5 * f_join
         else
           f_mult = d2 ** -0.5 * f_split
@@ -97,6 +97,23 @@ Grid = Struct.new(
     end
     print "  " + col_headers.join + "\r\n"
   end
+
+  def fuse_region(x1, y1)
+    region = [[x1, y1]]
+    (0..).each do |i|
+      break if region.size == i
+      x, y = region[i]
+      region |= [[x + 1, y]] if cells[y][x].join_e
+      region |= [[x, y + 1]] if cells[y][x].join_s
+      region |= [[x - 1, y]] if x > 0 && cells[y][x - 1].join_e
+      region |= [[x, y - 1]] if y > 0 && cells[y - 1][x].join_s
+    end
+
+    region.each do |x, y|
+      cells[y][x].join_e = true if region.include? [x + 1, y]
+      cells[y][x].join_s = true if region.include? [x, y + 1]
+    end
+  end
 end
 
 def Grid.checker(f_join, f_split, f_temp, w, h)
@@ -137,23 +154,24 @@ if __FILE__ == $0
         when /^new ([0-9]{1,2})x([0-9]{1,2})$/
           IO.console.clear_screen
           grid = Grid.checker(0.1, 0.002, 0.001, $1.to_i, $2.to_i)
-        when /^(join|split) ([a-z])([0-9]{1,2}) ([neswurdl^>v<])$/
-          arg = $1 == "join"
+        when /^(join|merge|split) ([a-z])([0-9]{1,2}) ([neswurdl^>v<])$/
+          arg = $1 != "split"
           x = $2.ord - "a".ord
-          y = grid.cells.length - $3.to_i 
+          y = grid.cells.length - $3.to_i
           case $4
           when "n", "u", "^"
             y -= 1
-            method = :"join_s?="
+            method = :join_s=
           when "e", "r", ">"
-            method = :"join_e?="
+            method = :join_e=
           when "s", "d", "v"
-            method = :"join_s?="
+            method = :join_s=
           when "w", "l", "<"
             x -= 1
-            method = :"join_e?="
+            method = :join_e=
           end
           grid.cells[y][x].send method, arg
+          grid.fuse_region x, y if $1 == "merge"
         else
           puts "unknown command"
         end
