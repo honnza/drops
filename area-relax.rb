@@ -13,6 +13,31 @@ Grid = Struct.new(
   :f_temp, # force multiplier for the random noise
   :cells, # grid of Cell elements
 ) do
+  def export
+    result = ""
+    (-1 ... cells.length).each do |y|
+      (-1 ... cells[y].length).each do |x|
+        cell_fixed = x == -1 || y == -1 || cells[y][x].fixed
+        cell_s_fixed = x == -1 || y == cells.length - 1 || cells[y+1][x].fixed
+        cell_e_fixed = y == -1 || x == cells[y].length - 1 || cells[y][x+1].fixed
+        result << case
+                  when cell_fixed && cell_s_fixed then " "
+                  when cell_fixed || cell_s_fixed then "_"
+                  when cells[y][x].join_s then " "
+                  else "_"
+                  end
+        result << case
+                  when cell_fixed && cell_e_fixed then ","
+                  when cell_fixed || cell_e_fixed then "|"
+                  when cells[y][x].join_e then ","
+                  else "|"
+                  end
+      end
+      result << "\r\n"
+    end
+    result
+  end
+
   def relax_tick
     cells.each do |row|
       row.each do |cell|
@@ -160,6 +185,12 @@ if __FILE__ == $0
         when /^new ([0-9]{1,2})x([0-9]{1,2})$/
           IO.console.clear_screen
           grid = Grid.checker(0.1, 0.002, 0.001, $1.to_i, $2.to_i)
+        when /^export$/
+          IO.console.clear_screen
+          IO.console.cursor = [0, 0]
+          puts grid.export
+          STDIN.getc
+
         when /^(join|merge|split) ([a-z])([0-9]{1,2}) ((?:\d?[neswurdl^>v<])*)$/
           arg = $1 != "split"
           merge = $1 == "merge"
