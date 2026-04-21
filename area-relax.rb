@@ -3,7 +3,7 @@ require "io/console"
 Cell = Struct.new(
   :r, :g, :b, # floats going from 0.0 to 1.0
   :dr, :dg, :db, # accumulated difference from applied forces
-  :fixed?, # fixed cells are immune to forces
+  :fixed, # fixed cells are immune to forces
   :join_e, :join_s, # false for repulsive force, true for attractive force
 )
 
@@ -23,45 +23,49 @@ Grid = Struct.new(
     end
     cells.each do |row|
       row.each_cons(2) do |cell_w, cell_e|
-        dr = cell_w.r - cell_e.r
-        dg = cell_w.g - cell_e.g
-        db = cell_w.b - cell_e.b
-        d2 = dr ** 2 + dg ** 2 + db ** 2
-        if cell_w.join_e
-          f_mult = - d2 ** 0.5 * f_join
-        else
-          f_mult = d2 ** -0.5 * f_split
+        unless cell_w.fixed || cell_e.fixed
+          dr = cell_w.r - cell_e.r
+          dg = cell_w.g - cell_e.g
+          db = cell_w.b - cell_e.b
+          d2 = dr ** 2 + dg ** 2 + db ** 2
+          if cell_w.join_e
+            f_mult = - d2 ** 0.5 * f_join
+          else
+            f_mult = d2 ** -0.5 * f_split
+          end
+          cell_w.dr += dr * f_mult
+          cell_w.dg += dg * f_mult
+          cell_w.db += db * f_mult
+          cell_e.dr -= dr * f_mult
+          cell_e.dg -= dg * f_mult
+          cell_e.db -= db * f_mult
         end
-        cell_w.dr += dr * f_mult
-        cell_w.dg += dg * f_mult
-        cell_w.db += db * f_mult
-        cell_e.dr -= dr * f_mult
-        cell_e.dg -= dg * f_mult
-        cell_e.db -= db * f_mult
       end
     end
     cells.each_cons(2) do |row_n, row_s|
       row_n.zip row_s do |cell_n, cell_s|
-        dr = cell_n.r - cell_s.r
-        dg = cell_n.g - cell_s.g
-        db = cell_n.b - cell_s.b
-        d2 = dr ** 2 + dg ** 2 + db ** 2
-        if cell_n.join_s
-          f_mult = - d2 ** 0.5 * f_join
-        else
-          f_mult = d2 ** -0.5 * f_split
+        unless cell_n.fixed || cell_s.fixed
+          dr = cell_n.r - cell_s.r
+          dg = cell_n.g - cell_s.g
+          db = cell_n.b - cell_s.b
+          d2 = dr ** 2 + dg ** 2 + db ** 2
+          if cell_n.join_s
+            f_mult = - d2 ** 0.5 * f_join
+          else
+            f_mult = d2 ** -0.5 * f_split
+          end
+          cell_n.dr += dr * f_mult
+          cell_n.dg += dg * f_mult
+          cell_n.db += db * f_mult
+          cell_s.dr -= dr * f_mult
+          cell_s.dg -= dg * f_mult
+          cell_s.db -= db * f_mult
         end
-        cell_n.dr += dr * f_mult
-        cell_n.dg += dg * f_mult
-        cell_n.db += db * f_mult
-        cell_s.dr -= dr * f_mult
-        cell_s.dg -= dg * f_mult
-        cell_s.db -= db * f_mult
       end
     end
     cells.each do |row|
       row.each do |cell|
-        unless cell.fixed?
+        unless cell.fixed
           cell.r = cell.r + cell.dr
           cell.g = cell.g + cell.dg
           cell.b = cell.b + cell.db
@@ -161,6 +165,7 @@ if __FILE__ == $0
           merge = $1 == "merge"
           x = $2.ord - "a".ord
           y = grid.cells.length - $3.to_i
+          grid.cells[y][x].fixed = false
           $4.scan(/(\d*)(\D)/).each do |count, dir|
             (count.empty? ? 1 : count.to_i).times do
               case dir
@@ -179,9 +184,43 @@ if __FILE__ == $0
               end
             end
           end
+          grid.cells[y][x].fixed = false
           grid.fuse_region x, y if merge
+        when /^fix ([a-z])([0-9]{1,2})(?: (\d(?:\.\d+)?) (\d(?:\.\d+)?) (\d(?:\.\d+)?))?$/
+          x = $1.ord - "a".ord
+          y = grid.cells.length - $2.to_i
+
+          region = [[x, y]]
+          (0..).each do |i|
+            break if region.size == i
+            x, y = region[i]
+            region |= [[x + 1, y]] if x < grid.cells[y].length && grid.cells[y][x].join_e
+            region |= [[x, y + 1]] if y < grid.cells.length && grid.cells[y][x].join_s
+            region |= [[x - 1, y]] if x > 0 && grid.cells[y][x - 1].join_e
+            region |= [[x, y - 1]] if y > 0 && grid.cells[y - 1][x].join_s
+          end
+
+          region.each do |x, y|
+            cell = grid.cells[y][x]
+            cell.fixed = true
+            cell.r = $3&.to_f || 0
+            cell.g = $4&.to_f || 0
+            cell.b = $5&.to_f || 0
+          end
+
+        when /^upscale( \d+)?$/
+          scale = $1.nil? ? 2 : $1.strip.to_i
+          grid.cells = grid.cells.flat_map{[_1] * scale}
+          grid.cells.map!{|row| row.flat_map{[_1] * scale}}
+          grid.cells.each_index do |y|
+            grid.cells[y].each_index do |x|
+              grid.cells[y][x] = grid.cells[y][x].dup
+              grid.cells[y][x].join_e = true unless x % scale == scale - 1
+              grid.cells[y][x].join_s = true unless y % scale == scale - 1
+            end
+          end
         when /^shuffle$/
-          grid.cells.each{|row| row.each{_1.r = rand; _1.g = rand; _1.b = rand}}
+          grid.cells.each{|row| row.each{unless _1.fixed; _1.r = rand; _1.g = rand; _1.b = rand; end}}
         else
           puts "unknown command"
         end
