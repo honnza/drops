@@ -12,8 +12,6 @@ Grid = Struct.new(
   :f_split, # force multiplier for the repulsive force
   :f_temp, # force multiplier for the random noise
   :cells, # grid of Cell elements
-  :row_headers, # list of length-2 strings
-  :col_headers, # list of length-2 strings
 ) do
   def relax_tick
     cells.each do |row|
@@ -83,6 +81,9 @@ Grid = Struct.new(
     end
   end
 
+  def row_headers; (1..).take(cells.length).map{"%2d" % _1}.reverse; end
+  def col_headers; (?a..).take(cells[0].length).map{"%2s" % _1}; end
+
   def render_1x
     print "  " + col_headers.join + "\r\n"
     row_headers.zip cells do |header, row|
@@ -126,9 +127,7 @@ def Grid.checker(f_join, f_split, f_temp, w, h)
       )
     end
   end
-  row_headers = (1..).take(h).map{"%2d" % _1}.reverse
-  col_headers = (?a..).take(w).map{"%2s" % _1}
-  Grid.new(f_join, f_split, f_temp, cells, row_headers, col_headers)
+  Grid.new(f_join, f_split, f_temp, cells)
 end
 
 if __FILE__ == $0
