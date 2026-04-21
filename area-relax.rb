@@ -182,6 +182,9 @@ if __FILE__ == $0
         exit
       when "\r"
         case input
+        when /^exit$|^quit$/
+          print "\e[?25h"
+          exit
         when /^new ([0-9]{1,2})x([0-9]{1,2})$/
           IO.console.clear_screen
           grid = Grid.checker(0.1, 0.002, 0.001, $1.to_i, $2.to_i)
