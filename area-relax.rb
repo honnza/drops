@@ -178,12 +178,12 @@ if __FILE__ == $0
         IO.console.clear_screen
         input[-1] = "" unless input.empty?
       when "\x03", "\x1A"
-        print "\e[?25h"
+        print "\r\e[?25h"
         exit
       when "\r"
         case input
         when /^exit$|^quit$/
-          print "\e[?25h"
+          print "\r\e[?25h"
           exit
         when /^new ([0-9]{1,2})x([0-9]{1,2})$/
           IO.console.clear_screen
