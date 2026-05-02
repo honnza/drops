@@ -839,6 +839,7 @@ def bucketed_progress_bar progress, text = "", width
   "[#{text}\e[0m]"
 end
 
+Cline = Struct.new(:x, :y)
 Pline = Struct.new(:x, :y)
 
 def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
@@ -910,7 +911,10 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
         case method
           when :drizzle, :rain then 0
           when :pour then (2 * x - w + 1) ** 2 + (2 * y - h + 1) ** 2
-          when Pline then ((2 * x - w + 1) * method.y - (2 * y - h + 1) * method.x).abs
+          when Cline, Pline
+            pline_score = ((2 * x - w + 1) * method.y - (2 * y - h + 1) * method.x).abs
+            manhattan = (2 * x - w + 1).abs + (2 * y - h + 1).abs
+            pline_score <= 1 && method.is_a?(Cline) ? [0, manhattan] : [1, pline_score]
           when :lex then [-y, x]
           when :wfcr then board[y][x].digits(2).count(1)
           when :wfcp then [board[y][x].digits(2).count(1), (2 * x - w + 1) ** 2 + (2 * y - h + 1) ** 2]
@@ -1168,8 +1172,8 @@ if $0 == __FILE__
         end
       end
     when /
-      ^(?<q>q?q?)(?<g>gen( rsr)?|genus|gense|gensess|generate( seeded| unseeded| rsr)?)\ 
-      (?<m>drizzle|rain|pour|wfc[rpl]|lex|(?<mn>pline)\((?<mx>-?\d+)\ (?<my>-?\d+)\))
+      ^(?<q>q?q?)(?<g>gen( rsr)?|genus|gense|gensess|generate( seeded| unseeded| rsr)?)\
+      (?<m>drizzle|rain|pour|wfc[rpl]|lex|(?<mn>[cp]line)\((?<mx>-?\d+)\ (?<my>-?\d+)\))
       (\ (?<h>\d+)x(?<w>\d+))?
       (\ (?<t>\S+))?$
     /x
@@ -1177,7 +1181,11 @@ if $0 == __FILE__
         puts "at least one tile required"
         next
       end
-      method = $~[:mn] == "pline" ? Pline.new($~[:mx].to_i, $~[:my].to_i) : $~[:m].to_sym
+      method = case $~[:mn]
+               when "cline" then Cline.new($~[:mx].to_i, $~[:my].to_i)
+               when "pline" then Pline.new($~[:mx].to_i, $~[:my].to_i)
+               else $~[:m].to_sym
+               end
       seeded = case $~[:g]
                when "gen", "generate" then nil
                when "gense", "generate seeded" then :seeded
@@ -1240,6 +1248,7 @@ show (all)? rules - list all rules in the ruleset. Omits symmetric images of oth
   rain - at each step, select a random position and select one tile for that position
   pour - at each step, select an unresolved position closest to the middle and select one tile for that position
   pline - at each step, select an unresolved position closest to the specified line and select one tile for that position. Same order as the add period command.
+  cline - like pline, but start from the center out before reaching the edges
   lex - resolve tiles from left to right, then bottom to top
   wfc(r|p|l) - wavefunction collapse classic. At each step, randomly choose a tile with the fewest possibilities and resolve it. The variant decides the order in which tiles with equal number of possibilities are chosen.
 
