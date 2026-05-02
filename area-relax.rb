@@ -146,12 +146,25 @@ Grid = Struct.new(
   end
 end
 
-def Grid.checker(f_join, f_split, f_temp, w, h)
+def Grid.blank(f_join, f_split, f_temp, w, h)
+  cells = Array.new(h) do
+    Array.new(w) do
+      Cell.new(
+        0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0,
+        true, false, false
+      )
+    end
+  end
+  Grid.new(f_join, f_split, f_temp, cells)
+end
+
+def Grid.checkered(f_join, f_split, f_temp, w, h)
   cells = Array.new(h) do
     Array.new(w) do
       Cell.new(
         rand, rand, rand,
-        0, 0, 0,
+        0.0, 0.0, 0.0,
         false, false, false
       )
     end
@@ -163,7 +176,7 @@ if __FILE__ == $0
   STDIN.raw do
     IO.console.clear_screen
     print "\e[?25l"
-    grid = Grid.checker(0.1, 0.002, 0.001, 4, 4)
+    grid = Grid.checkered(0.1, 0.002, 0.001, 4, 4)
     input = ""
     loop do
       grid.relax_tick
@@ -185,9 +198,9 @@ if __FILE__ == $0
         when /^exit$|^quit$/
           print "\r\e[?25h"
           exit
-        when /^new ([0-9]{1,2})x([0-9]{1,2})$/
+        when /^new(?: (blank|checkered))? ([0-9]{1,2})x([0-9]{1,2})$/
           IO.console.clear_screen
-          grid = Grid.checker(0.1, 0.002, 0.001, $1.to_i, $2.to_i)
+          grid = Grid.send($1 || :checkered, 0.1, 0.002, 0.001, $2.to_i, $3.to_i)
         when /^export$/
           IO.console.clear_screen
           IO.console.cursor = [0, 0]
@@ -217,8 +230,8 @@ if __FILE__ == $0
                 grid.cells[y][x].join_e = arg
               end
             end
+            grid.cells[y][x].fixed = false
           end
-          grid.cells[y][x].fixed = false
           grid.fuse_region x, y if merge
         when /^fix ([a-z])([0-9]{1,2})(?: (\d(?:\.\d+)?) (\d(?:\.\d+)?) (\d(?:\.\d+)?))?$/
           x = $1.ord - "a".ord
