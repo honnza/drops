@@ -134,7 +134,7 @@ Ruleset = Struct.new(
         new_ruleset.tileset.each{_1.mirrored = tileset[_1.mirrored].rotated}
       end
     end
-    
+
     # step two: reduce rotational symmetry
     if new_rotation > old_rotation
       raise "tried to add rotational symmetry"
@@ -546,7 +546,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
       y, x
     ]}.reverse
   progress_bar = []
-  progress_bar_length = coord_iter.length + n_possible_tiles
+  progress_bar_length = coord_iter.length + n_possible_tiles - 1
   head_at = n_possible_tiles - 1
 
   renderer.call rule_bitmap, progress_bar, progress_bar_length,
@@ -585,7 +585,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
       y, x
     ]}.reverse
   progress_bar = []
-  progress_bar_length = coord_iter.length * (n_possible_tiles + 1)
+  progress_bar_length = coord_iter.length * (n_possible_tiles)
 
   coord_iter.each.with_index do |(y, x), ix|
     renderer.call rule_bitmap, progress_bar, progress_bar_length, [x, x, y, y], hl: true
@@ -597,7 +597,6 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
     end
     rule_bitmap[y][x] |= ruleset.all_tiles & ~bitmap_without[y][x]
     # tile_iter = (0 ... ruleset.tileset.count).select{|tile| rule_bitmap[y][x] & 2 ** tile == 0}
-    progress_bar << :head
     (possible_tiles & rule_bitmap[y][x]).digits(2).count(1).times{progress_bar << :skipped}
     (0 ... ruleset.tileset.count).each do |tile|
       next if possible_tiles & 2 ** tile == 0
@@ -609,7 +608,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
             nil, nil, true, [x, y, rule_bitmap[y][x]]
                         ) {}
           rule_bitmap[y][x] |= 2 ** tile
-          progress_bar << :removed
+          progress_bar.insert(progress_bar.rindex(:skipped) + 1, :removed)
         else
           progress_bar << :kept
         end
