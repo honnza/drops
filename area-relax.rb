@@ -179,7 +179,8 @@ if __FILE__ == $0
     grid = Grid.checkered(0.1, 0.002, 0.001, 4, 4)
     input = ""
     loop do
-      grid.relax_tick
+      t = Time.new
+      grid.relax_tick until Time.now - t > 0.01
       IO.console.cursor = [0, 0]
       grid.render_1x
       puts "> #{input}\e[7m \e[0m"
