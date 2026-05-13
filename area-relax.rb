@@ -19,17 +19,21 @@ Grid = Struct.new(
       (-1 ... cells[y].length).each do |x|
         cell_fixed = x == -1 || y == -1 || cells[y][x].fixed
         cell_s_fixed = x == -1 || y == cells.length - 1 || cells[y+1][x].fixed
-        cell_e_fixed = y == -1 || x == cells[y].length - 1 || cells[y][x+1].fixed
+        cell_e_fixed = x == cells[y].length - 1 || y == -1 || cells[y][x+1].fixed
+        cell_se_fixed = x == cells[y].length - 1 || y == cells.length - 1 || cells[y+1][x+1].fixed
+
+        join_e = cell_fixed && cell_e_fixed || (!cell_fixed && !cell_e_fixed && cells[y][x].join_e)
+        join_s = cell_fixed && cell_s_fixed || (!cell_fixed && !cell_s_fixed && cells[y][x].join_s)
+        s_join_e = cell_s_fixed && cell_se_fixed || (!cell_s_fixed && !cell_se_fixed && cells[y+1][x].join_e)
+        e_join_s = cell_e_fixed && cell_se_fixed || (!cell_e_fixed && !cell_se_fixed && cells[y][x+1].join_s)
+
         result << case
-                  when cell_fixed && cell_s_fixed then " "
-                  when cell_fixed || cell_s_fixed then "_"
-                  when cells[y][x].join_s then " "
+                  when join_s then " "
                   else "_"
                   end
         result << case
-                  when cell_fixed && cell_e_fixed then ","
-                  when cell_fixed || cell_e_fixed then "|"
-                  when cells[y][x].join_e then ","
+                  when join_s && join_e && s_join_e && e_join_s then " "
+                  when join_e then ","
                   else "|"
                   end
       end
