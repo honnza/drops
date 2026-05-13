@@ -234,8 +234,8 @@ if __FILE__ == $0
                 x -= 1
                 grid.cells[y][x].join_e = arg
               end
+              grid.cells[y][x].fixed = false
             end
-            grid.cells[y][x].fixed = false
           end
           grid.fuse_region x, y if merge
         when /^fix ([a-z])([0-9]{1,2})(?: (\d(?:\.\d+)?) (\d(?:\.\d+)?) (\d(?:\.\d+)?))?$/
