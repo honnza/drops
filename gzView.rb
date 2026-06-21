@@ -33,10 +33,10 @@ class String
                     bits[6] << 1 | bits[2] << 4 |
                     bits[5] << 2 | bits[1] << 5 |
                     bits[4] << 6 | bits[0] << 7
-            if c.ord < 0x20
+            if c.valid_encoding? && c.ord < 0x20
               "\e[7;#{space_color}m#{(0x40 + c.ord).chr}\e[27;#{color}m"
             else
-              "\e[7m#{(0x2800 + dots).chr(Encoding::UTF_8)}\e[27m"
+              "\e[#{space_color}m#{(0x2800 + dots).chr(Encoding::UTF_8)}\e[#{color}m"
             end
           end
     end
