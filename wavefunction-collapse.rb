@@ -513,14 +513,19 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   inferred_tiles[... -1] = inferred_tiles[... -1].select do |(origin_x, origin_y), origin_c|
     rule_bitmap[origin_y - new_rule_min_y][origin_x - new_rule_min_x].digits(2).count(1) <= 2
   end
-  (origin_x, origin_y), origin_c = inferred_tiles.find.with_index do |((origin_x, origin_y), origin_c), ix|
-    renderer.call rule_bitmap, ix, inferred_tiles.length
-    renderer.call rule_bitmap, ix, inferred_tiles.length,
+
+  progress_bar = []
+  (origin_x, origin_y), origin_c = inferred_tiles.find do |(origin_x, origin_y), origin_c|
+    renderer.call rule_bitmap, progress_bar, inferred_tiles.length
+    renderer.call rule_bitmap, progress_bar, inferred_tiles.length,
       [origin_x - new_rule_min_x, origin_x - new_rule_min_x,
        origin_y - new_rule_min_y, origin_y - new_rule_min_y], hl: true
     new_bitmap = applied_bitmap.map &:dup
     new_bitmap[origin_y - new_rule_min_y][origin_x - new_rule_min_x] &= ~origin_c
-    apply_ruleset(ruleset, new_bitmap, Hash.new(0), origin_x - new_rule_min_x, origin_y - new_rule_min_y, true) {}
+    t = Time.now
+    r = apply_ruleset(ruleset, new_bitmap, Hash.new(0), origin_x - new_rule_min_x, origin_y - new_rule_min_y, true) {}
+    progress_bar << Time.now - t
+    r
   end
   if origin_x.nil?
     (origin_x, origin_y), origin_c = inferred_tiles.last
@@ -546,29 +551,22 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
       y, x
     ]}.reverse
   progress_bar = []
-  progress_bar_length = coord_iter.length + n_possible_tiles - 1
-  head_at = n_possible_tiles - 1
+  progress_bar_length = coord_iter.length
 
   renderer.call rule_bitmap, progress_bar, progress_bar_length,
     [origin_x, origin_x, origin_y, origin_y], hl: true
   coord_iter.each.with_index do |(y, x), ix|
     y, x = coord_iter[ix]
     cell_bits = rule_bitmap[y][x].digits(2).count(1)
-    if head_at != cell_bits
-      progress_bar << :head
-      progress_bar_length -= head_at - cell_bits - 1
-      head_at = cell_bits
-    end
     renderer.call rule_bitmap, progress_bar, progress_bar_length, [x, x, y, y], hl: true
     new_bitmap = rule_bitmap.map{|row| row.dup}
     new_bitmap[y][x] = ruleset.all_tiles
+    t = Time.now
     r = apply_ruleset(ruleset, new_bitmap, Hash.new(0),
                        nil, nil, true, [x, y, rule_bitmap[y][x]]) {}
+    progress_bar << Time.now - t
     if r
       rule_bitmap[y][x] = ruleset.all_tiles
-      progress_bar << (r == :skipped ? :skipped : :removed)
-    else
-      progress_bar << :kept
     end
     renderer.call rule_bitmap, progress_bar, progress_bar_length,
                   [x, x, y, y], hl: x == origin_x && y == origin_y
@@ -596,22 +594,21 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
       raise "There's a conflict if #{[x, y]} is removed. We should have noticed earlier."
     end
     rule_bitmap[y][x] |= ruleset.all_tiles & ~bitmap_without[y][x]
-    # tile_iter = (0 ... ruleset.tileset.count).select{|tile| rule_bitmap[y][x] & 2 ** tile == 0}
-    (possible_tiles & rule_bitmap[y][x]).digits(2).count(1).times{progress_bar << :skipped}
+    # tile_iter = (0 ... rulese.tileset.count).select{|tile| rule_bitmap[y][x] & 2 ** tile == 0}
+    (possible_tiles & rule_bitmap[y][x]).digits(2).count(1).times{progress_bar << 0}
     (0 ... ruleset.tileset.count).each do |tile|
       next if possible_tiles & 2 ** tile == 0
       renderer.call rule_bitmap, progress_bar, progress_bar_length, [x, x, y, y], hl: true
       if rule_bitmap[y][x] & 2 ** tile == 0
         new_bitmap = bitmap_without.map(&:dup)
         new_bitmap[y][x] = rule_bitmap[y][x] | 2 ** tile
+        t = Time.now
         if apply_ruleset(ruleset, new_bitmap, Hash.new(0),
             nil, nil, true, [x, y, rule_bitmap[y][x]]
                         ) {}
           rule_bitmap[y][x] |= 2 ** tile
-          progress_bar.insert(progress_bar.rindex(:skipped) + 1, :removed)
-        else
-          progress_bar << :kept
         end
+        progress_bar << Time.now - t
       end
     end
     renderer.call rule_bitmap, progress_bar, progress_bar_length, [x, x, y, y], hl: false
@@ -795,12 +792,14 @@ def progress_bar progress, text = "", width
 end
 
 def bucketed_progress_bar progress, text = "", width
-  def bucket_rgb bucket
-    plte = {blank: [0, 0, 0],
-            removed: [255, 255, 0],
-            kept: [255, 0, 0],
-            skipped: [0, 255, 0],
-            head: [255, 255, 255]}
+  plte = {blank: [0, 0, 0],
+          removed: [255, 255, 0],
+          kept: [255, 0, 0],
+          skipped: [0, 255, 0],
+          head: [255, 255, 255]}
+
+  def bucket_rgb bucket, plte
+    return [0, 0, 0] if bucket.nil? || bucket.empty?
     r = 0
     g = 0
     b = 0
@@ -815,24 +814,37 @@ def bucketed_progress_bar progress, text = "", width
   bucket_width = 2 * (width - 2) / buckets.length
   buckets = buckets.flat_map{[_1] * bucket_width}
 
-  if bucket_volume > 1
+  if progress[0].is_a?(Symbol) && bucket_volume > 1
     buckets.each_cons(2) do |left, right|
       data = left + right
       data.sort_by!{|elem| [right.include?(elem) ? 1 : 0, data.index(elem)]}
       left.replace data[...bucket_volume]
       right.replace data[bucket_volume...]
     end
+  elsif progress[0].is_a? Numeric
+    xs = progress.grep(Numeric)
+    avg = xs.sum / xs.count
+    std_dev = (xs.map{(_1 - avg) ** 2.0}.sum / (xs.count - 1)) ** 0.5
+    min, max = xs.minmax
+    min = avg - std_dev if min < avg - std_dev
+    max = avg + std_dev if max > avg + std_dev
+    max += 1 if min == max
+    plte = lambda do |n|
+      return [0, 0, 0] if n == :blank
+      n = (min - n).fdiv(min - max).clamp(0..1)
+      [255 * n ** 0.5, 255 * (1 - n) ** 0.5, 0]
+    end
   end
 
   text = buckets.each_slice(2).zip(text.chars).map do |(left, right), char|
     if char
-      rgb = bucket_rgb(left + (right || [:blank]))
+      rgb = bucket_rgb(left + (right), plte)
       fg = rgb[1] > 127 ? "30" : "97"
       bg = "48;2;#{rgb.join ";"}"
     else
       char = "\u258c"
-      fg = "38;2;#{bucket_rgb(left).join(";")}"
-      bg = "48;2;#{bucket_rgb(right || [:blank]).join(";")}"
+      fg = "38;2;#{bucket_rgb(left, plte).join(";")}"
+      bg = "48;2;#{bucket_rgb(right, plte).join(";")}"
     end
     "\e[#{fg};#{bg}m#{char}"
   end.join
