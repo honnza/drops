@@ -1289,3 +1289,28 @@ def bisect(min, max, &fn)
   end
 end
 
+def enum_lattices(area)
+  r = []
+  (1 .. area).select{area % _1 == 0}.each do |x|
+    y = area / x
+    (0 .. x / 2).each{r << [x, 0, _1, y]}
+  end
+
+  r.map! do |a, b, c, d|
+    loop do
+      p [a, b, c, d]
+      case
+      when [a, c] < [b, d] then a, b, c, d = b, a, d, c
+      when [a, b] < [c, d] then a, b, c, d = c, d, a, b
+      when [a, b] < [d, c] then a, b, c, d = d, c, b, a
+      when c <= a && b + d < a && c > 0 then a, b = a - c, b + d
+      when b == 0 && c >= a then c -= a
+      when c == 0 && b >= d then b -= d
+      else break
+      end
+    end
+    gets
+    [a, b, c, d].join " "
+  end
+  r.sort.reverse.uniq
+end
