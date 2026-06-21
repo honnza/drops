@@ -101,13 +101,13 @@ Ruleset = Struct.new(
 
   def add_period(x, y)
     unpack_tiles(possible_tiles).each do |tile|
-      rule_tiles = Array.new(y + 1){Array.new(x.abs + 1){all_tiles}}
+      rule_tiles = Array.new(y.abs + 1){Array.new(x.abs + 1){all_tiles}}
       if (x < 0) == (y < 0)
         rule_tiles[0][0] = pack_tiles([tile])
         rule_tiles[-1][-1] = pack_tiles(tileset - [tile])
       else
         rule_tiles[0][-1] = pack_tiles([tile])
-        rule_tiles[-1][0] = pack_tiles(ruleset.tileset - [tile])
+        rule_tiles[-1][0] = pack_tiles(tileset - [tile])
       end
       rule = Rule.new(self, (rules.map(&:id).max || -1) + 1, [:axiom], rule_tiles)
       self.rules += rule.all_syms
