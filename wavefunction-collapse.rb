@@ -575,7 +575,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   # phase four: discard individual constraints
 
   coord_iter = [*0 ... rule_bitmap.length].product([*0 ... rule_bitmap[0].length])
-    .select{|y, x| rule_bitmap[y][x].digits(2).count(1) < n_possible_tiles - 1}
+    .select{|y, x| rule_bitmap[y][x].digits(2).count(1) < ruleset.tileset.length - 1}
     .sort_by{|y, x| [
       rule_bitmap[y][x].digits(2).count(1),
       origin_x == x && origin_y == y ? 1 : 0,
