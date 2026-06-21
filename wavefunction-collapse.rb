@@ -1192,7 +1192,7 @@ if $0 == __FILE__
         end
       end
     when /
-      ^(?<q>q?q?)(?<g>gen( rsr)?|genus|gense|gensess|generate( seeded| unseeded| rsr)?)\
+      ^(?<q>q?q?)(?<g>gen( rsr)?|genus|gense|gensess|generate( seeded| unseeded| rsr)?)\ 
       (?<m>drizzle|rain|pour|wfc[rpl]|lex|(?<mn>[cp]line)\((?<mx>-?\d+)\ (?<my>-?\d+)\))
       (\ (?<h>\d+)x(?<w>\d+))?
       (\ (?<t>\S+))?$
