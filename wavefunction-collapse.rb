@@ -1154,6 +1154,14 @@ if $0 == __FILE__
       end
       ruleset.add_period($1.to_i, $2.to_i)
       puts "ok"
+    when /^add period (\d+) (\d+) (\d+) (\d+)$/
+      if $1.to_i == 0 && $2.to_i == 0 || $3.to_i == 0 && $4.to_i == 0
+        puts "period cannot be zero"
+        break
+      end
+      ruleset.add_period($1.to_i, $2.to_i)
+      ruleset.add_period($3.to_i, -$4.to_i)
+      puts "ok"
     when /^delete (cascade )?rule (\d+)$/
       delete_stack = [$2.to_i]
       until delete_stack.empty?
@@ -1249,6 +1257,7 @@ reduce symmetry - changes the ruleset symmetry to a specificed one. Must be a su
 add rule - define a pattern that may not appear in the generated pattern. Follow by a list of tile names. Separate multiple tiles an the same position with /. Type / followed by a list to include all tiles except the ones listed. Type only / to include all tiles at that position. Use (tiles)*(number) to duplicate that tile in the pattern. Use (row)**(number) to duplicate an entire row. Use // to separate multiple rows of rule pattern in one row of input.
 add rule (rule) - as above, but only one line of input.
 add period (number) (number) - add rule that requires the board repeats with a given offset. Negate one number to indicate offset along the rising diagonal.
+add period (number) (number) (number) (number) - add two period rules at once; the first two numbers follow the falling diagonal, the second two follow the rising diagonal
 
 Ruleset must be defined before tiles, tiles must be defined before tile symmetries that use them, symmetries must be defined before rules.
 
