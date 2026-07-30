@@ -1299,18 +1299,33 @@ def enum_lattices(area)
   r.map! do |a, b, c, d|
     loop do
       p [a, b, c, d]
-      case
-      when [a, c] < [b, d] then a, b, c, d = b, a, d, c
-      when [a, b] < [c, d] then a, b, c, d = c, d, a, b
-      when [a, b] < [d, c] then a, b, c, d = d, c, b, a
-      when c <= a && b + d < a && c > 0 then a, b = a - c, b + d
-      when b == 0 && c >= a then c -= a
-      when c == 0 && b >= d then b -= d
-      else break
-      end
+      step = [
+        [a, b, c - a, d + b],
+        [a, b, c + a, d - b],
+        [a - c, b + d, c, d],
+        [a + c, b - d, c, d],
+        [a, b, c, d]
+      ].select{_1.min >= 0}.map{|a, b, c, d| [
+        [a, b, c, d],
+        [b, a, d, c],
+        [c, d, a, b],
+        [d, c, b, a]
+      ].max}.min
+      break if [a, b, c, d] == step
+      a, b, c, d = step
     end
     gets
-    [a, b, c, d].join " "
+    [a, b, c, d]
   end
-  r.sort.reverse.uniq
+  r = r.sort.reverse.uniq.map{|a, b, c, d|
+    [a, b, c, d] + [
+      a ** 2 + b ** 2, c ** 2 + d ** 2,
+      [(a - c) ** 2 + (b + d) ** 2, (a + c) ** 2 + (b - d) ** 2].min
+    ].sort
+  }.sort_by{_1[4..6]}
+  width = r.flatten.max.to_s.length
+  r.map do |row|
+    row = row.map{"%*d" % [width, _1]}
+    "#{row[0..3].join " "} | #{row[4..6].join " "}}"
+  end
 end

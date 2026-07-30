@@ -113,7 +113,18 @@ Ruleset = Struct.new(
       self.rules += rule.all_syms
     end
 
-    self.periods << [x, y]
+    periods << [x, y]
+
+    if periods.count == 2
+      (a, b), (c, d) = periods
+      sum_len = (a + c) ** 2 + (b + d) ** 2
+      dif_len = (a - c) ** 2 + (b - d) ** 2
+      if sum_len < dif_len
+        periods << [a + c, b + d]
+      elsif dif_len < sum_len
+        periods << [a - c, b - d]
+      end
+    end
   end
 
   def reduce_sym new_sym
@@ -476,23 +487,17 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   new_rule_min_y, new_rule_max_y = (new_rule_tiles.keys.map{|_, y| y} + [origin_y]).minmax
   rule_bitmap = [*new_rule_min_y .. new_rule_max_y].map{[*new_rule_min_x .. new_rule_max_x].map{ruleset.all_tiles}}
   new_rule_tiles.transform_keys! do |x, y|
-    ruleset.periods.each do |period_x, period_y|
-      while (
-          (new_rule_min_x .. new_rule_max_x).include?(x + period_x) &&
-          (new_rule_min_y .. new_rule_max_y).include?(y + period_y) &&
-          (x + period_x - origin_x) ** 2 + (y + period_y - origin_y) ** 2 < (x - origin_x) ** 2 + (y - origin_y) ** 2
-      )
-        x += period_x
-        y += period_y
-      end
-      while (
-          (new_rule_min_x .. new_rule_max_x).include?(x - period_x) &&
-          (new_rule_min_y .. new_rule_max_y).include?(y - period_y) &&
-          (x - period_x - origin_x) ** 2 + (y - period_y - origin_y) ** 2 < (x - origin_x) ** 2 + (y - origin_y) ** 2
-      )
-        x -= period_x
-        y -= period_y
-      end
+    loop do
+      new_x, new_y = (ruleset.periods + [[0, 0]]).flat_map{|px, py|
+        [[x - px, y - py], [x + px, y + py]]
+      }.select{ |x, y|
+          (new_rule_min_x .. new_rule_max_x).include?(x) && (new_rule_min_y .. new_rule_max_y).include?(y)
+      }.min_by{|x, y|
+        [(x - origin_x) ** 2 + (y - origin_y) ** 2, x, y]
+      }
+      break if new_x == x && new_y == y
+      x = new_x
+      y = new_y
     end
     [x, y]
   end
@@ -589,13 +594,15 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
     renderer.call rule_bitmap, progress_bar, progress_bar_length, [x, x, y, y], hl: true
     bitmap_without = rule_bitmap.map(&:dup)
     bitmap_without[y][x] = ruleset.all_tiles
+    t = Time.now
     if apply_ruleset(ruleset, bitmap_without, Hash.new(0),
                        nil, nil, true) {}
       raise "There's a conflict if #{[x, y]} is removed. We should have noticed earlier."
     end
+    progress_bar << Time.now - t
     rule_bitmap[y][x] |= ruleset.all_tiles & ~bitmap_without[y][x]
     # tile_iter = (0 ... rulese.tileset.count).select{|tile| rule_bitmap[y][x] & 2 ** tile == 0}
-    (possible_tiles & rule_bitmap[y][x]).digits(2).count(1).times{progress_bar << 0}
+    progress_bar_length -= (possible_tiles & rule_bitmap[y][x]).digits(2).count(1) - 1
     (0 ... ruleset.tileset.count).each do |tile|
       next if possible_tiles & 2 ** tile == 0
       renderer.call rule_bitmap, progress_bar, progress_bar_length, [x, x, y, y], hl: true
@@ -854,7 +861,7 @@ end
 Cline = Struct.new(:x, :y)
 Pline = Struct.new(:x, :y)
 
-def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
+def generate ruleset, method, w, h, seeded, quiet = 2, tiles = nil
   render = proc do |board, n, d, diff = nil, hl: false|
     print "\e[H\e[?25l"
     full_draw = diff.nil?
@@ -893,8 +900,8 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
     print "\e[J\e[?25h"
   end
 
-  tile = ruleset.tileset.find_index tile
   randomization = nil
+  possible_tiles = ruleset.possible_tiles
   loop do
     if randomization.nil? || seeded == :unseeded
       randomization = [*0 ... w].product([*0 ... h]).map do |x, y|
@@ -905,12 +912,14 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
       else
         randomization = randomization.shuffle.flat_map{|x, y, ts| ts.map{|t| [x, y, t]}}
       end
+      if tiles
+        randomization = [*0 ... w].product([*0 ... h]).map{|x, y| [x, y, tiles]}.shuffle + randomization
+      end
     end
 
     stats = Hash[ruleset.rules.select{_1.source[0] != :symm}.map{[_1.id, 0]}]
     last_old_rule = stats.keys.max
     stats[:g] = 0
-    possible_tiles = ruleset.possible_tiles(stats)
     if possible_tiles.nil?
       puts "no solution"
       return
@@ -933,7 +942,7 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
           when :wfcl then [board[y][x].digits(2).count(1), -y, x]
         end
       end
-      break if x.nil?
+      break if x.nil? || ruleset.possible_tiles.nil?
 
       if rsr_undo_log[0] && rsr_undo_log[0][0] == [x, y, t]
         rule = rsr_undo_log.min_by{[_1[1].sparse.length, _1[1].tiles.length * _1[1].tiles[0].length]}[1]
@@ -945,8 +954,6 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
         end
         break
       end
-
-      break if ruleset.possible_tiles(stats) != possible_tiles
 
       new_stats = stats.dup
       new_stats[:g] += (board[y][x] & ~t).digits(2).count(1)
@@ -989,6 +996,8 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
           if seeded.nil?
             puts "conflict; aborting"
             return
+          elsif ruleset.possible_tiles.nil?
+            puts "conflict; no candidates left"
           else
             puts "conflict; retrying"
             if seeded == :split_sym
@@ -1019,6 +1028,7 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
       [(rule.source[0] == :symm ? -stats[rule.source[1]] : -stats[rule.id] rescue -stats.values.select{_1.is_a? Numeric}.max - 1), rule.source[0], ix]
     end
 
+    ruleset.possible_tiles(stats)
     unless stats.values.include?(:back) || stats[:g] == 0
       rules_deleted = ruleset.rules.select do
         _1.id <= last_old_rule && (_1.source[0] == :conflict && stats[_1.id] == 0)
@@ -1033,6 +1043,11 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
     end
 
     if quiet < 2
+      old_tiles = ruleset.unpack_tiles(possible_tiles)
+      new_tiles = ruleset.unpack_tiles(ruleset.possible_tiles || 0)
+      puts "\e[91mruled out tiles: #{(old_tiles - new_tiles).map(&:name).join("/")}\e[0m" unless new_tiles == old_tiles
+      puts "candidate tiles: #{new_tiles.map(&:name).join("/")}" unless new_tiles.empty?
+
       puts "rule stats:"
       puts vwrap stats.to_a
       ruleset.rules.sort_by!.with_index do |rule, ix|
@@ -1040,11 +1055,12 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tile = nil
       end
       puts "#{stats.values.select{_1.is_a? Numeric}.sum} total"
     end
+    possible_tiles = ruleset.possible_tiles
     if board.all?{|row| row.all?{_1 & (_1 - 1) == 0}}
       puts "success"
       return
     end
-    gets if quiet < 2
+    gets if quiet < 2 && possible_tiles
   end
 end
 
@@ -1217,14 +1233,14 @@ if $0 == __FILE__
       normalize_tiles ruleset.tileset
       h = $~[:h]&.to_i || (IO.console.winsize[0] - 1) / ruleset.tileset[0].ascii.length
       w = $~[:w]&.to_i || IO.console.winsize[1] / ruleset.tileset[0].ascii[0].display_length
-      tile = ruleset.tileset.find{_1.name == $~[:t]}
-      if $~[:t] && !tile
+      tiles = ruleset.tileset.find{_1.name == $~[:t]}
+      if $~[:t] && !tiles
         puts "couldn't find tile #{$~[:t]}"
         next
       end
       StackProf.start(mode: :cpu)
       begin
-        generate ruleset, method, w, h, seeded, $~[:q].length, tile
+        generate ruleset, method, w, h, seeded, $~[:q].length, ruleset.pack_tiles(tiles || ruleset.tileset)
       rescue Interrupt
         p $!
       end
