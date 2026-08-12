@@ -1323,9 +1323,9 @@ def enum_lattices(area)
       [(a - c) ** 2 + (b + d) ** 2, (a + c) ** 2 + (b - d) ** 2].min
     ].sort
   }.sort_by{_1[4..6]}
-  width = r.flatten.max.to_s.length
+  widths = (0..6).map{|i| r.map{_1[i]}.max.to_s.length}
   r.map do |row|
-    row = row.map{"%*d" % [width, _1]}
+    row = row.zip(widths).map{"%*d" % [_2, _1]}
     "#{row[0..3].join " "} | #{row[4..6].join " "}}"
   end
 end
