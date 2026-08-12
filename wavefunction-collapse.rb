@@ -521,8 +521,8 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
 
   progress_bar = []
   (origin_x, origin_y), origin_c = inferred_tiles.find do |(origin_x, origin_y), origin_c|
-    renderer.call rule_bitmap, progress_bar, inferred_tiles.length
-    renderer.call rule_bitmap, progress_bar, inferred_tiles.length,
+    renderer.call rule_bitmap, progress_bar.sort, inferred_tiles.length
+    renderer.call rule_bitmap, progress_bar.sort, inferred_tiles.length,
       [origin_x - new_rule_min_x, origin_x - new_rule_min_x,
        origin_y - new_rule_min_y, origin_y - new_rule_min_y], hl: true
     new_bitmap = applied_bitmap.map &:dup
@@ -558,22 +558,24 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   progress_bar = []
   progress_bar_length = coord_iter.length
 
-  renderer.call rule_bitmap, progress_bar, progress_bar_length,
+  renderer.call rule_bitmap, progress_bar.sort.map(&:last), progress_bar_length,
     [origin_x, origin_x, origin_y, origin_y], hl: true
   coord_iter.each.with_index do |(y, x), ix|
     y, x = coord_iter[ix]
     cell_bits = rule_bitmap[y][x].digits(2).count(1)
-    renderer.call rule_bitmap, progress_bar, progress_bar_length, [x, x, y, y], hl: true
+    renderer.call rule_bitmap, progress_bar.sort.map(&:last), progress_bar_length, [x, x, y, y], hl: true
     new_bitmap = rule_bitmap.map{|row| row.dup}
     new_bitmap[y][x] = ruleset.all_tiles
     t = Time.now
     r = apply_ruleset(ruleset, new_bitmap, Hash.new(0),
                        nil, nil, true, [x, y, rule_bitmap[y][x]]) {}
-    progress_bar << Time.now - t
     if r
       rule_bitmap[y][x] = ruleset.all_tiles
+      progress_bar << [0, Time.now - t]
+    else
+      progress_bar << [1, Time.now - t]
     end
-    renderer.call rule_bitmap, progress_bar, progress_bar_length,
+    renderer.call rule_bitmap, progress_bar.sort.map(&:last), progress_bar_length,
                   [x, x, y, y], hl: x == origin_x && y == origin_y
   end
 
@@ -591,7 +593,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   progress_bar_length = coord_iter.length * (n_possible_tiles)
 
   coord_iter.each.with_index do |(y, x), ix|
-    renderer.call rule_bitmap, progress_bar, progress_bar_length, [x, x, y, y], hl: true
+    renderer.call rule_bitmap, progress_bar.sort.map(&:last), progress_bar_length, [x, x, y, y], hl: true
     bitmap_without = rule_bitmap.map(&:dup)
     bitmap_without[y][x] = ruleset.all_tiles
     t = Time.now
@@ -599,13 +601,13 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
                        nil, nil, true) {}
       raise "There's a conflict if #{[x, y]} is removed. We should have noticed earlier."
     end
-    progress_bar << Time.now - t
+    progress_bar << [0, Time.now - t]
     rule_bitmap[y][x] |= ruleset.all_tiles & ~bitmap_without[y][x]
     # tile_iter = (0 ... rulese.tileset.count).select{|tile| rule_bitmap[y][x] & 2 ** tile == 0}
     progress_bar_length -= (possible_tiles & rule_bitmap[y][x]).digits(2).count(1) - 1
     (0 ... ruleset.tileset.count).each do |tile|
       next if possible_tiles & 2 ** tile == 0
-      renderer.call rule_bitmap, progress_bar, progress_bar_length, [x, x, y, y], hl: true
+      renderer.call rule_bitmap, progress_bar.sort.map(&:last), progress_bar_length, [x, x, y, y], hl: true
       if rule_bitmap[y][x] & 2 ** tile == 0
         new_bitmap = bitmap_without.map(&:dup)
         new_bitmap[y][x] = rule_bitmap[y][x] | 2 ** tile
@@ -614,11 +616,13 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
             nil, nil, true, [x, y, rule_bitmap[y][x]]
                         ) {}
           rule_bitmap[y][x] |= 2 ** tile
+          progress_bar << [1, Time.now - t]
+        else
+          progress_bar << [2, Time.now - t]
         end
-        progress_bar << Time.now - t
       end
     end
-    renderer.call rule_bitmap, progress_bar, progress_bar_length, [x, x, y, y], hl: false
+    renderer.call rule_bitmap, progress_bar.sort.map(&:last), progress_bar_length, [x, x, y, y], hl: false
   end
 
   #we do one last run to collect conflict stats because the previous run may have taken a shortcut
