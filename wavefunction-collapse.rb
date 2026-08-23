@@ -1167,14 +1167,29 @@ if $0 == __FILE__
       rescue
         puts $!.message
       end
-    when /^add period (-?\d)(\d)$/, /^add period (-?\d+) (-?\d+)$/
+    when /^add period (-?\w)(\w)$/
+      if $1.to_i(36) == 0 && $2.to_i(36) == 0
+        puts "period cannot be zero"
+        break
+      end
+      ruleset.add_period($1.to_i(36), $2.to_i(36))
+      puts "ok"
+    when /^add period (-?\d+) (-?\d+)$/
       if $1.to_i == 0 && $2.to_i == 0
         puts "period cannot be zero"
         break
       end
       ruleset.add_period($1.to_i, $2.to_i)
       puts "ok"
-    when /^add period (\d)(\d)(\d)(\d)$/, /^add period (\d+) (\d+) (\d+) (\d+)$/
+    when /^add period (\w)(\w)(\w)(\w)$/
+      if $1.to_i(36) == 0 && $2.to_i(36) == 0 || $3.to_i(36) == 0 && $4.to_i(36) == 0
+        puts "period cannot be zero"
+        break
+      end
+      ruleset.add_period($1.to_i(36), $2.to_i(36))
+      ruleset.add_period($3.to_i(36), -$4.to_i(36))
+      puts "ok"
+    when /^add period (\d+) (\d+) (\d+) (\d+)$/
       if $1.to_i == 0 && $2.to_i == 0 || $3.to_i == 0 && $4.to_i == 0
         puts "period cannot be zero"
         break
