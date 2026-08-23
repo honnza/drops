@@ -589,6 +589,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
       (origin_x - x) ** 2 + (origin_y - y) ** 2,
       y, x
     ]}.reverse
+  coord_iter = [] if coord_iter.length == 1
   progress_bar = []
   progress_bar_length = coord_iter.length * (n_possible_tiles)
 
