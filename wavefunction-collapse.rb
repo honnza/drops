@@ -549,14 +549,14 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   end
 
   coord_iter = [*0 ... rule_bitmap.length].product([*0 ... rule_bitmap[0].length])
-    .select{|y, x| rule_bitmap[y][x].digits(2).count(1) < n_possible_tiles}
+    .select{|y, x| rule_bitmap[y][x].digits(2).count(1) < n_possible_tiles && [x, y] != [origin_x, origin_y]}
     .sort_by{|y, x| [
       rule_bitmap[y][x].digits(2).count(1),
       (origin_x - x) ** 2 + (origin_y - y) ** 2,
       y, x
     ]}.reverse
   progress_bar = []
-  progress_bar_length = coord_iter.length
+  progress_bar_length = [coord_iter.length, 1].max
 
   renderer.call rule_bitmap, progress_bar.sort.map(&:last), progress_bar_length,
     [origin_x, origin_x, origin_y, origin_y], hl: true
@@ -571,9 +571,9 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
                        nil, nil, true, [x, y, rule_bitmap[y][x]]) {}
     if r
       rule_bitmap[y][x] = ruleset.all_tiles
-      progress_bar << [0, Time.now - t]
-    else
       progress_bar << [1, Time.now - t]
+    else
+      progress_bar << [0, Time.now - t]
     end
     renderer.call rule_bitmap, progress_bar.sort.map(&:last), progress_bar_length,
                   [x, x, y, y], hl: x == origin_x && y == origin_y
@@ -616,9 +616,9 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
             nil, nil, true, [x, y, rule_bitmap[y][x]]
                         ) {}
           rule_bitmap[y][x] |= 2 ** tile
-          progress_bar << [1, Time.now - t]
-        else
           progress_bar << [2, Time.now - t]
+        else
+          progress_bar << [1, Time.now - t]
         end
       end
     end
@@ -837,8 +837,8 @@ def bucketed_progress_bar progress, text = "", width
     avg = xs.sum / xs.count
     std_dev = (xs.map{(_1 - avg) ** 2.0}.sum / (xs.count - 1)) ** 0.5
     min, max = xs.minmax
-    min = avg - std_dev if min < avg - std_dev
-    max = avg + std_dev if max > avg + std_dev
+    min = avg - 1.4 * std_dev if min < avg - 1.4 * std_dev
+    max = avg + 1.4 * std_dev if max > avg + 1.4 * std_dev
     max += 1 if min == max
     plte = lambda do |n|
       return [0, 0, 0] if n == :blank
