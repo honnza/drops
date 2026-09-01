@@ -415,6 +415,7 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
 
   lits_br = []
   lits_bits = []
+  prev_lit_new = nil
   push_lits = proc do
     case lits_bits.count
     when 0 then nil
@@ -429,12 +430,13 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
         code.chr.bytes_to_glyphs.join
       ]
     else
+      code = out_buf[-1].ord
       str = out_buf.rtake lits_bits.count
       table.push_row [
         lits_br.join(" "),
         "@#{out_buf.size - lits_bits.count}",
         "#{fbits[lits_bits.join " "]}",
-        "literal x#{lits_bits.count}",
+        "#{NEW_STR if stats[:block_counts][code] == 1}literal x#{lits_bits.count}",
         str.bytes_to_glyphs.join
       ]
     end
@@ -447,11 +449,11 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
     key, code = bit_reader.read_huffman litlen_codes
     stats[:block_counts][code] += 1
     if code < 256
-      push_lits[] if stats[:block_counts][code] == 1
+      push_lits[] if (stats[:block_counts][code] == 1) != prev_lit_new
+      prev_lit_new = stats[:block_counts][code] == 1
       lits_br << bit_reader.pop_bytes_read_str
       lits_bits << key
       out_buf << code.chr
-      push_lits[] if stats[:block_counts][code] == 1
       stats[:lit_blocks] += 1
     elsif code == 256
       push_lits[]
