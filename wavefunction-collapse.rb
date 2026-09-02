@@ -13,7 +13,7 @@ class RingQueue
   end
 
   def << x
-    ring_ix = [(@origin_x - x[0]).abs, @origin_y - x[1]).abs].max
+    ring_ix = [(@origin_x - x[0]).abs, (@origin_y - x[1]).abs].max
     unless @set[x]
       @rings[ring_ix] ||= []
       @rings[ring_ix] << x 
@@ -412,29 +412,13 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   conflict = false
   undo_log = []
   diff_queue = RingQueue.new(origin_x || board[0].length / 2, origin_y || board.length / 2)
-  diff_queue << [origin_x, origin_y] if origin_x.is_a? Numeric
-  if !origin_x.is_a?(Numeric)
-    (origin_x || ruleset.rules).each do |rule|
-      (0 .. board.length - rule.tiles.length).each do |rule_y|
-        (0 .. board[0].length - rule.tiles[0].length).each do |rule_x|
-          diff_x, diff_y, diff_c = rule.apply_at board, rule_x, rule_y
-          next unless diff_x
-          board[diff_y][diff_x] -= diff_c
-          stat_rule = rule.source[0] == :symm ? rule.source[1] : rule.id
-          rule_stats[stat_rule] += diff_c.digits(2).count(1)
-          if stop_at && stop_at[0] == diff_x && stop_at[1] == diff_y && board[diff_y][diff_x] & ~stop_at[2] == 0
-            conflict = :skipped
-          else
-            conflict = board[diff_y][diff_x] == 0
-          end
-          undo_log << [diff_x, diff_y, diff_c, rule_x, rule_y, rule]
-          diff_queue << [diff_x, diff_y]
-          renderer.call board, rule_stats.values.select{_1.is_a? Numeric}.sum, board.length * board[0].length * (ruleset.tileset.length - 1), [diff_x, diff_x, diff_y, diff_y]
-          break if conflict
-        end
-        break if conflict
+  if origin_x.is_a?(Numeric)
+    diff_queue << [origin_x, origin_y]
+  else
+    (0 .. board.length).each do |y|
+      (0 .. board[0].length).each do |x|
+        diff_queue << [x, y]
       end
-      break if conflict
     end
   end
 
@@ -494,21 +478,6 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   new_rule_min_x, new_rule_max_x = (new_rule_tiles.keys.map{|x, _| x} + [origin_x]).minmax
   new_rule_min_y, new_rule_max_y = (new_rule_tiles.keys.map{|_, y| y} + [origin_y]).minmax
   rule_bitmap = [*new_rule_min_y .. new_rule_max_y].map{[*new_rule_min_x .. new_rule_max_x].map{ruleset.all_tiles}}
-  new_rule_tiles.transform_keys! do |x, y|
-    loop do
-      new_x, new_y = (ruleset.periods + [[0, 0]]).flat_map{|px, py|
-        [[x - px, y - py], [x + px, y + py]]
-      }.select{ |x, y|
-          (new_rule_min_x .. new_rule_max_x).include?(x) && (new_rule_min_y .. new_rule_max_y).include?(y)
-      }.min_by{|x, y|
-        [(x - origin_x) ** 2 + (y - origin_y) ** 2, x, y]
-      }
-      break if new_x == x && new_y == y
-      x = new_x
-      y = new_y
-    end
-    [x, y]
-  end
   new_rule_tiles.keys.each{|x, y| rule_bitmap[y - new_rule_min_y][x - new_rule_min_x] &= board[y][x]}
 
   # phase two: find the last conflict
