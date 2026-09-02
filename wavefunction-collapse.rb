@@ -3,26 +3,34 @@ require 'json'
 require 'io/console'
 require 'stackprof'
 
-class SetQueue
-  def initialize
-    @tail = []
-    @head = []
+class RingQueue
+  def initialize(origin_x, origin_y)
+    @origin_x = origin_x
+    @origin_y = origin_y
+    @rings = []
+    @min_ring = 0
     @set = {}
   end
 
   def << x
-    @head << x unless @set[x]
-    @set[x] = true
+    ring_ix = [(@origin_x - x[0]).abs, @origin_y - x[1]).abs].max
+    unless @set[x]
+      @rings[ring_ix] ||= []
+      @rings[ring_ix] << x 
+      @min_ring = ring_ix if @min_ring > ring_ix
+      @set[x] = true
+    end
   end
 
   def empty?; @set.empty?; end
 
   def pop
-    if @tail.empty?
-      @tail = @head.reverse!
-      @head = []
+    ring_ix = (@min_ring ... @rings.length).find do
+      ring = @rings[_1]
+      !ring.nil? && !ring.empty?
     end
-    r = @tail.pop
+    @min_ring = ring_ix
+    r = @rings[ring_ix].pop
     @set.delete r
     r
   end
@@ -403,7 +411,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   renderer.call board, rule_stats.values.select{_1.is_a? Numeric}.sum, board.length * board[0].length * (ruleset.tileset.length - 1), [origin_x, origin_x, origin_y, origin_y], hl: true if origin_x
   conflict = false
   undo_log = []
-  diff_queue = SetQueue.new
+  diff_queue = RingQueue.new(origin_x || board[0].length / 2, origin_y || board.length / 2)
   diff_queue << [origin_x, origin_y] if origin_x.is_a? Numeric
   if !origin_x.is_a?(Numeric)
     (origin_x || ruleset.rules).each do |rule|
