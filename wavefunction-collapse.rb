@@ -566,7 +566,6 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
       (origin_x - x) ** 2 + (origin_y - y) ** 2,
       y, x
     ]}.reverse
-  coord_iter = [] if coord_iter.length == 1
   progress_bar = []
   progress_bar_length = coord_iter.length * (n_possible_tiles)
 
@@ -583,20 +582,22 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
     rule_bitmap[y][x] |= ruleset.all_tiles & ~bitmap_without[y][x]
     # tile_iter = (0 ... rulese.tileset.count).select{|tile| rule_bitmap[y][x] & 2 ** tile == 0}
     progress_bar_length -= (possible_tiles & rule_bitmap[y][x]).digits(2).count(1) - 1
-    (0 ... ruleset.tileset.count).each do |tile|
-      next if possible_tiles & 2 ** tile == 0
-      renderer.call rule_bitmap, progress_bar.sort.map(&:last), progress_bar_length, [x, x, y, y], hl: true
-      if rule_bitmap[y][x] & 2 ** tile == 0
-        new_bitmap = bitmap_without.map(&:dup)
-        new_bitmap[y][x] = rule_bitmap[y][x] | 2 ** tile
-        t = Time.now
-        if apply_ruleset(ruleset, new_bitmap, Hash.new(0),
-            nil, nil, true, [x, y, rule_bitmap[y][x]]
-                        ) {}
-          rule_bitmap[y][x] |= 2 ** tile
-          progress_bar << [2, Time.now - t]
-        else
-          progress_bar << [1, Time.now - t]
+    if coord_iter.length > 1
+      (0 ... ruleset.tileset.count).each do |tile|
+        next if possible_tiles & 2 ** tile == 0
+        renderer.call rule_bitmap, progress_bar.sort.map(&:last), progress_bar_length, [x, x, y, y], hl: true
+        if rule_bitmap[y][x] & 2 ** tile == 0
+          new_bitmap = bitmap_without.map(&:dup)
+          new_bitmap[y][x] = rule_bitmap[y][x] | 2 ** tile
+          t = Time.now
+          if apply_ruleset(ruleset, new_bitmap, Hash.new(0),
+              nil, nil, true, [x, y, rule_bitmap[y][x]]
+                          ) {}
+            rule_bitmap[y][x] |= 2 ** tile
+            progress_bar << [2, Time.now - t]
+          else
+            progress_bar << [1, Time.now - t]
+          end
         end
       end
     end
@@ -884,6 +885,7 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tiles = nil
 
   randomization = nil
   possible_tiles = ruleset.possible_tiles
+  ruled_out_buffer = []
   loop do
     if randomization.nil? || seeded == :unseeded
       randomization = [*0 ... w].product([*0 ... h]).map do |x, y|
@@ -903,7 +905,7 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tiles = nil
     last_old_rule = stats.keys.max
     stats[:g] = 0
     if possible_tiles.nil?
-      puts "no solution"
+      puts "\e[91mno solution\e[0m"
       return
     end
     board = Array.new(h){Array.new(w){possible_tiles}}
@@ -963,7 +965,7 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tiles = nil
 
         new_board = board.map(&:dup)
         new_stats = stats.dup
-        conflict = apply_ruleset ruleset, new_board, new_stats, nil, nil, true, &render
+        conflict = possible_tiles != ruleset.possible_tiles || apply_ruleset(ruleset, new_board, new_stats, nil, nil, true, &render)
         stats[new_rule.id] = :gone
         if new_stats[new_rule.id] == 1 && seeded == :rsr && !rsr_undo_log.any?{|_, r| r == new_rule}
           ruleset.rules.reject!{_1.id == new_rule.id || _1.source == [:symm, new_rule.id]}
@@ -1027,8 +1029,10 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tiles = nil
     if quiet < 2
       old_tiles = ruleset.unpack_tiles(possible_tiles)
       new_tiles = ruleset.unpack_tiles(ruleset.possible_tiles || 0)
-      puts "\e[91mruled out tiles: #{(old_tiles - new_tiles).map(&:name).join("/")}\e[0m" unless new_tiles == old_tiles
-      puts "candidate tiles: #{new_tiles.map(&:name).join("/")}" unless new_tiles.empty?
+      ruled_out_buffer += old_tiles - new_tiles
+      puts "\e[91mruled out tiles: #{ruleset.name_tiles(ruled_out_buffer, method: :pos)}\e[0m" unless ruled_out_buffer.empty?
+      puts "candidate tiles: #{ruleset.name_tiles(new_tiles, method: :pos)}" unless new_tiles.empty?
+      ruled_out_buffer = [] if stats[:g] > 0
 
       puts "rule stats:"
       puts vwrap stats.to_a
@@ -1042,7 +1046,7 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tiles = nil
       puts "success"
       return
     end
-    gets if quiet < 2 && possible_tiles
+    gets if quiet < 2 && stats[:g] > 0 && possible_tiles
   end
 end
 
