@@ -1326,6 +1326,6 @@ def enum_lattices(area)
   widths = (0..6).map{|i| r.map{_1[i]}.max.to_s.length}
   r.map do |row|
     row = row.zip(widths).map{"%*d" % [_2, _1]}
-    "#{row[0..3].join " "} | #{row[4..6].join " "}}"
+    "#{row[0..3].join " "} | #{row[4..6].join " "}"
   end
 end
