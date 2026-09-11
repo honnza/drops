@@ -84,6 +84,27 @@ Ruleset = Struct.new(
   # unpacks set of tiles, applies a block to each of them and repacks the set
   def map_tiles tiles, &key; pack_tiles unpack_tiles(tiles).map(&key); end
 
+  def name_tiles tiles, method = nil
+    tiles = unpack_tiles tiles unless tiles.is_a? Array
+    pos = tiles.map(&:name).join("/")
+    neg = "/" + (tileset - tiles).map(&:name).join("/")
+    (method == :pos || method.nil? && pos.length > neg.length) ? neg : pos
+  end
+
+  def parse_tiles str
+    return tileset if str == "/"
+    strs = str.split("/", -1)
+    if strs[0].empty?
+      tiles = strs[1..].map{|str| tileset.find{_1.name == str}}
+      raise "invalid tile name #{strs[tiles.find_index(nil)]}" if tiles.include? nil
+      tileset - tiles
+    else
+      tiles = strs.map{|str| tileset.find{_1.name == str}}
+      raise "invalid tile name #{strs[tiles.find_index(nil)]}" if tiles.include? nil
+      tiles
+    end
+  end
+
   def to_json
     rule_id_map = Hash[rules.map.with_index{|r, i| [r.id, i]}]
     JSON.generate({
@@ -1121,24 +1142,7 @@ if $0 == __FILE__
         rule_tiles = strs.map do |row_str|
           row_str.gsub!(/(\S+)\*(\d+)/){([$1] * $2.to_i).join " "}
           row_str.split(" ").map do |tile_str|
-            names = tile_str.split("/", -1)
-            if names == ["", ""]
-              ruleset.all_tiles
-            elsif names[0] == ""
-              tiles = ruleset.tileset.select{names.include? _1.name}
-              if tiles.count != names.count - 1
-                error = names.select{|name| !ruleset.tileset.any? {_1.name == name}}
-                raise "#{error} aren't tiles in this ruleset"
-              end
-              ruleset.pack_tiles(ruleset.tileset.to_a - tiles)
-            else
-              tiles = ruleset.tileset.select{names.include? _1.name}
-              if tiles.count != names.count
-                error = names.select{|name| !ruleset.tileset.any? {_1.name == name}} - [""]
-                raise "#{error} aren't tiles in this ruleset"
-              end
-              ruleset.pack_tiles(tiles)
-            end
+            ruleset.pack_tiles(ruleset.parse_tiles(tile_str))
           end
         end
         raise "pattern must be a rectangle" unless rule_tiles.all?{_1.length == rule_tiles[0].length}
@@ -1234,16 +1238,13 @@ if $0 == __FILE__
       normalize_tiles ruleset.tileset
       h = $~[:h]&.to_i || (IO.console.winsize[0] - 1) / ruleset.tileset[0].ascii.length
       w = $~[:w]&.to_i || IO.console.winsize[1] / ruleset.tileset[0].ascii[0].display_length
-      tiles = ruleset.tileset.find{_1.name == $~[:t]}
-      if $~[:t] && !tiles
-        puts "couldn't find tile #{$~[:t]}"
-        next
-      end
-      StackProf.start(mode: :cpu)
       begin
+        tiles = $~[:t] && ruleset.parse_tiles($~[:t])
+        StackProf.start(mode: :cpu)
         generate ruleset, method, w, h, seeded, $~[:q].length, ruleset.pack_tiles(tiles || ruleset.tileset)
-      rescue Interrupt
+      rescue
         p $!
+        p $@
       end
       StackProf.stop
     when /^save as (.*)$/
