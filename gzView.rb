@@ -425,7 +425,7 @@ def show_parse_block bit_reader, out_buf, stats, quiet:, extrapolate:
         lits_br[0], 
         "@#{out_buf.size - 1}", 
         "#{fbits[lits_bits[0]]}",
-        "#{code.to_s(16).rjust(2, '0')} - #{NEW_STR if stats[:block_counts][code] == 1}" + 
+        "#{code.to_s(16).rjust(2, '0')} - #{NEW_STR if prev_lit_new}" +
         "literal #{code.chr.bytes_to_glyphs.join}",
         code.chr.bytes_to_glyphs.join
       ]

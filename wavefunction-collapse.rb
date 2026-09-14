@@ -1242,7 +1242,7 @@ if $0 == __FILE__
         tiles = $~[:t] && ruleset.parse_tiles($~[:t])
         StackProf.start(mode: :cpu)
         generate ruleset, method, w, h, seeded, $~[:q].length, ruleset.pack_tiles(tiles || ruleset.tileset)
-      rescue
+      rescue Interrupt, StandardError
         p $!
         p $@
       end

@@ -212,7 +212,7 @@ if __FILE__ == $0
           puts grid.export
           STDIN.getc
 
-        when /^(join|merge|split) ([a-z])([0-9]{1,2}) ((?:\d?[neswurdl^>v<])*)$/
+        when /^(join|merge|split) ([a-z])([0-9]{1,2}) ((?:\d*[neswurdl^>v<])*)$/
           arg = $1 != "split"
           merge = $1 == "merge"
           x = $2.ord - "a".ord
