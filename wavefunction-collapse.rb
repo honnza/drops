@@ -986,7 +986,16 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tiles = nil
 
         new_board = board.map(&:dup)
         new_stats = stats.dup
-        conflict = possible_tiles != ruleset.possible_tiles || apply_ruleset(ruleset, new_board, new_stats, nil, nil, true, &render)
+        if stats[:g] == 0
+          ruled_out_buffer += ruleset.unpack_tiles(possible_tiles - (ruleset.possible_tiles || 0))
+          conflict = ruleset.possible_tiles.nil?
+          unless conflict
+            possible_tiles = ruleset.possible_tiles
+            new_board.each{_1.map!{possible_tiles}}
+          end
+        else
+          conflict = apply_ruleset(ruleset, new_board, new_stats, nil, nil, true, &render)
+        end
         stats[new_rule.id] = :gone
         if new_stats[new_rule.id] == 1 && seeded == :rsr && !rsr_undo_log.any?{|_, r| r == new_rule}
           ruleset.rules.reject!{_1.id == new_rule.id || _1.source == [:symm, new_rule.id]}
@@ -1050,10 +1059,9 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tiles = nil
     if quiet < 2
       old_tiles = ruleset.unpack_tiles(possible_tiles)
       new_tiles = ruleset.unpack_tiles(ruleset.possible_tiles || 0)
-      ruled_out_buffer += old_tiles - new_tiles
       puts "\e[91mruled out tiles: #{ruleset.name_tiles(ruled_out_buffer, method: :pos)}\e[0m" unless ruled_out_buffer.empty?
       puts "candidate tiles: #{ruleset.name_tiles(new_tiles, method: :pos)}" unless new_tiles.empty?
-      ruled_out_buffer = [] if stats[:g] > 0
+      ruled_out_buffer = []
 
       puts "rule stats:"
       puts vwrap stats.to_a
@@ -1067,7 +1075,7 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tiles = nil
       puts "success"
       return
     end
-    gets if quiet < 2 && stats[:g] > 0 && possible_tiles
+    gets if quiet < 2 && possible_tiles
   end
 end
 
