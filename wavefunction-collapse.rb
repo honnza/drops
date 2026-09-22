@@ -1059,6 +1059,7 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tiles = nil
     if quiet < 2
       old_tiles = ruleset.unpack_tiles(possible_tiles)
       new_tiles = ruleset.unpack_tiles(ruleset.possible_tiles || 0)
+      ruled_out_buffer |= old_tiles - new_tiles
       puts "\e[91mruled out tiles: #{ruleset.name_tiles(ruled_out_buffer, method: :pos)}\e[0m" unless ruled_out_buffer.empty?
       puts "candidate tiles: #{ruleset.name_tiles(new_tiles, method: :pos)}" unless new_tiles.empty?
       ruled_out_buffer = []
