@@ -865,7 +865,7 @@ end
 Cline = Struct.new(:x, :y)
 Pline = Struct.new(:x, :y)
 
-def generate ruleset, method, w, h, seeded, quiet = 2, tiles = nil
+def generate ruleset, method, w, h, seeded, quiet = 2, tiles
   render = proc do |board, n, d, diff = nil, hl: false|
     print "\e[H\e[?25l"
     full_draw = diff.nil?
@@ -910,15 +910,13 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tiles = nil
   loop do
     if randomization.nil? || seeded == :unseeded
       randomization = [*0 ... w].product([*0 ... h]).map do |x, y|
-        [x, y, [*0 ... ruleset.tileset.length].map{2 ** _1}.shuffle]
+        [x, y, [*0 ... ruleset.tileset.length].map{2 ** _1}.sort_by{|t| [t & tiles == 0 ? 1 : 0, rand]}]
       end
       if method == :drizzle
-        randomization = randomization.flat_map{|x, y, ts| ts.map{|t| [x, y, ruleset.all_tiles - t]}}.shuffle
+        randomization = randomization.flat_map{|x, y, ts| ts.map{|t| [x, y, ruleset.all_tiles - t]}}
+                                     .sort_by{|x, y, t| [t & tiles == 0 ? 0 : 1, rand]}
       else
         randomization = randomization.shuffle.flat_map{|x, y, ts| ts.map{|t| [x, y, t]}}
-      end
-      if tiles
-        randomization = [*0 ... w].product([*0 ... h]).map{|x, y| [x, y, tiles]}.shuffle + randomization
       end
     end
 
