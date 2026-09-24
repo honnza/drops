@@ -37,7 +37,8 @@ class RingQueue
 end
 
 Tile = Struct.new(:name, :ascii, :rotated, :mirrored) do
-  def inspect;
+  attr_accessor :id
+  def inspect
     "<Tile name = #{name.inspect} ascii = #{ascii.inspect} " +
       "rotated = #{rotated.is_a?(Tile) ? "Tile #{rotated.name}" : rotated.inspect} " +
       "mirrored = #{mirrored.is_a?(Tile) ? "Tile #{mirrored.name}" : mirrored.inspect}"
@@ -73,7 +74,8 @@ Ruleset = Struct.new(
 
   # converts an array of tile objects or indices into its packed representation
   def pack_tiles tiles
-    tileset.map.with_index{|t, i| tiles.include?(t) || tiles.include?(i) ? 2 ** i : 0}.sum
+    tiles.map{|tile| 2 ** (tile.is_a?(Numeric) ? tile : (tile.id ||= tileset.find_index(tile)))}.sum
+    # tileset.map.with_index{|t, i| tiles.include?(t) || tiles.include?(i) ? 2 ** i : 0}.sum
   end
 
   # converts the packed representation of a set of tiles into an array of tile objects
