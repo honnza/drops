@@ -24,7 +24,7 @@ class Polyomino
     rows = @aspects[0].map do |row|
       row.reverse.each_slice(5).map{_1.reverse.join.to_i(2).to_s(32)}
     end
-    w == 1 ? "Poly##{rows.join}" : "Poly##{rows[0]}/#{rows[1..].join}"
+    w == 1 ? "Poly##{rows.join}" : "Poly##{rows[0].reverse.join}/#{rows[1..].map(&:reverse).join}"
   end
 
   def grow
