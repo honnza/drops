@@ -23,13 +23,15 @@ class Polyomino
   end
 
   # outputs the polyomino as its bitmask code
-  def to_s(aspect = 0)
+  def bitmask(aspect = 0)
     w = width.fdiv(5).ceil
     rows = @aspects[aspect].map do |row|
-      row.reverse.each_slice(5).map{_1.reverse.join.to_i(2).to_s(32)}
+      row.reverse.each_slice(5).map{_1.reverse.join.to_i(2).to_s(32).upcase}
     end
-    w == 1 ? "Poly##{rows.join}" : "Poly##{rows[0].reverse.join}/#{rows[1..].map(&:reverse).join}"
+    w == 1 ? rows.join : "#{rows[0].reverse.join}/#{rows[1..].map(&:reverse).join}"
   end
+
+  def to_s; "Poly#{bitmask}"; end
 
   def grow
     bitmap = @aspects[0]
@@ -94,6 +96,7 @@ class Placement
   def oriented; polyomino.aspects[aspect]; end
   # index of first unoccupied column after the polyomino
   def right; polyomino.width + offset; end
+  def bitmask; polyomino.bitmask(aspect); end
   def to_s; "#{polyomino.to_s(aspect)}\e[30;1m@\e[0m#{offset}"; end
 
   # space taken up by the polyomino and to the left of it
@@ -103,8 +106,10 @@ end
 Strip = Struct.new :placements do
   def initialize(placements = []); @placements = placements; end
   attr_accessor :placements
+  def height; placements.last.polyomino.height; end
   def width; placements.last.right; end
   def to_s; placements.join(", "); end
+  def bitmasks; placements.map(&:bitmask).join " "; end
 
   # leftmost placement of a given aspect that doesn't overlap the previous orientation
   def place(polyomino, aspect)
@@ -117,6 +122,46 @@ Strip = Struct.new :placements do
     end
     new_place
   end
+
+  def render
+    # ,_,
+    # |_|
+    #
+
+    r = Array.new(height + 1){" " * (2 * width + 1)}
+    placements.each do |placement|
+      po = placement.oriented
+      po.each_index do |ri|
+        po[ri].each_index do |ci|
+          if po[ri][ci] == 1
+            r[ri][2 * (ci + placement.offset) + 2] = ","
+            r[ri + 1][2 * (ci + placement.offset)] = ","
+            r[ri + 1][2 * (ci + placement.offset) + 2] = ","
+            if ri > 0 && ci > 0 &&
+                po[ri - 1][ci - 1] == 1 && po[ri - 1][ci] == 1 && po[ri][ci - 1] == 1
+              r[ri][2 * (ci + placement.offset)] = " "
+            else
+              r[ri][2 * (ci + placement.offset)] = ","
+            end
+          end
+        end
+      end
+    end
+    placements.each do |placement|
+      po = placement.oriented
+      po.each_index do |ri|
+        po[ri].each_index do |ci|
+          if po[ri][ci] == 1
+            r[ri][2 * (ci + placement.offset) + 1] = "_" if ri == 0 || po[ri - 1][ci] != 1
+            r[ri + 1][2 * (ci + placement.offset)] = "|" if ci == 0 || po[ri][ci - 1] != 1
+            r[ri + 1][2 * (ci + placement.offset) + 1] = "_" if po[ri + 1].nil? || po[ri + 1][ci] != 1
+            r[ri + 1][2 * (ci + placement.offset) + 2] = "|" if po[ri][ci + 1] != 1
+          end
+        end
+      end
+    end
+    r
+  end
 end
 
 if __FILE__ == $0
@@ -128,19 +173,20 @@ if __FILE__ == $0
     polyominoes.each{puts _1.to_s}
     puts "#{polyominoes.length} polyominoes"
   when "naive"
+    puts
     width = ARGV[2] || (IO.console.winsize[1] - 1) / 2
     polyominoes.each do |group|
       strip = Strip.new
       group.each do |polyomino|
         placement = strip.place(polyomino, 0)
         if placement.right > width
-          puts strip
+          puts [strip.bitmasks, strip.render, ""]
           strip = Strip.new
           placement = strip.place(polyomino, 0)
         end
         strip.placements << placement
       end
-      puts strip
+    puts [strip.bitmasks, strip.render, ""]
     end
   when "help"
     puts <<END
