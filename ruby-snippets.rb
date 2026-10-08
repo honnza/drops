@@ -1327,7 +1327,11 @@ def enum_lattices(area)
   }.sort_by{_1[4..6]}
   widths = (0..6).map{|i| r.map{_1[i]}.max.to_s.length}
   r.map do |row|
-    row = row.zip(widths).map{"%*d" % [_2, _1]}
-    "#{row[0..3].join " "} | #{row[4..6].join " "}"
+    angles = [
+      (row[4] + row[5] - row[6]) / 2 / (row[4] * row[5]) ** 0.5,
+      (row[5] + row[6] - row[4]) / 2 / (row[5] * row[6]) ** 0.5,
+      (row[6] + row[4] - row[5]) / 2 / (row[6] * row[4]) ** 0.5
+    ].map{Math.acos(_1) * 180 / Math::PI}.sort
+    "%*d %*d %*d %*d | %*d %*d %*d | %3.2f %3.2f %3.2f" % p(widths.zip(row).flatten + angles)
   end
 end
