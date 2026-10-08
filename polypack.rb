@@ -1,10 +1,13 @@
+require "io/console"
+
 def syms(aspect)
   r = [aspect]
   4.times do
     r << r.last.transpose
     r << r.last.reverse
   end
-  r.uniq.sort_by{|aspect| [aspect[0].length, aspect]}
+  r = r.uniq.sort_by{|aspect| [aspect[0].length, aspect]}
+  r.select{|aspect| aspect[0].length == r[0][0].length}
 end
 
 class Polyomino
@@ -19,9 +22,10 @@ class Polyomino
     @aspects = syms(bitmap)
   end
 
-  def to_s
+  # outputs the polyomino as its bitmask code
+  def to_s(aspect = 0)
     w = width.fdiv(5).ceil
-    rows = @aspects[0].map do |row|
+    rows = @aspects[aspect].map do |row|
       row.reverse.each_slice(5).map{_1.reverse.join.to_i(2).to_s(32)}
     end
     w == 1 ? "Poly##{rows.join}" : "Poly##{rows[0].reverse.join}/#{rows[1..].map(&:reverse).join}"
@@ -78,12 +82,72 @@ def gen_polyominoes(n)
   gen_polyominoes(n - 1).flat_map(&:grow).uniq
 end
 
+class Placement
+  def initialize(polyomino, aspect, offset)
+    @polyomino = polyomino
+    @aspect = aspect
+    @offset = offset
+  end
+
+  attr_accessor :polyomino, :aspect, :offset
+  # polyomino aspect that is used for this placement
+  def oriented; polyomino.aspects[aspect]; end
+  # index of first unoccupied column after the polyomino
+  def right; polyomino.width + offset; end
+  def to_s; "#{polyomino.to_s(aspect)}\e[30;1m@\e[0m#{offset}"; end
+
+  # space taken up by the polyomino and to the left of it
+  def c_cost; polyomino.height * offset + polyomino.aspects[aspect].map{|row| row.rindex(0) + 1}; end
+end
+
+Strip = Struct.new :placements do
+  def initialize(placements = []); @placements = placements; end
+  attr_accessor :placements
+  def width; placements.last.right; end
+  def to_s; placements.join(", "); end
+
+  # leftmost placement of a given aspect that doesn't overlap the previous orientation
+  def place(polyomino, aspect)
+    return Placement.new(polyomino, aspect, 0) if placements.empty?
+    new_place = Placement.new(polyomino, aspect, placements.last&.offset)
+    while placements.last.oriented.zip(new_place.oriented).any?{ |row_l, row_r|
+      row_l[new_place.offset - placements.last.offset ..].zip(row_r).any?{_1 == 1 && _2 == 1}
+    }
+      new_place.offset += 1
+    end
+    new_place
+  end
+end
+
 if __FILE__ == $0
+  polyominoes = gen_polyominoes(ARGV[1].to_i)
+    .sort_by{|polyomino| [polyomino.height, polyomino.width, polyomino.to_s]}
+    .group_by(&:height).values
   case ARGV[0]
   when "gen"
-    polys = gen_polyominoes(ARGV[1].to_i).sort_by{|poly| [poly.height, poly.width, poly.to_s]}
-    polys.each{puts _1.to_s}
-    puts "#{polys.length} polyominoes"
-  else puts "unknown method; use \"gen\""
+    polyominoes.each{puts _1.to_s}
+    puts "#{polyominoes.length} polyominoes"
+  when "naive"
+    width = ARGV[2] || (IO.console.winsize[1] - 1) / 2
+    polyominoes.each do |group|
+      strip = Strip.new
+      group.each do |polyomino|
+        placement = strip.place(polyomino, 0)
+        if placement.right > width
+          puts strip
+          strip = Strip.new
+          placement = strip.place(polyomino, 0)
+        end
+        strip.placements << placement
+      end
+      puts strip
+    end
+  when "help"
+    puts <<END
+gen (size) - only list polyominoes of a given size
+naive (size) (width) - pack polyominoes in lexicographical order according to their bitmask code
+help - print this message
+END
+  else puts 'unknown method; use "gen" or "naive" or type "help" for detailed descriptions'
   end
 end
