@@ -1256,20 +1256,22 @@ def gen_polyomino(n_tiles)
         (bb[1][0] .. bb[1][1]).map do |x|
           ttiles.include?([y, x]) ? "#" : " "
         end.join(" ")
-      end.join("\n")
-    end.min_by{[_1.count("\n"), _1]}
+      end
+    end.min_by{[_1.length, _1]}
     return {tries:, polyomino:}
   end
 end
 
-def print_polyominos(n_tiles)
+def print_polyominos(n_tiles, w = nil, h = nil)
   polyominos = []
   loop do
     r = gen_polyomino n_tiles
     puts "." * r[:tries]
-    unless polyominos.include? r[:polyomino]
-      puts r[:polyomino]
-      polyominos << r[:polyomino]
+    r = r[:polyomino]
+    if !polyominos.include?(r) && (h.nil? || h == r.length) && (w.nil? || w == r[0].length / 2 + 1)
+      puts "#{r[0].length / 2 + 1}x#{r.length}" if w.nil? || h.nil?
+      puts r
+      polyominos << r
       gets
     end
   end
