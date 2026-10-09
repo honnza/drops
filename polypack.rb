@@ -96,11 +96,11 @@ class Placement
   def oriented; polyomino.aspects[aspect]; end
   # index of first unoccupied column after the polyomino
   def right; polyomino.width + offset; end
-  def bitmask; polyomino.bitmask(aspect); end
+  def bitmask; polyomino.bitmask(); end
   def to_s; "#{polyomino.to_s(aspect)}\e[30;1m@\e[0m#{offset}"; end
 
   # space taken up by the polyomino and to the left of it
-  def c_cost; polyomino.height * offset + polyomino.aspects[aspect].map{|row| row.rindex(0) + 1}; end
+  def c_cost; polyomino.height * offset + polyomino.aspects[aspect].map{|row| row.rindex(1) + 1}.sum; end
 end
 
 Strip = Struct.new :placements do
@@ -172,19 +172,38 @@ if __FILE__ == $0
   when "gen"
     polyominoes.each{puts _1.to_s}
     puts "#{polyominoes.length} polyominoes"
-  when "naive"
+  when "naive", /^[wc]*[frl]$/
     puts
-    width = ARGV[2] || (IO.console.winsize[1] - 1) / 2
+    width = ARGV[2]&.to_i || (IO.console.winsize[1] - 1) / 2
     polyominoes.each do |group|
       strip = Strip.new
-      group.each do |polyomino|
-        placement = strip.place(polyomino, 0)
-        if placement.right > width
+      until group.empty?
+        if ARGV[0] == "naive"
+          placement = strip.place(group.shift, 0)
+        else
+          placement = group
+            .flat_map{|polyomino|
+              polyomino.aspects.each_index.map{|aspect| strip.place(polyomino, aspect)}
+            }.select{|placement| placement.right <= width}
+            .min_by.with_index do |placement, index|
+              ARGV[0].chars.map do |c|
+                case c
+                when "w" then placement.right
+                when "c" then placement.c_cost
+                when "f" then index
+                when "r" then rand
+                when "l" then -index
+                end
+              end
+            end
+          group.delete(placement.polyomino) if placement
+        end
+        if placement.nil? || placement.right > width
           puts [strip.bitmasks, strip.render, ""]
           strip = Strip.new
-          placement = strip.place(polyomino, 0)
+          placement = strip.place(placement.polyomino, placement.aspect) if placement
         end
-        strip.placements << placement
+        strip.placements << placement if placement
       end
     puts [strip.bitmasks, strip.render, ""]
     end
@@ -192,6 +211,12 @@ if __FILE__ == $0
     puts <<END
 gen (size) - only list polyominoes of a given size
 naive (size) (width) - pack polyominoes in lexicographical order according to their bitmask code
+[wc]*[frl] - pack by always selecting a polyomino according to a set of criteria:
+ w - width - rightmost edge of the polyomino should be as far to the left as possible
+ c - cost - as little empty space should be left inaccessible as possible
+ f - first - pick polyominoes in lexicographical order; equivalent to "naive" when used alone
+ r - random - pick polyominoes completely at random
+ t - last - pick polyominoes in reverse lexicographical order
 help - print this message
 END
   else puts 'unknown method; use "gen" or "naive" or type "help" for detailed descriptions'
