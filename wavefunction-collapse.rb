@@ -434,7 +434,7 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   renderer.call board, rule_stats.values.select{_1.is_a? Numeric}.sum, board.length * board[0].length * (ruleset.tileset.length - 1), [origin_x, origin_x, origin_y, origin_y], hl: true if origin_x
   conflict = false
   undo_log = []
-  diff_queue = RingQueue.new(origin_x || board[0].length / 2, origin_y || board.length / 2)
+  diff_queue = RingQueue.new(stop_at&.[](0) || origin_x || board[0].length / 2, stop_at&.[](1) || origin_y || board.length / 2)
   if origin_x.is_a?(Numeric)
     diff_queue << [origin_x, origin_y]
   else
