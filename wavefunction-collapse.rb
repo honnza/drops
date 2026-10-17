@@ -45,10 +45,13 @@ Tile = Struct.new(:name, :ascii, :rotated, :mirrored) do
   end
 end
 
+TileGroup = Struct.new(:name, :ascii, :tiles)
+
 Ruleset = Struct.new(
   :symmetry,  # characterized by the rotation order (1 = no symmetry / 2 / 4), and at most one mirror line (-, /, |, \)
   :tile_symm, # list of tile permutations that generate the ruleset tile symmetries, each stored as a list of cycles
   :tileset,   # list of tiles that can appear in the world
+  :tile_groups, # list of named groups of tiles
   :periods,   # list of explicit periodicity rules given for the ruleset
   :rules) do
 
@@ -97,14 +100,19 @@ Ruleset = Struct.new(
     return tileset if str == "/"
     strs = str.split("/", -1)
     if strs[0].empty?
-      tiles = strs[1..].map{|str| tileset.find{_1.name == str}}
-      raise "invalid tile name #{strs[tiles.find_index(nil)]}" if tiles.include? nil
-      tileset - tiles
+      strs = strs[1..]
+      invert = true
     else
-      tiles = strs.map{|str| tileset.find{_1.name == str}}
-      raise "invalid tile name #{strs[tiles.find_index(nil)]}" if tiles.include? nil
-      tiles
+      invert = false
     end
+    tiles = strs.flat_map do |str|
+      r = tileset.find{_1.name == str}
+      next [r] if r
+      r = tile_groups.find{_1.name == str}
+      next unpack_tiles(r.tiles) if r
+      raise "invalid tile or tile group name #{str}"
+    end
+    invert ? tileset - tiles : tiles
   end
 
   def to_json
@@ -118,6 +126,13 @@ Ruleset = Struct.new(
           a: t.ascii,
           r: t.rotated,
           m: t.mirrored
+        }
+      end,
+      tg: tile_groups.map do |tg|
+        {
+          n: tg.name,
+          a: tg.ascii,
+          t: tg.tiles
         }
       end,
       p: periods,
@@ -223,10 +238,12 @@ end
 def Ruleset.from_json str
   json = JSON.parse str, symbolize_names: true
   tiles = json[:t].map{|t| Tile.new(t[:n], t[:a], t[:r], t[:m])}
+  groups = (json[:tg] || []).map{|tg| TileGroup.new(tg[:n], tg[:a], tg[:t])}
   ruleset = Ruleset.new(
     json[:s],
     json[:ts] || [],
     tiles,
+    groups,
     json[:p] || [],
     nil
   )
@@ -655,34 +672,38 @@ def normalize_tiles(tileset)
     tile.ascii << ' ' * w until tile.ascii.length == h
   end
 end
+def prompt_ascii(name, optional)
+  puts "#{"(optional) " if optional}#{name} appearance (use #bbbbbb/ffffff; or #bbb/fff to set background and foreground color,"
+  puts "#bbbbbb; or #bbb; to set only the background, or #; to reset both; use empty line to end input/:"
+  ascii = []
+  until (line = gets.chomp).empty?
+    line.gsub!(/\#(?:(\h{6})(?:\/(\h{6}))?)?\;/) do
+      if $1.nil?
+        "\e[0m"
+      elsif $2.nil?
+        "\e[48;2;%d;%d;%dm" % $1.scan(/../).map{_1.to_i(16)}
+      else
+        "\e[48;2;%d;%d;%dm\e[38;2;%d;%d;%dm" % ($1 + $2).scan(/../).map{_1.to_i(16)}
+      end
+    end
+    line.gsub!(/\#(?:(\h{3})(?:\/(\h{3}))?)?\;/) do
+      if $1.nil?
+        "\e[0m"
+      elsif $2.nil?
+        "\e[48;2;%d;%d;%dm" % $1.scan(/./).map{17 * _1.to_i(16)}
+      else
+        "\e[48;2;%d;%d;%dm\e[38;2;%d;%d;%dm" % ($1 + $2).scan(/./).map{17 * _1.to_i(16)}
+      end
+    end
+    ascii << line
+  end
+  ascii unless ascii.empty? && optional
+end
 
 def prompt_tiles(ruleset, name)
   def prompt_tile(name, rotated, mirrored)
     puts
-    puts "tile #{name} appearance (use #bbbbbb/ffffff; or #bbb/fff to set background and foreground color,"
-    puts "#bbbbbb; or #bbb; to set only the background, or #; to reset both; use empty line to end input/:"
-    ascii = []
-    until (line = gets.chomp).empty?
-      line.gsub!(/\#(?:(\h{6})(?:\/(\h{6}))?)?\;/) do
-        if $1.nil?
-          "\e[0m"
-        elsif $2.nil?
-          "\e[48;2;%d;%d;%dm" % $1.scan(/../).map{_1.to_i(16)}
-        else
-          "\e[48;2;%d;%d;%dm\e[38;2;%d;%d;%dm" % ($1 + $2).scan(/../).map{_1.to_i(16)}
-        end
-      end
-      line.gsub!(/\#(?:(\h{3})(?:\/(\h{3}))?)?\;/) do
-        if $1.nil?
-          "\e[0m"
-        elsif $2.nil?
-          "\e[48;2;%d;%d;%dm" % $1.scan(/./).map{17 * _1.to_i(16)}
-        else
-          "\e[48;2;%d;%d;%dm\e[38;2;%d;%d;%dm" % ($1 + $2).scan(/./).map{17 * _1.to_i(16)}
-        end
-      end
-      ascii << line
-    end
+    ascii = prompt_ascii("tile #{name}")
     case rotated
     when :"4"
       print "tile rotated clockwise: "
@@ -1090,7 +1111,7 @@ if $0 == __FILE__
     print "WFC> "
     case gets.chomp
     when /^new ruleset ([124][\\\/\-\|]?)$/
-      ruleset = Ruleset.new $1, [], [], [], []
+      ruleset = Ruleset.new $1, [], [], [], [], []
       puts "ok"
     when /^add tile (\S+)$/
       if !ruleset
@@ -1102,7 +1123,7 @@ if $0 == __FILE__
         next
       end
       tiles = prompt_tiles ruleset, $1
-      error = tiles.map(&:name) & ruleset.tileset.map(&:name)
+      error = tiles.map(&:name) & (ruleset.tileset | ruleset.groups).map(&:name)
       if error.empty?
         ruleset.tileset += tiles
         tiles.each do |tile|
@@ -1113,6 +1134,18 @@ if $0 == __FILE__
       else
         puts "#{error.inspect} already defined, discarding #{tiles.count} tiles"
       end
+    when /^add tile group (\S+) (\S+)$/
+      if !ruleset
+        puts "ruleset must be defined before tiles"
+        next
+      end
+      tiles = ruleset.parse_tiles($2)
+      ascii = prompt_ascii("tile group", true)
+      if (ruleset.tileset | ruleset.tile_groups).any?{_1.name == $1}
+        puts "tile or group with this name has already been defined"
+        next
+      end
+      ruleset.tile_groups << p(TileGroup.new($1, ascii, ruleset.pack_tiles(tiles)))
     when /^add tile symmetry (.+)$/
       begin
         new_symm = $1.split(" ").map do |cycle_str|
@@ -1165,6 +1198,7 @@ if $0 == __FILE__
         puts "ok; #{rule.summary} added"
       rescue
         puts $!.message
+        p $@
       end
     when /^add period (-?\w)(\w)$/
       if $1.to_i(36) == 0 && $2.to_i(36) == 0
