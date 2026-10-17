@@ -13,7 +13,7 @@ class RingQueue
   end
 
   def << x
-    ring_ix = [(@origin_x - x[0]).abs, (@origin_y - x[1]).abs].max
+    ring_ix = (@origin_x - x[0]) ** 2 + (@origin_y - x[1]) ** 2
     unless @set[x]
       @rings[ring_ix] ||= []
       @rings[ring_ix] << x 
