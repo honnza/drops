@@ -866,6 +866,7 @@ end
 
 Cline = Struct.new(:x, :y)
 Pline = Struct.new(:x, :y)
+Reverse = Struct.new(:inner)
 
 def generate ruleset, method, w, h, seeded, quiet = 2, tiles
   render = proc do |board, n, d, diff = nil, hl: false|
@@ -909,6 +910,8 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tiles
   randomization = nil
   possible_tiles = ruleset.possible_tiles
   ruled_out_buffer = []
+  reverse_method = method.is_a? Reverse
+  method = method.inner if reverse_method
   loop do
     if randomization.nil? || seeded == :unseeded
       randomization = [*0 ... w].product([*0 ... h]).map do |x, y|
@@ -932,8 +935,9 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tiles
     board = Array.new(h){Array.new(w){possible_tiles}}
     rsr_undo_log = []
 
+    order_method = reverse_method ? :max_by : :min_by
     loop do
-      x, y, t = randomization.select{|x, y, t| board[y][x] & ~t != 0 && board[y][x] & t != 0}.min_by do |x, y, t|
+      x, y, t = randomization.select{|x, y, t| board[y][x] & ~t != 0 && board[y][x] & t != 0}.send order_method do |x, y, t|
         case method
           when :drizzle, :rain then 0
           when :pour then (2 * x - w + 1) ** 2 + (2 * y - h + 1) ** 2
@@ -1223,7 +1227,7 @@ if $0 == __FILE__
       end
     when /
       ^(?<q>q?q?)(?<g>gen( rsr)?|genus|gense|gensess|generate( seeded| unseeded| rsr)?)\ 
-      (?<m>drizzle|rain|pour|wfc[rpl]|lex|(?<mn>[cp]line)\((?<mx>-?\d+)\ (?<my>-?\d+)\))
+      (?<mr>r?)(?<m>drizzle|rain|pour|wfc[rpl]|lex|(?<mn>[cp]line)\((?<mx>-?\d+)\ (?<my>-?\d+)\))
       (\ (?<h>\d+)x(?<w>\d+))?
       (\ (?<t>\S+))?$
     /x
@@ -1236,6 +1240,7 @@ if $0 == __FILE__
                when "pline" then Pline.new($~[:mx].to_i, $~[:my].to_i)
                else $~[:m].to_sym
                end
+      method = Reverse[method] if $~[:mr] == "r"
       seeded = case $~[:g]
                when "gen", "generate" then nil
                when "gense", "generate seeded" then :seeded
@@ -1291,7 +1296,7 @@ Ruleset must be defined before tiles, tiles must be defined before tile symmetri
 delete (cascade)? rule (id) - delete a rule. Must not be referenced by other rules. If cascade is set, delete refererrers instead.
 show (all)? rules - list all rules in the ruleset. Omits symmetric images of other rules unless specified.
 
-(q|qq)?(gen|genus|gense|gensess|generate) (rsr|seeded|unseeded)? (drizzle|rain|pour|wfc) (wxh)? (tile)? - generates a pattern using the ruleset or finds and adds a rule non-trivially implied by existing rules. Uses the screen size if unspecified. If q (quiet mode) is set, no stats are shown after each new rule. If superquiet is set, do not show stats when resetting the board either. If gense/seeded is set, it attemts to generate the board again with the same RNG if unsuccessful. If gensess (split-symmetry) is set, each symmetic aspect of a rule is treated separately for more aggressive rule pruning. If rsr is set, if a new rule only applies once, it is removed and the randomizzation is adjusted. If genus/unseeded is set, it retries with a different RNG. If neither is set, aborts after one attempt. If tile is specified, it tries to place that tile in the selected position.
+(q|qq)?(gen|genus|gense|gensess|generate) (rsr|seeded|unseeded)? r?(drizzle|rain|pour|wfc) (wxh)? (tile)? - generates a pattern using the ruleset or finds and adds a rule non-trivially implied by existing rules. Uses the screen size if unspecified. If q (quiet mode) is set, no stats are shown after each new rule. If superquiet is set, do not show stats when resetting the board either. If gense/seeded is set, it attemts to generate the board again with the same RNG if unsuccessful. If gensess (split-symmetry) is set, each symmetic aspect of a rule is treated separately for more aggressive rule pruning. If rsr is set, if a new rule only applies once, it is removed and the randomizzation is adjusted. If genus/unseeded is set, it retries with a different RNG. If neither is set, aborts after one attempt. If tile is specified, it tries to place that tile in the selected position.
   drizzle - at each step, select a random position and remove one possible tile from it
   rain - at each step, select a random position and select one tile for that position
   pour - at each step, select an unresolved position closest to the middle and select one tile for that position
