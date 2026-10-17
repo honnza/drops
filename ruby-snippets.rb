@@ -1312,7 +1312,9 @@ def enum_lattices(area)
         [b, a, d, c],
         [c, d, a, b],
         [d, c, b, a]
-      ].max}.min
+      ].max}.min_by{|a, b, c, d|
+        [a ** 2 + b ** 2, c ** 2 + d ** 2].sort + [a, b, c, d]
+      }
       break if [a, b, c, d] == step
       a, b, c, d = step
     end
