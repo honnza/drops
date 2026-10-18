@@ -174,7 +174,7 @@ Ruleset = Struct.new(
   end
 
   def reduce_sym new_sym
-    new_ruleset = Ruleset.new(new_sym, tile_symm, tileset.map(&:dup), [], [])
+    new_ruleset = Ruleset.new(new_sym, tile_symm, tileset.map(&:dup), [], [], [])
     old_rotation, old_mirror = symmetry.chars
     new_rotation, new_mirror = new_sym.chars
     # TODO: carry over period rules
