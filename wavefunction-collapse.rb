@@ -89,11 +89,16 @@ Ruleset = Struct.new(
   # unpacks set of tiles, applies a block to each of them and repacks the set
   def map_tiles tiles, &key; pack_tiles unpack_tiles(tiles).map(&key); end
 
-  def name_tiles tiles, method = nil
-    tiles = unpack_tiles tiles unless tiles.is_a? Array
-    pos = tiles.map(&:name).join("/")
-    neg = "/" + (tileset - tiles).map(&:name).join("/")
-    (method == :pos || method.nil? && pos.length > neg.length) ? neg : pos
+  def name_tiles tiles, method: nil
+    case method
+    when :pos then tiles.map(&:name).join("/")
+    when :neg then "/" + name_tiles(tiles, method: :pos)
+    when nil
+      pos = name_tiles(tiles, method: :pos)
+      neg = "/" + name_tiles(tiles, method: :pos)
+      pos.length > neg.length ? neg : pos
+    else raise "invalid method #{method}"
+    end
   end
 
   def parse_tiles str
