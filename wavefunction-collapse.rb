@@ -968,9 +968,10 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tiles
           when :drizzle, :rain then 0
           when :pour then (2 * x - w + 1) ** 2 + (2 * y - h + 1) ** 2
           when Cline, Pline
-            pline_score = ((2 * x - w + 1) * method.y - (2 * y - h + 1) * method.x).abs
-            manhattan = (2 * x - w + 1).abs + (2 * y - h + 1).abs
-            pline_score <= 1 && method.is_a?(Cline) ? [0, manhattan] : [1, pline_score]
+            line_score = ((2 * x - w + 1) * method.y - (2 * y - h + 1) * method.x).abs / 2.0
+            line_score = (line_score / (method.x ** 2 + method.y ** 2) ** 0.5)
+            line_score = line_score.round if method.is_a?(Cline)
+            [line_score, (2 * x - w + 1) ** 2 + (2 * y - h + 1) ** 2]
           when :lex then [-y, x]
           when :wfcr then board[y][x].digits(2).count(1)
           when :wfcp then [board[y][x].digits(2).count(1), (2 * x - w + 1) ** 2 + (2 * y - h + 1) ** 2]
@@ -1266,7 +1267,7 @@ if $0 == __FILE__
       end
     when /
       ^(?<q>q?q?)(?<g>gen( rsr)?|genus|gense|gensess|generate( seeded| unseeded| rsr)?)\ 
-      (?<mr>r?)(?<m>drizzle|rain|pour|wfc[rpl]|lex|(?<mn>[cp]line)\((?<mx>-?\d+)\ (?<my>-?\d+)\))
+      (?<mr>r?)(?<m>drizzle|rain|pour|wfc[rpl]|lex|(?<mn>[cp]line)(\((?<mx>-?\d+)\ (?<my>-?\d+)\))?)
       (\ (?<h>\d+)x(?<w>\d+))?
       (\ (?<t>\S+))?$
     /x
@@ -1274,9 +1275,12 @@ if $0 == __FILE__
         puts "at least one tile required"
         next
       end
+      mx = $~[:mx]
+      my = $~[:my]
+      mx, my = ruleset.periods.min_by{|mx, my| mx ** 2 + my ** 2} if mx.nil? && !ruleset.periods.empty?
       method = case $~[:mn]
-               when "cline" then Cline.new($~[:mx].to_i, $~[:my].to_i)
-               when "pline" then Pline.new($~[:mx].to_i, $~[:my].to_i)
+               when "cline" then Cline.new(mx.to_i, my.to_i)
+               when "pline" then Pline.new(mx.to_i, my.to_i)
                else $~[:m].to_sym
                end
       method = Reverse[method] if $~[:mr] == "r"
@@ -1335,11 +1339,11 @@ Ruleset must be defined before tiles, tiles must be defined before tile symmetri
 delete (cascade)? rule (id) - delete a rule. Must not be referenced by other rules. If cascade is set, delete refererrers instead.
 show (all)? rules - list all rules in the ruleset. Omits symmetric images of other rules unless specified.
 
-(q|qq)?(gen|genus|gense|gensess|generate) (rsr|seeded|unseeded)? r?(drizzle|rain|pour|wfc) (wxh)? (tile)? - generates a pattern using the ruleset or finds and adds a rule non-trivially implied by existing rules. Uses the screen size if unspecified. If q (quiet mode) is set, no stats are shown after each new rule. If superquiet is set, do not show stats when resetting the board either. If gense/seeded is set, it attemts to generate the board again with the same RNG if unsuccessful. If gensess (split-symmetry) is set, each symmetic aspect of a rule is treated separately for more aggressive rule pruning. If rsr is set, if a new rule only applies once, it is removed and the randomizzation is adjusted. If genus/unseeded is set, it retries with a different RNG. If neither is set, aborts after one attempt. If tile is specified, it tries to place that tile in the selected position.
+(q|qq)?(gen|genus|gense|gensess|generate) (rsr|seeded|unseeded)? r?(drizzle|rain|pour|wfc[rpl]|cline|pline) (wxh)? (tile)? - generates a pattern using the ruleset or finds and adds a rule non-trivially implied by existing rules. Uses the screen size if unspecified. If q (quiet mode) is set, no stats are shown after each new rule. If superquiet is set, do not show stats when resetting the board either. If gense/seeded is set, it attemts to generate the board again with the same RNG if unsuccessful. If gensess (split-symmetry) is set, each symmetic aspect of a rule is treated separately for more aggressive rule pruning. If rsr is set, if a new rule only applies once, it is removed and the randomizzation is adjusted. If genus/unseeded is set, it retries with a different RNG. If neither is set, aborts after one attempt. If tile is specified, it tries to place that tile in the selected position.
   drizzle - at each step, select a random position and remove one possible tile from it
   rain - at each step, select a random position and select one tile for that position
   pour - at each step, select an unresolved position closest to the middle and select one tile for that position
-  pline - at each step, select an unresolved position closest to the specified line and select one tile for that position. Same order as the add period command.
+  pline - at each step, select an unresolved position closest to the specified line and select one tile for that position. Same order as the add period command. Append (w, h) after pline to set direction, otherwise the shortest period is used
   cline - like pline, but start from the center out before reaching the edges
   lex - resolve tiles from left to right, then bottom to top
   wfc(r|p|l) - wavefunction collapse classic. At each step, randomly choose a tile with the fewest possibilities and resolve it. The variant decides the order in which tiles with equal number of possibilities are chosen.
