@@ -833,7 +833,7 @@ class Layout
     end
 
     def lattice(w, h, method:, anti:, re: , sym:, xy:)
-      xy = [:x, :y].sample if xy
+      xy = [:x, :y].sample if xy == :xy
       pt_ix = Array.new(h){Array.new(w, nil)}
       pts = [[rand(1 ... h - 1), rand(1 ... w - 1)]]
       pt_ix[pts[0][0]][pts[0][1]] = 0
@@ -852,7 +852,11 @@ class Layout
             when :y
               xy = :x
               [0, rand(4 .. w - 3) * [-1, 1].sample]
-            when false
+            when :xyz
+              x, y = [rand(-h + 3 .. h - 3), rand(-w + 3 .. w - 3)]
+              x, y = [rand(-h + 3 .. h - 3), rand(-w + 3 .. w - 3)] until x == 0 || y == 0 || x.abs == y.abs
+              [x, y]
+            when nil
               [rand(-h + 3 .. h - 3), rand(-w + 3 .. w - 3)]
             end
           generator_pos << 0
@@ -875,9 +879,9 @@ class Layout
         generator_pos[gi] += 1
         if pts.count == (w - 2) * (h - 2)
           generators.zip(generator_stats).reject{|k, v| v == 0}.each{p _1}
-          if re && (!xy && generator_stats.each_cons(2).any?{_2 > _1} || generator_stats.each_cons(3).any?{_3 > _1})
+          if re && ((xy == :x || xy == :y) && generator_stats.each_cons(2).any?{_2 > _1} || generator_stats.each_cons(3).any?{_3 > _1})
             generators = generators.zip(0..)
-            generators = if xy
+            generators = if xy == :x || xy == :y
               generators << nil if generators.count.odd?
               generators.each_slice(2).to_a.transpose
             else
@@ -1097,7 +1101,7 @@ w, h = case ARGV.length
          exit
        end
 
-layouts = %i{horizontal vertical regular prim pruskal nuskal xyskal bsp cobsp wcbsp frain xyfrain (anti)?(re)?(sym)?(xy)?latti(frain|skal) manhattan manyhattan manyhattanskal dbt rdbt}
+layouts = %i{horizontal vertical regular prim pruskal nuskal xyskal bsp cobsp wcbsp frain xyfrain (anti)?(re)?(sym)?(xyz?)?latti(frain|skal) manhattan manyhattan manyhattanskal dbt rdbt}
 unless ARGV[0] =~ /^((?:frain-|chordless-|tight-|centered-)*)(#{layouts.join ?|})$/
   puts "first argument should be #{layouts.join ", "}, or frain-, tight-, centered- or chordless- plus one of the preceding"
   exit
@@ -1114,10 +1118,10 @@ begin
            when "horizontal" then Layout.regular_3 w, h, :horizontal
            when "vertical" then Layout.regular_3 w, h, :vertical
            when "regular" then Layout.regular_3 w, h, :auto
-           when /(anti)?(re)?(sym)?(xy)?latti(frain|skal)/
+           when /(anti)?(re)?(sym)?(xyz?)?latti(frain|skal)/
              Layout.lattice(
                w, h,
-               anti: !$1.nil?, re: !$2.nil?, sym: !$3.nil?, xy: !$4.nil?,
+               anti: !$1.nil?, re: !$2.nil?, sym: !$3.nil?, xy: $4&.to_sym,
                method: $4 == "frain" ? :frain : :pruskal
              )
            else Layout.send layout, w, h
