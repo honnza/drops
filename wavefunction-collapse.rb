@@ -542,7 +542,13 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   end
 
   progress_bar = []
-  (origin_x, origin_y), origin_c = inferred_tiles.find do |(origin_x, origin_y), origin_c|
+  (origin_x, origin_y), origin_c = inferred_tiles.reject do |(new_origin_x, new_origin_y), new_origin_c|
+    d2 = (new_origin_x - origin_x) ** 2 + (new_origin_y - origin_y) ** 2
+    ruleset.periods.any? do |px, py|
+      (new_origin_x - origin_x - px) ** 2 + (new_origin_y - origin_y - py) ** 2 < d2 ||
+      (new_origin_x - origin_x + px) ** 2 + (new_origin_y - origin_y + py) ** 2 < d2
+    end
+  end.find do |(origin_x, origin_y), origin_c|
     renderer.call rule_bitmap, progress_bar.sort, inferred_tiles.length
     renderer.call rule_bitmap, progress_bar.sort, inferred_tiles.length,
       [origin_x - new_rule_min_x, origin_x - new_rule_min_x,
