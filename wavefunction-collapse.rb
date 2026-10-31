@@ -977,15 +977,15 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tiles, tiles_priority
           tiles_priority && t == tiles ? 0 : 1,
           case method
           when :drizzle, :rain then 0
-          when :pour then (2 * x - w + 1) ** 2 + (2 * y - h + 1) ** 2
+          when :pour then (x - w / 2) ** 2 + (y - h / 2) ** 2
           when Cline, Pline
-            line_score = ((2 * x - w + 1) * method.y - (2 * y - h + 1) * method.x).abs / 2.0
+            line_score = ((x - w / 2) * method.y - (y - h / 2) * method.x).abs / 2.0
             line_score = (line_score / (method.x ** 2 + method.y ** 2) ** 0.5)
             line_score = line_score.round if method.is_a?(Cline)
-            [line_score, (2 * x - w + 1) ** 2 + (2 * y - h + 1) ** 2]
+            [line_score, (x - w / 2) ** 2 + (y - h / 2) ** 2]
           when :lex then [-y, x]
           when :wfcr then board[y][x].digits(2).count(1)
-          when :wfcp then [board[y][x].digits(2).count(1), (2 * x - w + 1) ** 2 + (2 * y - h + 1) ** 2]
+          when :wfcp then [board[y][x].digits(2).count(1), (x - w / 2) ** 2 + (y - h / 2) ** 2]
           when :wfcl then [board[y][x].digits(2).count(1), -y, x]
           end
         ]
