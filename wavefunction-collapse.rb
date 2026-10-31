@@ -900,7 +900,7 @@ Cline = Struct.new(:x, :y)
 Pline = Struct.new(:x, :y)
 Reverse = Struct.new(:inner)
 
-def generate ruleset, method, w, h, seeded, quiet = 2, tiles
+def generate ruleset, method, w, h, seeded, quiet = 2, tiles, tiles_priority
   render = proc do |board, n, d, diff = nil, hl: false|
     print "\e[H\e[?25l"
     full_draw = diff.nil?
@@ -955,6 +955,9 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tiles
       else
         randomization = randomization.shuffle.flat_map{|x, y, ts| ts.map{|t| [x, y, t]}}
       end
+      if tiles_priority
+        randomization += [*0 ... w].product([*0 ... h]).map{|x, y| [x, y, tiles]}.shuffle
+      end
     end
 
     stats = Hash[ruleset.rules.select{_1.source[0] != :symm}.map{[_1.id, 0]}]
@@ -970,7 +973,9 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tiles
     order_method = reverse_method ? :max_by : :min_by
     loop do
       x, y, t = randomization.select{|x, y, t| board[y][x] & ~t != 0 && board[y][x] & t != 0}.send order_method do |x, y, t|
-        case method
+        [
+          tiles_priority && t == tiles ? 0 : 1,
+          case method
           when :drizzle, :rain then 0
           when :pour then (2 * x - w + 1) ** 2 + (2 * y - h + 1) ** 2
           when Cline, Pline
@@ -982,7 +987,8 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tiles
           when :wfcr then board[y][x].digits(2).count(1)
           when :wfcp then [board[y][x].digits(2).count(1), (2 * x - w + 1) ** 2 + (2 * y - h + 1) ** 2]
           when :wfcl then [board[y][x].digits(2).count(1), -y, x]
-        end
+          end
+        ]
       end
       break if x.nil? || ruleset.possible_tiles.nil?
 
@@ -1275,7 +1281,7 @@ if $0 == __FILE__
       ^(?<q>q?q?)(?<g>gen( rsr)?|genus|gense|gensess|generate( seeded| unseeded| rsr)?)\ 
       (?<mr>r?)(?<m>drizzle|rain|pour|wfc[rpl]|lex|(?<mn>[cp]line)(\((?<mx>-?\d+)\ (?<my>-?\d+)\))?)
       (\ (?<h>\d+)x(?<w>\d+))?
-      (\ (?<t>\S+))?$
+      (\ (?<t>[^! ]+))?(?<tp>!)?$
     /x
       if ruleset.nil? || ruleset.tileset.empty?
         puts "at least one tile required"
@@ -1304,7 +1310,10 @@ if $0 == __FILE__
       begin
         tiles = $~[:t] && ruleset.parse_tiles($~[:t])
         StackProf.start(mode: :cpu)
-        generate ruleset, method, w, h, seeded, $~[:q].length, ruleset.pack_tiles(tiles || ruleset.tileset)
+        generate(
+          ruleset, method, w, h, seeded, $~[:q].length,
+          ruleset.pack_tiles(tiles || ruleset.tileset), $~[:tp] == "!"
+        )
       rescue Interrupt, StandardError
         p $!
         p $@
@@ -1345,7 +1354,7 @@ Ruleset must be defined before tiles, tiles must be defined before tile symmetri
 delete (cascade)? rule (id) - delete a rule. Must not be referenced by other rules. If cascade is set, delete refererrers instead.
 show (all)? rules - list all rules in the ruleset. Omits symmetric images of other rules unless specified.
 
-(q|qq)?(gen|genus|gense|gensess|generate) (rsr|seeded|unseeded)? r?(drizzle|rain|pour|wfc[rpl]|cline|pline) (wxh)? (tile)? - generates a pattern using the ruleset or finds and adds a rule non-trivially implied by existing rules. Uses the screen size if unspecified. If q (quiet mode) is set, no stats are shown after each new rule. If superquiet is set, do not show stats when resetting the board either. If gense/seeded is set, it attemts to generate the board again with the same RNG if unsuccessful. If gensess (split-symmetry) is set, each symmetic aspect of a rule is treated separately for more aggressive rule pruning. If rsr is set, if a new rule only applies once, it is removed and the randomizzation is adjusted. If genus/unseeded is set, it retries with a different RNG. If neither is set, aborts after one attempt. If tile is specified, it tries to place that tile in the selected position.
+(q|qq)?(gen|genus|gense|gensess|generate) (rsr|seeded|unseeded)? r?(drizzle|rain|pour|wfc[rpl]|cline|pline) (wxh)? (tile)?!? - generates a pattern using the ruleset or finds and adds a rule non-trivially implied by existing rules. Uses the screen size if unspecified. If q (quiet mode) is set, no stats are shown after each new rule. If superquiet is set, do not show stats when resetting the board either. If gense/seeded is set, it attemts to generate the board again with the same RNG if unsuccessful. If gensess (split-symmetry) is set, each symmetic aspect of a rule is treated separately for more aggressive rule pruning. If rsr is set, if a new rule only applies once, it is removed and the randomizzation is adjusted. If genus/unseeded is set, it retries with a different RNG. If neither is set, aborts after one attempt. If tile is specified, it tries to place that tile in the selected position.
   drizzle - at each step, select a random position and remove one possible tile from it
   rain - at each step, select a random position and select one tile for that position
   pour - at each step, select an unresolved position closest to the middle and select one tile for that position
