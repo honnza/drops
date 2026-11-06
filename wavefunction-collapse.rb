@@ -898,6 +898,7 @@ end
 
 Cline = Struct.new(:x, :y)
 Pline = Struct.new(:x, :y)
+Wline = Struct.new(:x, :y)
 Reverse = Struct.new(:inner)
 
 def generate ruleset, method, w, h, seeded, quiet = 2, tiles, tiles_priority
@@ -978,10 +979,11 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tiles, tiles_priority
           case method
           when :drizzle, :rain then 0
           when :pour then (x - w / 2) ** 2 + (y - h / 2) ** 2
-          when Cline, Pline
+          when Cline, Pline, Wline
             line_score = ((x - w / 2) * method.y - (y - h / 2) * method.x).abs
             line_score = line_score / (method.x ** 2 + method.y ** 2) ** 0.5
             line_score = line_score.round if method.is_a?(Cline)
+            line_score = (line_score + 1) * board[y][x].digits(2).count(1) if method.is_a?(Wline)
             [line_score, (x - w / 2) ** 2 + (y - h / 2) ** 2]
           when :lex then [-y, x]
           when :wfcr then board[y][x].digits(2).count(1)
@@ -1279,7 +1281,7 @@ if $0 == __FILE__
       end
     when /
       ^(?<q>q?q?)(?<g>gen( rsr)?|genus|gense|gensess|generate( seeded| unseeded| rsr)?)\ 
-      (?<mr>r?)(?<m>drizzle|rain|pour|wfc[rpl]|lex|(?<mn>[cp]line)(\((?<mx>-?\d+)\ (?<my>-?\d+)\))?)
+      (?<mr>r?)(?<m>drizzle|rain|pour|wfc[rpl]|lex|(?<mn>[cpw]line)(\((?<mx>-?\d+)\ (?<my>-?\d+)\))?)
       (\ (?<h>\d+)x(?<w>\d+))?
       (\ (?<t>[^! ]+))?(?<tp>!)?$
     /x
@@ -1293,6 +1295,7 @@ if $0 == __FILE__
       method = case $~[:mn]
                when "cline" then Cline.new(mx.to_i, my.to_i)
                when "pline" then Pline.new(mx.to_i, my.to_i)
+               when "wline" then Wline.new(mx.to_i, my.to_i)
                else $~[:m].to_sym
                end
       method = Reverse[method] if $~[:mr] == "r"
@@ -1362,6 +1365,7 @@ show (all)? rules - list all rules in the ruleset. Omits symmetric images of oth
   cline - like pline, but start from the center out before reaching the edges
   lex - resolve tiles from left to right, then bottom to top
   wfc(r|p|l) - wavefunction collapse classic. At each step, randomly choose a tile with the fewest possibilities and resolve it. The variant decides the order in which tiles with equal number of possibilities are chosen.
+  wline - blend of pline and wfc strategies
 
 save as (filename) - save the ruleset to a file
 load from (filename) - restore a ruleset from the file
