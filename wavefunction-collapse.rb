@@ -902,6 +902,7 @@ Wline = Struct.new(:x, :y)
 Reverse = Struct.new(:inner)
 
 def generate ruleset, method, w, h, seeded, quiet = 2, tiles, tiles_priority
+  ruleset.tile_groups.sort_by!{_1.tiles.digits(2).count(1)}
   render = proc do |board, n, d, diff = nil, hl: false|
     print "\e[H\e[?25l"
     full_draw = diff.nil?
@@ -916,13 +917,18 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tiles, tiles_priority
           if n_tiles == 1
             ruleset.unpack_tiles(board[y][x])[0].ascii[ty]
           else
-            rgb = if n_tiles == ruleset.tileset.length
-                    64
-                  else
-                    (255 * (2 - n_tiles.fdiv(ruleset.tileset.length)) / 2).to_i
-                  end
-            str = [board[y][x].digits(2).count(1), 10 ** tw - 1].min.to_s.rjust(tw)
-            "\e[38;2;#{rgb};#{rgb};#{rgb}m#{str}\e[0m"
+            group = ruleset.tile_groups.find{|tg| !tg.ascii.nil? && board[y][x] & ~tg.tiles == 0} if board[y][x] != 0
+            if group
+              group.ascii[ty]
+            else
+              rgb = if n_tiles == ruleset.tileset.length
+                      64
+                    else
+                      (255 * (2 - n_tiles.fdiv(ruleset.tileset.length)) / 2).to_i
+                    end
+              str = [board[y][x].digits(2).count(1), 10 ** tw - 1].min.to_s.rjust(tw)
+              "\e[38;2;#{rgb};#{rgb};#{rgb}m#{str}\e[0m"
+            end
           end
         }.map{hl ? _1.highlight : _1}.join
         print "\e[K" if full_draw
