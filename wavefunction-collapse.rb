@@ -90,12 +90,26 @@ Ruleset = Struct.new(
   def map_tiles tiles, &key; pack_tiles unpack_tiles(tiles).map(&key); end
 
   def name_tiles tiles, method: nil
+    tiles = unpack_tiles(tiles) if tiles.is_a? Integer
     case method
-    when :pos then tiles.map(&:name).join("/")
-    when :neg then "/" + name_tiles(tiles, method: :pos)
+    when :pos
+      to_name = tiles.dup
+      valid_groups = tile_groups.select{(unpack_tiles(_1.tiles) - tiles).empty?}
+      used_groups = []
+      unless valid_groups.empty?
+        loop do
+          group = valid_groups.max_by{(unpack_tiles(_1.tiles) & to_name).length}
+          new_named = unpack_tiles(group.tiles) & to_name
+          break if new_named.length < 2
+          used_groups << group
+          to_name -= new_named
+        end
+      end
+      (used_groups + to_name).map(&:name).join("/")
+    when :neg then "/" + name_tiles(tileset - tiles, method: :pos)
     when nil
       pos = name_tiles(tiles, method: :pos)
-      neg = "/" + name_tiles(tiles, method: :pos)
+      neg = name_tiles(tiles, method: :neg)
       pos.length > neg.length ? neg : pos
     else raise "invalid method #{method}"
     end
@@ -417,17 +431,7 @@ Rule = Struct.new(
                           when :conflict then "conflict of #{source[1..]}"
                           end
     d = tiles.map do |row|
-      row.map do |tiles|
-        pos = ruleset.unpack_tiles(tiles).map(&:name).join("/")
-        neg = "/" + ruleset.unpack_tiles(ruleset.all_tiles & ~tiles).map(&:name).join("/")
-        pos.length > neg.length ? neg : pos
-      end.chunk{_1}.map do |k, a|
-        if a.length == 1 || a.length == 2 && k.length == 1
-          a.join " "
-        else
-          "#{k}*#{a.length}"
-        end
-      end.join " "
+      row.map{ruleset.name_tiles(_1)}.join " "
     end.chunk{_1}.map{|k, a| a.length == 1 ? k : "#{k}**#{a.length}"}.join "\n"
 
     [h, d].join "\n"
