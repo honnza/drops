@@ -907,7 +907,7 @@ Wline = Struct.new(:x, :y)
 Reverse = Struct.new(:inner)
 
 def generate ruleset, method, w, h, seeded, quiet = 2, tiles, tiles_priority
-  ruleset.tile_groups.sort_by!{_1.tiles.digits(2).count(1)}
+  tile_groups = ruleset.tile_groups.sort_by{_1.tiles.digits(2).count(1)}
   render = proc do |board, n, d, diff = nil, hl: false|
     print "\e[H\e[?25l"
     full_draw = diff.nil?
@@ -922,7 +922,7 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tiles, tiles_priority
           if n_tiles == 1
             ruleset.unpack_tiles(board[y][x])[0].ascii[ty]
           else
-            group = ruleset.tile_groups.find{|tg| !tg.ascii.nil? && board[y][x] & ~tg.tiles == 0} if board[y][x] != 0
+            group = tile_groups.find{|tg| !tg.ascii.nil? && board[y][x] & ~tg.tiles == 0} if board[y][x] != 0
             if group
               group.ascii[ty]
             else
@@ -1261,6 +1261,10 @@ if $0 == __FILE__
       ruleset.add_period($1.to_i, $2.to_i)
       ruleset.add_period($3.to_i, -$4.to_i)
       puts "ok"
+    when /^delete tile group (\w+)$/
+      group = ruleset.tile_groups.find{_1.name == $1}
+      ruleset.tile_groups.delete group
+      puts group.nil? ? "no such group found" : "ok"
     when /^delete (cascade )?rule (\d+)$/
       delete_stack = [$2.to_i]
       until delete_stack.empty?
@@ -1284,6 +1288,26 @@ if $0 == __FILE__
         end
       end
       puts "ok; #{ruleset.rules.count} rules remain"
+    when /^show tiles$/
+      if ruleset.nil? || ruleset.tileset.empty?
+        puts "no tiles defined"
+        next
+      end
+      ruleset.tileset.each do |tile|
+        if tile.ascii.length == 1
+          puts "#{tile.ascii[0]} #{tile.name}"
+        else
+          puts tile.ascii.join("\n"), name
+        end
+      end
+    when /^show tile groups$/
+      if ruleset.nil? || ruleset.tile_groups.empty?
+        puts "no tile groups defined"
+        next
+      end
+      ruleset.tile_groups.each do |group|
+        puts "#{group.name} #{ruleset.name_tiles(group.tiles, method: :pos, noself: true)}"
+      end
     when /^show (all )?rules$/
       ruleset.rules.each do |rule|
         if $1 || rule.source[0] != :symm
@@ -1366,6 +1390,9 @@ add period (number) (number) (number) (number) - add two period rules at once; t
 Ruleset must be defined before tiles, tiles must be defined before tile symmetries that use them, symmetries must be defined before rules.
 
 delete (cascade)? rule (id) - delete a rule. Must not be referenced by other rules. If cascade is set, delete refererrers instead.
+delete tile group (name)
+show tiles - list all tiles in the order they were defined
+show tile groups - list all tile groups in the order they were define
 show (all)? rules - list all rules in the ruleset. Omits symmetric images of other rules unless specified.
 
 (q|qq)?(gen|genus|gense|gensess|generate) (rsr|seeded|unseeded)? r?(drizzle|rain|pour|wfc[rpl]|cline|pline) (wxh)? (tile)?!? - generates a pattern using the ruleset or finds and adds a rule non-trivially implied by existing rules. Uses the screen size if unspecified. If q (quiet mode) is set, no stats are shown after each new rule. If superquiet is set, do not show stats when resetting the board either. If gense/seeded is set, it attemts to generate the board again with the same RNG if unsuccessful. If gensess (split-symmetry) is set, each symmetic aspect of a rule is treated separately for more aggressive rule pruning. If rsr is set, if a new rule only applies once, it is removed and the randomizzation is adjusted. If genus/unseeded is set, it retries with a different RNG. If neither is set, aborts after one attempt. If tile is specified, it tries to place that tile in the selected position.
