@@ -976,7 +976,7 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tiles, tiles_priority
     last_old_rule = stats.keys.max
     stats[:g] = 0
     if possible_tiles.nil?
-      puts "\e[91mno solution\e[0m"
+      puts "no solution"
       return
     end
     board = Array.new(h){Array.new(w){possible_tiles}}
@@ -1108,24 +1108,34 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tiles, tiles_priority
         end
       puts "#{to_delete.summary} purged"
       ruleset.rules.reject!{_1.id == to_delete.id || _1.source == [:symm, to_delete.id]}
-      end.length
-      puts "#{rules_deleted}/#{stats.length - 1} rules purged" if quiet < 2
+      end
     end
 
     if quiet < 2
-      old_tiles = ruleset.unpack_tiles(possible_tiles)
-      new_tiles = ruleset.unpack_tiles(ruleset.possible_tiles || 0)
-      ruled_out_buffer |= old_tiles - new_tiles
+      puts "rule stats:"
+      puts vwrap stats.to_a
+      puts "#{stats.values.select{_1.is_a? Numeric}.sum} total"
+      puts
+      puts "+ %s | %s | %s -" % [
+        ruleset.rules.select{_1.id > last_old_rule && _1.source[0] != :symm},
+        ruleset.rules.select{_1.source[0] == :conflict},
+        rules_deleted || []
+      ].map{|rules|
+        rules.map{_1.sparse.length}.tally.to_a.sort.map{|k, v| v == 1 ? k : "#{v}x#{k}"}.join(" ")
+      }
+    end
+
+    old_tiles = ruleset.unpack_tiles(possible_tiles)
+    new_tiles = ruleset.unpack_tiles(ruleset.possible_tiles || 0)
+    ruled_out_buffer |= old_tiles - new_tiles
+    if quiet < 2
       puts "\e[91mruled out tiles: #{ruleset.name_tiles(ruled_out_buffer, method: :pos)}\e[0m" unless ruled_out_buffer.empty?
       puts "candidate tiles: #{ruleset.name_tiles(new_tiles, method: :pos)}" unless new_tiles.empty?
       ruled_out_buffer = []
 
-      puts "rule stats:"
-      puts vwrap stats.to_a
       ruleset.rules.sort_by!.with_index do |rule, ix|
         [(rule.source[0] == :symm ? -stats[rule.source[1]] : -stats[rule.id] rescue - stats.values.select{_1.is_a? Numeric}.max - 1), rule.source[0], ix]
       end
-      puts "#{stats.values.select{_1.is_a? Numeric}.sum} total"
     end
     possible_tiles = ruleset.possible_tiles
     if board.all?{|row| row.all?{_1 & (_1 - 1) == 0}}
