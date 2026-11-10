@@ -89,12 +89,13 @@ Ruleset = Struct.new(
   # unpacks set of tiles, applies a block to each of them and repacks the set
   def map_tiles tiles, &key; pack_tiles unpack_tiles(tiles).map(&key); end
 
-  def name_tiles tiles, method: nil
+  def name_tiles tiles, method: nil, noself: false
     tiles = unpack_tiles(tiles) if tiles.is_a? Integer
     case method
     when :pos
       to_name = tiles.dup
       valid_groups = tile_groups.select{(unpack_tiles(_1.tiles) - tiles).empty?}
+      valid_groups.reject!{(tiles - unpack_tiles(_1.tiles)).empty?} if noself
       used_groups = []
       unless valid_groups.empty?
         loop do
@@ -106,10 +107,10 @@ Ruleset = Struct.new(
         end
       end
       (used_groups + to_name).map(&:name).join("/")
-    when :neg then "/" + name_tiles(tileset - tiles, method: :pos)
+    when :neg then "/" + name_tiles(tileset - tiles, method: :pos, noself:)
     when nil
-      pos = name_tiles(tiles, method: :pos)
-      neg = name_tiles(tiles, method: :neg)
+      pos = name_tiles(tiles, method: :pos, noself:)
+      neg = name_tiles(tiles, method: :neg, noself:)
       pos.length > neg.length ? neg : pos
     else raise "invalid method #{method}"
     end
