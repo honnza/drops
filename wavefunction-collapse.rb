@@ -1116,13 +1116,13 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tiles, tiles_priority
       puts vwrap stats.to_a
       puts "#{stats.values.select{_1.is_a? Numeric}.sum} total"
       puts
-      puts "+ %s | %s | %s -" % [
+      puts ("+ %s | - %s | %s" % [
         ruleset.rules.select{_1.id > last_old_rule && _1.source[0] != :symm},
-        ruleset.rules.select{_1.source[0] == :conflict},
-        rules_deleted || []
+        rules_deleted || [],
+        ruleset.rules.select{_1.source[0] == :conflict}
       ].map{|rules|
         rules.map{_1.sparse.length}.tally.to_a.sort.map{|k, v| v == 1 ? k : "#{v}x#{k}"}.join(" ")
-      }
+      }).sub("-  | ", "")
     end
 
     old_tiles = ruleset.unpack_tiles(possible_tiles)
