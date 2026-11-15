@@ -990,6 +990,7 @@ def generate ruleset, method, w, h, seeded, quiet = 2, tiles, tiles_priority
           case method
           when :drizzle, :rain then 0
           when :pour then (x - w / 2) ** 2 + (y - h / 2) ** 2
+          when :wpour then ((x - w / 2) ** 2 + (y - h / 2) ** 2) * board[y][x].digits(2).count(1)
           when Cline, Pline, Wline
             line_score = ((x - w / 2) * method.y - (y - h / 2) * method.x).abs
             line_score = line_score / (method.x ** 2 + method.y ** 2) ** 0.5
@@ -1326,7 +1327,7 @@ if $0 == __FILE__
       end
     when /
       ^(?<q>q?q?)(?<g>gen( rsr)?|genus|gense|gensess|generate( seeded| unseeded| rsr)?)\ 
-      (?<mr>r?)(?<m>drizzle|rain|pour|wfc[rpl]|lex|(?<mn>[cpw]line)(\((?<mx>-?\d+)\ (?<my>-?\d+)\))?)
+      (?<mr>r?)(?<m>drizzle|rain|w?pour|wfc[rpl]|lex|(?<mn>[cpw]line)(\((?<mx>-?\d+)\ (?<my>-?\d+)\))?)
       (\ (?<h>\d+)x(?<w>\d+))?
       (\ (?<t>[^! ]+))?(?<tp>!)?$
     /x
@@ -1405,7 +1406,7 @@ show tiles - list all tiles in the order they were defined
 show tile groups - list all tile groups in the order they were define
 show (all)? rules - list all rules in the ruleset. Omits symmetric images of other rules unless specified.
 
-(q|qq)?(gen|genus|gense|gensess|generate) (rsr|seeded|unseeded)? r?(drizzle|rain|pour|wfc[rpl]|cline|pline) (wxh)? (tile)?!? - generates a pattern using the ruleset or finds and adds a rule non-trivially implied by existing rules. Uses the screen size if unspecified. If q (quiet mode) is set, no stats are shown after each new rule. If superquiet is set, do not show stats when resetting the board either. If gense/seeded is set, it attemts to generate the board again with the same RNG if unsuccessful. If gensess (split-symmetry) is set, each symmetic aspect of a rule is treated separately for more aggressive rule pruning. If rsr is set, if a new rule only applies once, it is removed and the randomizzation is adjusted. If genus/unseeded is set, it retries with a different RNG. If neither is set, aborts after one attempt. If tile is specified, it tries to place that tile in the selected position.
+(q|qq)?(gen|genus|gense|gensess|generate) (rsr|seeded|unseeded)? r?(drizzle|rain|wpour|wfc[rpl]|cline|pline) (wxh)? (tile)?!? - generates a pattern using the ruleset or finds and adds a rule non-trivially implied by existing rules. Uses the screen size if unspecified. If q (quiet mode) is set, no stats are shown after each new rule. If superquiet is set, do not show stats when resetting the board either. If gense/seeded is set, it attemts to generate the board again with the same RNG if unsuccessful. If gensess (split-symmetry) is set, each symmetic aspect of a rule is treated separately for more aggressive rule pruning. If rsr is set, if a new rule only applies once, it is removed and the randomizzation is adjusted. If genus/unseeded is set, it retries with a different RNG. If neither is set, aborts after one attempt. If tile is specified, it tries to place that tile in the selected position.
   drizzle - at each step, select a random position and remove one possible tile from it
   rain - at each step, select a random position and select one tile for that position
   pour - at each step, select an unresolved position closest to the middle and select one tile for that position
@@ -1414,6 +1415,7 @@ show (all)? rules - list all rules in the ruleset. Omits symmetric images of oth
   lex - resolve tiles from left to right, then bottom to top
   wfc(r|p|l) - wavefunction collapse classic. At each step, randomly choose a tile with the fewest possibilities and resolve it. The variant decides the order in which tiles with equal number of possibilities are chosen.
   wline - blend of pline and wfc strategies
+  wpour - blend of pour and wfc strategies
 
 save as (filename) - save the ruleset to a file
 load from (filename) - restore a ruleset from the file
