@@ -462,12 +462,16 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
   conflict = false
   undo_log = []
   diff_queue = RingQueue.new(stop_at&.[](0) || origin_x || board[0].length / 2, stop_at&.[](1) || origin_y || board.length / 2)
+  possible_tiles = ruleset.possible_tiles
+  n_possible_tiles = possible_tiles.digits(2).count(1)
   if origin_x.is_a?(Numeric)
     diff_queue << [origin_x, origin_y]
   else
-    (0 .. board.length).each do |y|
-      (0 .. board[0].length).each do |x|
-        diff_queue << [x, y]
+    (0 ... board.length).each do |y|
+      (0 ... board[y].length).each do |x|
+        if board[y][x] != possible_tiles
+          diff_queue << [x, y]
+        end
       end
     end
   end
@@ -532,8 +536,6 @@ def apply_ruleset(ruleset, board, rule_stats, origin_x, origin_y, conflict_check
 
   # phase two: find the last conflict
 
-  possible_tiles = ruleset.possible_tiles
-  n_possible_tiles = possible_tiles.digits(2).count(1)
   rule_bitmap.each{|row| row.map!{_1 == possible_tiles ? ruleset.all_tiles : _1}}
   renderer.call rule_bitmap, 0, rule_bitmap.length * rule_bitmap[0].length
 
